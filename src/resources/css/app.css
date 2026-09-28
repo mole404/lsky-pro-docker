@@ -207,9 +207,11 @@
             width: 4rem;
         }
 
+        /* 品牌块整体居中：原先只把左右内边距改小，28px 的 logo 会偏在左边、右边空一大截 */
         html.sidebar-collapsed #app-sidebar .ls-brand {
-            padding-left: .75rem;
-            padding-right: .75rem;
+            padding-left: 0;
+            padding-right: 0;
+            justify-content: center;
         }
 
         /* 折叠后只留图标：文字、分组标题、容量区全部收起 */
