@@ -61,7 +61,7 @@
   （上游 `webpack.mix.js` 里本来也是 `mix.copy('resources/js/context-js.js', 'public/js/context-js')`，
   但仓库里 `public/` 下那份是旧工具链留下的压缩产物，一直没跟着源码更新，所以两个位置都要覆盖）
 - `overlay/images.blade.php` → 写入 `resources/views/user/images.blade.php`，只改一行：
-  给脚本加 `?v=ios-longpress3`，避免 iOS/Safari 的启发式缓存把旧版 JS 一直喂给老用户（每次改补丁就递增这个串）
+  给脚本加 `?v=ios-longpress4`，避免 iOS/Safari 的启发式缓存把旧版 JS 一直喂给老用户（每次改补丁就递增这个串）
 - 完整 diff 见 `patches/ios-longpress.patch`（存档用，构建实际走 `overlay/`）
 
 ## 第二个补丁：菜单收放与触摸端二级菜单（2026-09-28 追加）
@@ -76,6 +76,14 @@
 （`.dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}`），而手机没有光标：
 手指点"复制链接"时浏览器补发的合成 mouseenter 让二级菜单闪一下，紧接着那发 click 撞上关闭逻辑，
 整个菜单消失 —— "复制链接"里的 Url / Html / BBCode / Markdown 在手机上根本点不到。
+
+**问题 3：偶尔还会点穿（Windows 上偶发，2026-09-28 老师报的）。** 症状是"菜单还在屏幕上，点一下别的图片就透了"。
+根因是**判断"拦不拦这一发点击"只看了一个内存状态 `menuVisible`**，而有好几条路径会把它提前置 false ——
+外部滚动、`resize`、`Esc`、以及关菜单后的 100ms 淡出期。而 `scroll` 恰恰很容易被**非用户操作**触发：
+菜单是绝对定位插进 `body` 的，**插入这个动作本身**就可能改变页面高度/滚动条，让浏览器自己滚动
+（滚动锚定、图片懒加载重排、justified-gallery 重新布局），于是"菜单刚打开就被自己引发的滚动关掉"，
+紧接着元素淡出的那 100ms 里菜单看着还在、状态已经是关 —— 这时点别的图片就直通了。这也解释了它为什么"偶尔"：
+取决于菜单落在哪里、要不要出滚动条、浏览器是否触发滚动锚定。
 
 **改法**（都在 `overlay/context-js.js` 里，不动主题 CSS）：
 
@@ -92,10 +100,22 @@
   有鼠标/触摸板的设备继续用 hover，**桌面行为零改动**。
 - **收得干净**：滚动 / 旋转缩放（含 `#images-scroll` 这类内部滚动容器）、`Esc` 都关菜单；
   菜单自身滚动不误关。
+- **判据改成"屏幕上是否真有菜单"**（`menuOnScreen()`，问题 3 的修法）：`状态打开` → 在；
+  `刚关掉但还在淡出（fadeSpeed + 50ms 窗口）` → 还在屏幕上；再用 **DOM 实测**兜底
+  （元素存在且 `getBoundingClientRect().height > 0`）。这样**任何一条把状态提前置 false 的路径
+  都不会让"看得见的菜单"失去拦截能力** —— "看得见就不许点穿"成了硬保证，而不再依赖某个变量是否同步。
+- **菜单刚打开的 300ms 内忽略 `scroll`/`resize`**（`MENU_OPEN_IGNORE_INPUT`）：这一小段里的滚动/缩放
+  多半是菜单自己插入引发的（滚动锚定、懒加载重排），拿它关菜单就是上面那条链路的起点。过了 300ms
+  用户自己滚，照旧关。
+- **诊断转储**（`context.debugDump()`）：常驻记录最近 240 条与菜单有关的事件（打开/关闭**原因**/每次点击的
+  判定），出问题时在控制台执行 `copy(context.debugDump())` 就能把现场证据复制出来；`context.debug = true`
+  会实时打到控制台。上游没有这套东西。
 
-**验证**：`test/longpress.test.mjs` 覆盖了以上每条（包含"长按抬手那发 click 不能把刚开的菜单关掉"
-这条回归 —— 它是这次最容易踩的坑）；CI 的镜像自证还会断言 `installMenuGuard` / `MENU_OPEN_GRACE` /
-`touch-open` / `isMenuOpen` 这些标记真的在镜像里。
+**验证**：`test/longpress.test.mjs` 覆盖了以上每条（包含"长按抬手那发 click 不能把刚开的菜单关掉"、
+"淡出期间点击不许点穿"、"状态已 false 但菜单还看得见时点击仍被吞"这些回归 —— 都是这次最容易踩的坑）；
+`test/repro-clickthrough.mjs` 是问题 3 的最小复现（可指定任意一版 JS 跑，用来确认"旧版点穿、新版不点穿"）；
+CI 的镜像自证还会断言 `installMenuGuard` / `MENU_OPEN_GRACE` / `touch-open` / `isMenuOpen` /
+`MENU_OPEN_IGNORE_INPUT` / `menuOnScreen` / `debugDump` 这些标记真的在镜像里。
 
 ## 使用方法
 
@@ -174,7 +194,7 @@ docker compose up -d --force-recreate
 
 # 3) 验证（核「Apache 实际吐给浏览器」的那份，比看磁盘文件更硬）
 curl -s http://127.0.0.1:8089/js/context-js/context-js.js | md5sum
-# 期望：64ead77d518007cbf4a22f42e3404017
+# 期望：e114c840101d021aa416239196925624
 docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.image.source"}}'
 # 期望：https://github.com/mole404/lsky-pro-docker
 ```
@@ -192,7 +212,8 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 5. **站点数据不受影响，且有机器盯着**：CI 里那个自证步骤用真实 docker 跑三个场景 ——
    A) 空卷播种（并断言卷里**没有** `.env`、安装页 200）；
    B) 已有卷 + 旧标记（塞入旧代码 + `.env` / 数据库 / 上传 / 编译缓存，断言代码被同步、
-      数据与配置一项不被碰、`.env` 权限位不变）；
+      数据与配置一项不被碰、`.env` 内容不变 —— 不比对权限位：上游 entrypoint 的
+      `chmod -R 755` 与我们的断言并发，实测会 640/755 自己飘）；
    C) 已有卷 + 同标记（断言跳过同步、手动修补保留、对外服务的 JS 仍是补丁版）。
    任一条件不满足就构建失败，不会 promote 到 `latest`。
 
@@ -200,22 +221,25 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 
 镜像里这些文件的 md5（补丁之外的每个文件都应当与线上那份旧镜像一致）：
 
-- `public/js/context-js/context-js.js`：补丁前 `bab81ff5e43b50a760935c7b3ae6475c` → 补丁后 `64ead77d518007cbf4a22f42e3404017`
-- `resources/js/context-js.js`：补丁前 `c8e57f6232848ca8277341ddf1a3a7a6` → 补丁后 `64ead77d518007cbf4a22f42e3404017`
-- `resources/views/user/images.blade.php`：补丁前 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `2c9380a6af19953ba6ccdd78f503797e`
+- `public/js/context-js/context-js.js`：补丁前 `bab81ff5e43b50a760935c7b3ae6475c` → 补丁后 `e114c840101d021aa416239196925624`
+- `resources/js/context-js.js`：补丁前 `c8e57f6232848ca8277341ddf1a3a7a6` → 补丁后 `e114c840101d021aa416239196925624`
+- `resources/views/user/images.blade.php`：补丁前 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `f4e100c87d4becdcce163800db535775`
 - `app/Services/ImageService.php` `a7bcd8549c656501a057214637f10b45`、`config/convention.php` `674975e4e5561cc15c27626cb1ce5233`：**不变**
 
 功能上要过的用例：
 
 - iOS Safari 长按图片 → 弹图床自己的菜单（系统菜单不冒头）→ 抬手不会顺手弹出大图预览
 - 菜单开着时点别处（含另一张图片）→ **只关菜单**，不开预览、不跳转；再点一次才恢复普通点击
+- **菜单还在屏幕上的任何时刻点别的图片都不许点穿**（含刚打开、以及刚关掉还在淡出的那 100ms）
 - 手机上点"复制链接" → 二级菜单展开（不再闪一下就没）→ 点 Url / Html / Markdown 能正常复制
-- 菜单开着时滚动、缩放、按 Esc → 菜单收起
+- 菜单开着时滚动、缩放、按 Esc → 菜单收起（刚打开 300ms 内它自己引发的滚动不算）
 - Windows 右键、Android Chrome 长按 → 菜单照旧
 - 单击看大图、拖拽多选、复制链接、重命名、删除、上传、原图与缩略图访问、登录、API
 
 `test/` 下有一个 node + jsdom 的行为测试（`cd test && npm install && npm test`），
 可以在没有 iPhone 的情况下先把每条分支跑一遍；真机行为（原生 callout 是否被压掉）仍需真机确认。
+出问题时页面控制台执行 `copy(context.debugDump())` 可导出菜单事件的诊断转储（含每次关闭的原因），
+`test/repro-clickthrough.mjs <某版 context-js.js>` 是最小复现脚本，用来核对"旧版点穿、新版不点穿"。
 
 ## 维护
 

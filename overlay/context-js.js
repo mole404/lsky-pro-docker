@@ -36,6 +36,14 @@ window.context = window.context || (function () {
                                     // （iOS/Android 长按抬手都可能补发一发 click，目标正是刚被长按的那张图；
                                     //  菜单是手指还按着时就弹出来的，抬手到补发 click 的延迟通常 <500ms，
                                     //  所以留 800ms 余量。真手指再点一次必定先有 touchstart，那条路径另有处理）
+    const MENU_OPEN_IGNORE_INPUT = 300; // 菜单刚打开的这一小段时间里，忽略 scroll/resize/orientation。
+                                    // 为什么需要它：菜单是绝对定位插进 body 的，**插入这个动作本身**就可能
+                                    // 让页面高度/滚动条变化，触发浏览器自己的滚动（滚动锚定、图片懒加载重排、
+                                    // justified-gallery 重新布局）。这些“非用户操作”的滚动会把菜单刚开就关掉，
+                                    // 而关掉之后元素还要淡出，屏幕上看着菜单还在 —— 那一瞬间的点击就会点穿。
+    const MENU_FADE_GUARD = 50;     // 关菜单后，元素还要淡出 fadeSpeed 毫秒；这段时间它在屏幕上，
+                                    // 点击必须照样被吞（否则就是“看得见菜单却点穿了”）。这里再加一点余量。
+    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
 
     let options = {
         fadeSpeed: 100,
@@ -186,8 +194,14 @@ window.context = window.context || (function () {
 
     // ===== fork 补丁：菜单收放 + 触摸端二级菜单（开始）=====
 
-    let menuVisible = false;        // 菜单是否打开。以状态为准，不去查 DOM/CSS（jsdom、fade 期间都不可靠）
-    let menuOpenedAt = 0;           // 菜单打开时刻，用于 MENU_OPEN_GRACE
+    let menuVisible = false;        // 菜单是否打开（状态）。**“拦不拦这一发点击”不能只看它**：
+                                    // scroll/resize/Esc/淡出等多条路径都会把它提前置 false，而菜单可能还在屏幕上。
+                                    // 一律走 menuOnScreen()，那里以“真实可见性”为准。
+    let menuOpenedAt = 0;           // 菜单打开时刻，用于 MENU_OPEN_GRACE / MENU_OPEN_IGNORE_INPUT
+    let menuClosingUntil = 0;       // 关菜单后到这一刻为止，元素仍在淡出、还在屏幕上
+    let lastMenuEventAt = 0;        // 最近一次菜单相关事件的时刻（诊断用：只记“与菜单有关”的点击）
+    let debugBuffer = [];           // 诊断环缓冲
+    let debugToConsole = false;     // context.debug = true 时实时打控制台
     let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
     let suppressClickUntil = 0;     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
     let menuStylesInjected = false;
@@ -216,8 +230,74 @@ window.context = window.context || (function () {
         );
     }
 
-    function closeMenus() {
+    // ===== 诊断（fork 新增）=====
+    // 常驻记录“与菜单有关”的事件：开、关（含原因）、以及菜单牵涉到的点击判定。
+    // 万一现场还出问题，老师说一句 context.debugDump() 就能把证据拿出来，不用再猜。
+    function describeNode(node) {
+        if (! node || ! node.tagName) {
+            return String(node);
+        }
+        let id = node.id ? '#' + node.id : '',
+            cls = (typeof node.className === 'string' && node.className.trim())
+                ? '.' + node.className.trim().split(/\s+/).join('.')
+                : '';
+        return node.tagName.toLowerCase() + id + cls;
+    }
+
+    function logMenuEvent(text) {
+        lastMenuEventAt = Date.now();
+        let line = '[' + new Date().toISOString().slice(11, 23) + '] ' + text;
+        debugBuffer.push(line);
+        if (debugBuffer.length > DEBUG_BUFFER_SIZE) {
+            debugBuffer = debugBuffer.slice(-DEBUG_BUFFER_SIZE);
+        }
+        if (debugToConsole && window.console && window.console.log) {
+            window.console.log('[context-js] ' + line);
+        }
+    }
+
+    // 菜单到底还在不在屏幕上？判据顺序：
+    //   1) 状态就是打开 → 在；
+    //   2) 状态刚被置 false 但还没淡出完 → 也在（否则这段时间就是“看得见却点穿”的窗口）；
+    //   3) DOM 实测兜底：元素还画着（高度 > 0）就按“在”算。
+    // 第 3 条是关键：真浏览器里它才是唯一可信的判据 —— 任何一条把状态提前置 false 的路径，
+    // 都不该让“屏幕上明明看得见的菜单”失去拦截能力。
+    function menuOnScreen() {
+        if (menuVisible) {
+            return true;
+        }
+        if (Date.now() <= menuClosingUntil) {
+            return true;
+        }
+
+        let nodes = document.querySelectorAll('.dropdown-context');
+        for (let i = 0; i < nodes.length; i++) {
+            let el = nodes[i];
+            if (el.style && el.style.display === 'none') {
+                continue;
+            }
+            if (typeof el.getBoundingClientRect === 'function' && el.getBoundingClientRect().height > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // 菜单刚打开？用来忽略“菜单自己引发的”scroll/resize（见 MENU_OPEN_IGNORE_INPUT）
+    function justOpenedMenu() {
+        return (Date.now() - menuOpenedAt) < MENU_OPEN_IGNORE_INPUT;
+    }
+
+    function closeMenus(reason) {
+        if (menuVisible) {
+            logMenuEvent('close   reason=' + (reason || 'unknown')
+                + ' openFor=' + (Date.now() - menuOpenedAt) + 'ms');
+        }
+
         menuVisible = false;
+        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
+        menuClosingUntil = Date.now() + options.fadeSpeed + MENU_FADE_GUARD;
 
         $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
             $('.dropdown-context').css({ display: '' });
@@ -309,11 +389,16 @@ window.context = window.context || (function () {
                 return;
             }
 
-            if (! menuVisible) {
+            if (! menuOnScreen()) {
+                // 连“刚关不久、还在淡出”都算不上 → 与菜单无关的普通点击，照旧放行
+                if (Date.now() - lastMenuEventAt < 3000) {
+                    logMenuEvent('click   target=' + describeNode(e.target) + ' → 放行（屏幕上没有菜单）');
+                }
                 return;
             }
 
             if (isInsideMenu(e.target)) {
+                logMenuEvent('click   target=' + describeNode(e.target) + ' → 菜单内部，放行（交给原有逻辑）');
                 handleSubmenuTap(e);        // 菜单内部：只处理二级菜单的点击展开
                 return;                     // 其它内部点击照旧（执行动作 + 原有逻辑关菜单）
             }
@@ -323,15 +408,21 @@ window.context = window.context || (function () {
             // 桌面鼠标点击不满足"紧随触摸"这个条件（lastTouchAt 是 0 或很久以前），照常关菜单。
             if ((Date.now() - lastTouchAt) < MENU_OPEN_GRACE
                 && (Date.now() - menuOpenedAt) < MENU_OPEN_GRACE) {
+                logMenuEvent('click   target=' + describeNode(e.target)
+                    + ' → 吞掉（长按抬手补发的那一发，菜单保持打开）');
                 e.__contextjsClickSwallowed = true;
                 e.preventDefault();
                 e.stopPropagation();
                 return;
             }
 
+            logMenuEvent('click   target=' + describeNode(e.target)
+                + ' → 关菜单 + 吞掉（state=' + menuVisible + ' closing='
+                + Math.max(0, menuClosingUntil - Date.now()) + 'ms）');
+
             // 点击菜单之外的任何位置：只关闭菜单，绝不把这发事件放给页面
             // （否则会顺手打开图片预览、跳转链接）
-            closeMenus();
+            closeMenus('click-outside');
             e.preventDefault();
             e.stopPropagation();
         }, true);
@@ -342,11 +433,12 @@ window.context = window.context || (function () {
         document.addEventListener('touchstart', function (e) {
             lastTouchAt = Date.now();
 
-            if (! menuVisible || isInsideMenu(e.target)) {
+            if (! menuOnScreen() || isInsideMenu(e.target)) {
                 return;
             }
 
-            closeMenus();
+            logMenuEvent('touch   target=' + describeNode(e.target) + ' → 关菜单 + 吞掉随后的 click');
+            closeMenus('touch-outside');
             suppressClickUntil = Date.now() + MENU_CLOSE_CLICK_WINDOW;
         }, true);
 
@@ -358,20 +450,31 @@ window.context = window.context || (function () {
         // 滚动 / 旋转缩放：菜单用的是页面坐标，视口一动它就会粘在错的地方，直接收起来。
         // 监听装在 document 且用捕获，是为了连 #images-scroll 这类内部滚动容器也能收到。
         document.addEventListener('scroll', function (e) {
-            if (menuVisible && ! isInsideMenu(e.target)) {
-                closeMenus();
+            if (! menuVisible || isInsideMenu(e.target)) {
+                return;
             }
+
+            if (justOpenedMenu()) {
+                // 菜单刚插进 body，浏览器自己可能来一发滚动（滚动锚定 / 懒加载重排 / 画廊重排）——
+                // 这一发不是用户滚的，别拿它把菜单关掉：关掉之后元素还要淡出，
+                // 屏幕上看着菜单还在，那一瞬间的点击就会点穿。
+                logMenuEvent('scroll  target=' + describeNode(e.target)
+                    + ' → 忽略（菜单刚打开 ' + (Date.now() - menuOpenedAt) + 'ms）');
+                return;
+            }
+
+            closeMenus('scroll');
         }, true);
 
         window.addEventListener('resize', function () {
-            if (menuVisible) {
-                closeMenus();
+            if (menuVisible && ! justOpenedMenu()) {
+                closeMenus('resize');
             }
         }, true);
 
         window.addEventListener('orientationchange', function () {
             if (menuVisible) {
-                closeMenus();
+                closeMenus('orientationchange');
             }
         }, true);
 
@@ -379,7 +482,7 @@ window.context = window.context || (function () {
         document.addEventListener('keydown', function (e) {
             let key = e.key || '';
             if (menuVisible && (key === 'Escape' || key === 'Esc' || e.keyCode === 27)) {
-                closeMenus();
+                closeMenus('esc');
             }
         }, true);
     }
@@ -547,6 +650,11 @@ window.context = window.context || (function () {
 
             menuVisible = true;
             menuOpenedAt = Date.now();
+            menuClosingUntil = 0;
+
+            logMenuEvent('open    trigger=' + (evt ? 'contextmenu' : 'longpress')
+                + ' item=' + describeNode(item)
+                + ' at=' + Math.round(pageX) + ',' + Math.round(pageY));
 
             typeof opts.afterOpen === 'function' && opts.afterOpen.call(evt || item, item, $dd.get(0));
         }
@@ -576,7 +684,7 @@ window.context = window.context || (function () {
         $(document).off('contextmenu', selector).off('click', '.context-event');
     }
 
-    return {
+    let api = {
         init: initialize,
         settings: updateOptions,
         attach: addContext,
@@ -584,6 +692,35 @@ window.context = window.context || (function () {
         // fork 补丁：暴露菜单开合状态，供测试与诊断用（上游没有这个）
         isMenuOpen: function () {
             return menuVisible;
+        },
+        // fork 补丁：菜单此刻是否“在屏幕上”（状态 + 淡出窗口 + DOM 实测），诊断用
+        isMenuOnScreen: function () {
+            return menuOnScreen();
+        },
+        // fork 补丁：诊断转储。出问题时在控制台执行 copy(context.debugDump()) 即可复制出来。
+        debugDump: function () {
+            let head = [
+                '# context-js 诊断转储 ' + new Date().toISOString(),
+                'url: ' + window.location.href,
+                'ua: ' + navigator.userAgent,
+                'fadeSpeed: ' + options.fadeSpeed + ' | 触摸输入(hover:none): ' + isTouchInput(),
+                'menuVisible: ' + menuVisible + ' | menuOnScreen: ' + menuOnScreen()
+                    + ' | 淡出剩余: ' + Math.max(0, menuClosingUntil - Date.now()) + 'ms',
+                '--- 事件（时间升序，最多 ' + DEBUG_BUFFER_SIZE + ' 条）---'
+            ];
+            return head.concat(debugBuffer).join('\n');
         }
     };
+
+    Object.defineProperty(api, 'debug', {
+        get: function () {
+            return debugToConsole;
+        },
+        set: function (v) {
+            debugToConsole = !! v;
+            logMenuEvent('debug   控制台实时输出 = ' + debugToConsole);
+        }
+    });
+
+    return api;
 })();

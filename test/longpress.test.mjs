@@ -165,12 +165,20 @@ console.log('\n[iPhone Safari] 长按应弹出图床自己的菜单');
     // 新规格：菜单开着时，点别处只关菜单，不触发别的交互
     await sleep(750);
     window.__viewerOpened = 0;
+    // 真实点按是“按下即抬起”：抬手会取消长按计时器，否则 250ms 后长按会再弹一次菜单
     touch(window, 'touchstart', 300, 300, img);
+    touch(window, 'touchend', 300, 300, img);
     tapClick(window, img);
     check('菜单开着时点别的图片：菜单关闭', menuOpen(window) === false);
     check('菜单开着时点别的图片：不会顺手打开预览（这一发 click 被吞）', window.__viewerOpened === 0, `viewerOpened=${window.__viewerOpened}`);
 
-    // 菜单关掉之后，正常点击必须照旧生效
+    // 刚关掉的头 fadeSpeed+50ms 里，元素还在淡出、屏幕上还看得见 → 这一发仍必须被吞
+    window.__viewerOpened = 0;
+    tapClick(window, img);
+    check('★ 淡出期间（菜单还看得见）的点击照样被吞', window.__viewerOpened === 0, `viewerOpened=${window.__viewerOpened}`);
+
+    // 淡出结束、菜单真的没了之后，正常点击必须照旧生效（不会一直吞点击）
+    await sleep(300);
     window.__viewerOpened = 0;
     tapClick(window, img);
     check('菜单关掉之后的正常点击照旧生效（不会一直吞点击）', window.__viewerOpened === 1, `viewerOpened=${window.__viewerOpened}`);
@@ -227,6 +235,11 @@ console.log('\n[菜单收放] 点菜单之外只关菜单，不点穿到页面�
 
     window.__viewerOpened = 0;
     tapClick(window, img);
+    check('★ 淡出期间再点图片：仍被吞（看得见就不许点穿）', window.__viewerOpened === 0, `viewerOpened=${window.__viewerOpened}`);
+
+    await sleep(300);
+    window.__viewerOpened = 0;
+    tapClick(window, img);
     check('菜单关掉后再点图片：正常打开预览', window.__viewerOpened === 1);
 
     // 菜单内部的点击必须照旧放行（否则复制/重命名/删除全废）
@@ -242,11 +255,15 @@ console.log('\n[菜单收放] 滚动、缩放、Esc 关闭');
 {
     const { window, $, $item } = boot({ ua: UA.windows, platform: 'Win32', maxTouchPoints: 0, hasTouch: false });
 
+    // 注意：菜单刚打开的 300ms 内是“忽略自引发输入”的窗口（见 MENU_OPEN_IGNORE_INPUT），
+    // 所以这些用例都先 sleep 越过它，测的才是“用户真去滚动/缩放”的路径。
     $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    await sleep(320);
     window.document.dispatchEvent(new window.Event('scroll', { bubbles: true }));
     check('页面滚动 → 菜单关闭', menuOpen(window) === false);
 
     $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    await sleep(320);
     window.dispatchEvent(new window.Event('resize'));
     check('窗口缩放 → 菜单关闭', menuOpen(window) === false);
 
@@ -256,6 +273,7 @@ console.log('\n[菜单收放] 滚动、缩放、Esc 关闭');
 
     // 菜单内部自己的滚动不该误关（#images-scroll 这类容器滚动才是要关的）
     $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    await sleep(320);
     menu(window).dispatchEvent(new window.Event('scroll', { bubbles: true }));
     check('菜单自身滚动（不算视口变化）→ 菜单保持打开', menuOpen(window) === true);
 
@@ -377,6 +395,71 @@ console.log('\n[Windows 桌面] 鼠标右键，必须完全走原路径');
     // 去重窗口不应误伤连续两次右键
     $item.trigger($.Event('contextmenu', { pageX: 60, pageY: 80 }));
     check('连续右键仍能开菜单（去重不影响桌面）', $(`.dropdown-context`).css('left') === '47px', $(`.dropdown-context`).css('left'));
+}
+
+// ---------------------------------------------------------------- 回归：看得见的菜单必须拦得住
+console.log('\n[回归] 菜单还在屏幕上时，任何路径都不许“点穿”（老师报的 Windows 偶尔点穿）');
+{
+    const { window, $, $item, img } = boot({ ua: UA.windows, platform: 'Win32', maxTouchPoints: 0, hasTouch: false });
+
+    // A. 淡出窗口：菜单被关掉后元素还在淡出（屏幕上还看得见），这一瞬间点别的图片
+    //    必须照样被吞 —— 原来的实现只看状态，状态一 false 就放行，于是点穿开预览。
+    $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    await sleep(320);                                   // 越过“菜单刚打开”的忽略窗
+    window.document.getElementById('images-scroll').dispatchEvent(new window.Event('scroll', { bubbles: true }));
+    check('A 前置：滚动把菜单关掉（状态已是 false）', menuOpen(window) === false);
+    check('A 前置：但元素还在屏幕上（淡出中）', window.eval('context.isMenuOnScreen()') === true,
+        `onScreen=${window.eval('context.isMenuOnScreen()')}`);
+
+    window.__viewerOpened = 0;
+    window.__pageClicks = [];
+    tapClick(window, img);
+    check('★ A 淡出期间点别的图片：不点穿、不开预览',
+        window.__viewerOpened === 0 && window.__pageClicks.length === 0,
+        `viewer=${window.__viewerOpened} pageClicks=${window.__pageClicks.length}`);
+
+    // B. 状态与可见性脱节：状态说关了、淡出窗也过了，但菜单其实还画在屏幕上 → 仍必须拦。
+    //    （真浏览器里“状态被某条路径提前置 false、而菜单还在”正是偶尔点穿的成因；
+    //      jsdom 没有排版引擎、高度恒为 0，所以这里把高度桩成 120。）
+    await sleep(200);
+    const el = menu(window);
+    el.getBoundingClientRect = () => ({ height: 120, width: 160, top: 0, left: 0, right: 160, bottom: 120 });
+    check('B 前置：状态 false、淡出窗已过，但 DOM 实测菜单可见',
+        menuOpen(window) === false && window.eval('context.isMenuOnScreen()') === true,
+        `state=${menuOpen(window)} onScreen=${window.eval('context.isMenuOnScreen()')}`);
+
+    window.__viewerOpened = 0;
+    window.__pageClicks = [];
+    tapClick(window, img);
+    check('★ B 状态已 false 但菜单还看得见：点击照样被吞，不开预览',
+        window.__viewerOpened === 0 && window.__pageClicks.length === 0,
+        `viewer=${window.__viewerOpened} pageClicks=${window.__pageClicks.length}`);
+
+    // C. 菜单刚插入引发的那一发滚动（滚动锚定/懒加载重排）不该把菜单自己关掉
+    delete el.getBoundingClientRect;                    // 撤掉高度桩，恢复 jsdom 原生实现
+    $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    window.document.getElementById('images-scroll').dispatchEvent(new window.Event('scroll', { bubbles: true }));
+    check('★ C 菜单刚打开 300ms 内的滚动（它自己引发的）→ 不关菜单', menuOpen(window) === true);
+
+    await sleep(320);
+    window.document.getElementById('images-scroll').dispatchEvent(new window.Event('scroll', { bubbles: true }));
+    check('C 过了忽略窗之后用户滚动 → 照旧关菜单', menuOpen(window) === false);
+
+    // D. 淡出结束、菜单真的没了 → 点击必须恢复正常（绝不能一直吞点击）
+    await sleep(300);
+    window.__viewerOpened = 0;
+    check('D 前置：菜单确实不在屏幕上了', window.eval('context.isMenuOnScreen()') === false);
+    tapClick(window, img);
+    check('D 菜单彻底消失后：点击恢复正常', window.__viewerOpened === 1, `viewer=${window.__viewerOpened}`);
+
+    // E. 诊断转储：能拿到开/关记录（含关闭原因），出问题时老师复制出来即可
+    $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    await sleep(320);
+    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const dump = window.eval('context.debugDump()');
+    check('E debugDump() 含打开记录（触发方式）与关闭原因',
+        typeof dump === 'string' && dump.includes('open    trigger=contextmenu') && dump.includes('close   reason=esc'),
+        dump.split('\n').slice(0, 1).join(''));
 }
 
 // ---------------------------------------------------------------- 汇总
