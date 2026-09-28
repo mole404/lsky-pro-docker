@@ -127,22 +127,11 @@
                         {{ config('app.version') }}@if(\App\Utils::shortCommit()) <span class="font-mono">{{ \App\Utils::shortCommit() }}</span>@endif
                     </dd>
                 </div>
+                {{-- fork：上游的官方网站/使用手册两项已删除（官方早已停更），仓库地址指向本仓库 --}}
                 <div class="bg-surface px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">官方网站</dt>
-                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
-                        <a target="_blank" class="hover:text-brand" href="https://www.lsky.pro">https://www.lsky.pro</a>
-                    </dd>
-                </div>
-                <div class="bg-surface px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">使用手册</dt>
-                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
-                        <a target="_blank" class="hover:text-brand" href="https://docs.lsky.pro">https://docs.lsky.pro</a>
-                    </dd>
-                </div>
-                <div class="bg-surface-2 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                     <dt class="text-sm font-medium text-ink-2">仓库地址</dt>
                     <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
-                        <a target="_blank" class="hover:text-brand" href="https://github.com/lsky-org/lsky-pro">https://github.com/lsky-org/lsky-pro</a>
+                        <a target="_blank" class="hover:text-brand" href="https://github.com/mole404/lsky-pro-docker">https://github.com/mole404/lsky-pro-docker</a>
                     </dd>
                 </div>
             </dl>
