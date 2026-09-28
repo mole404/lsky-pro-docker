@@ -7,7 +7,7 @@
         "watch-poll": "mix watch -- --watch-options-poll=1000",
         "hot": "mix watch --hot",
         "prod": "npm run production",
-        "production": "mix --production"
+        "production": "mix --production && node scripts/copy-patched-assets.js"
     },
     "devDependencies": {
         "@fortawesome/fontawesome-free": "^5.15.4",

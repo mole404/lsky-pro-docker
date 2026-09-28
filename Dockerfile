@@ -101,7 +101,7 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 RUN printf '%s\n' \
         'e114c840101d021aa416239196925624  ./public/js/context-js/context-js.js' \
         'e114c840101d021aa416239196925624  ./resources/js/context-js.js' \
-        'ec25ecc2a4f09395db5a50de1883d521  ./resources/views/user/images.blade.php' \
+        'fb65dc33a394fc28e14af5ab92272406  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "context-js.js') . '?v=ios-longpress4'" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -118,7 +118,7 @@ RUN printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
         "context_js_md5=e114c840101d021aa416239196925624" \
-        "images_blade_md5=ec25ecc2a4f09395db5a50de1883d521" \
+        "images_blade_md5=fb65dc33a394fc28e14af5ab92272406" \
         > .code-revision \
     && cat .code-revision
 
