@@ -68,6 +68,13 @@ jobs:
           REQ_PHP="${REQ_PHP_INPUT:-$DEF_PHP}"
           echo "pin=$PIN" >> "$GITHUB_OUTPUT"
           echo "php_version=$REQ_PHP" >> "$GITHUB_OUTPUT"
+          echo "php_default=$DEF_PHP" >> "$GITHUB_OUTPUT"
+          if [ "$REQ_PHP" != "$DEF_PHP" ]; then
+            echo "is_test_build=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::试构建（PHP $REQ_PHP ≠ Dockerfile 默认 $DEF_PHP）：本次不会提升 latest"
+          else
+            echo "is_test_build=false" >> "$GITHUB_OUTPUT"
+          fi
           echo "上游 pin = $PIN"
           echo "本次构建 PHP = $REQ_PHP（Dockerfile 默认 $DEF_PHP）"
           # 迁移数守卫：换 pin 时若上游新增迁移，这里报红，提醒必须人工评估 schema 变更
@@ -425,6 +432,9 @@ jobs:
 
       # 自证全过之后才动 latest：验证失败时 latest 保持在上一个已知可用版本
       - name: Promote verified image to latest
+        # 试构建（手动指定 php_version 且与 Dockerfile 默认不同）只保留不可变 tag，不动 latest：
+        # 免得"还没定案的版本"变成线上 `docker compose pull` 的目标。
+        if: steps.pin.outputs.is_test_build != 'true'
         run: |
           set -euo pipefail
           # pin 从 Dockerfile 解析（不要再写死：曾经漂移过一次，把新镜像贴上了旧 pin 的 tag）
