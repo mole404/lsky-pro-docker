@@ -1,23 +1,34 @@
 # Lsky Pro Docker 镜像（含 iOS 长按菜单修复）
 
 本仓库是 [HalcyonAzure/lsky-pro-docker](https://github.com/HalcyonAzure/lsky-pro-docker) 的个人 fork，
-用来给 [lsky-org/lsky-pro](https://github.com/lsky-org/lsky-pro)（兰空图床）打个前端补丁：
-**修复 iOS Safari 上长按图片无法弹出图床自定义菜单的问题**。
+用来给 [lsky-org/lsky-pro](https://github.com/lsky-org/lsky-pro)（兰空图床）打前端补丁：
+**修复 iOS Safari 上长按图片无法弹出图床自定义菜单的问题**，顺带修菜单的交互问题。
+
+**应用源码就在本仓库的 `src/` 里**（上游 commit `38d52c46…` 的完整快照），构建直接用它、
+不再联网拉 GitHub —— 上游已明示停止维护，这样既防上游仓库消失，也方便之后直接改 PHP 代码。
 
 - 本 fork 镜像：`ghcr.io/mole404/lsky-pro-docker:latest`
-  （另有按源码 commit 命名的 tag，如 `:911275c13b038c7a8b710de44664f23887eeb6f6`）
+  （另有按本仓库提交命名的 tag，如 `:sha-3a1136c924c42eaf4dc23203d8f09163fc4ea063`）
 - 上游镜像：`halcyonazure/lsky-pro-docker:latest`
 
 ## 与上游的差异
 
-1. **源码钉死在 `911275c`**，不再在构建时拉 `master.zip`。
-   证据：`halcyonazure/lsky-pro-docker:latest` 在 Docker Hub 上最后更新于 2024-04-29，
-   而当时 lsky-pro 的 `master` HEAD 正是 `911275c`（2023-05-16，之后停更到 2024-12）。
-   也就是说**这个镜像 = 当前线上那份代码 + 前端补丁**，除补丁外行为逐字节不变。
-2. **叠加 `overlay/` 前端补丁**：`context-js.js`（iOS 长按 + 菜单收放/触摸端二级菜单）+ `images.blade.php`（脚本版本串）。
+1. **应用源码 vendored 在 `src/`**（= 上游 `38d52c46…`，2025-11-24 的 master 完整树，304 个文件、约 8MB），
+   构建直接 `COPY src/`，**不再联网拉 GitHub archive**。上游 README 已写明「开源版本已停止维护」，
+   所以「跟不上上游」这个风险基本为零；这么做的收益是：上游仓库哪天被删/归档/改名，你照样能重建镜像，
+   而且之后要改 PHP 代码，直接改 `src/` 下的文件、提交即可（不用再维护 overlay 叠加）。
+   为什么钉在 2025-11-24 这个 commit：它是上游最后一个提交，比原先钉的 `911275c`（2023-05-16）
+   多吃了三个真实修复 —— 图片格式转换时**不同图片共用同一个临时文件、会变成同一张图**、
+   加水印后丢质量参数、SVG 支持 —— 外加 laravel / phpseclib / commonmark 等一串安全升级。
+2. **前端补丁就地落在 `src/` 里**：`resources/js/context-js.js` 与 `public/js/context-js/context-js.js`
+   （同一份内容的两处拷贝，必须一致）+ `resources/views/user/images.blade.php`（脚本版本串）。
+   「我们相对上游改了什么」见 `patches/ios-longpress.patch`（存档，不参与构建），可用
+   `bash tools/diff-vs-upstream.sh` 随时重新生成与核对。
 3. 基础镜像显式写成 Debian **bookworm** 变体（与 2024-04 那版镜像同一 Debian 大版本），
    `install-php-extensions` 钉到具体版本（不再用 `latest`）。
-4. **构建期自证**：源码快照与补丁产物都用 md5 断言，对不上直接构建失败（见 Dockerfile「自证 1/2」）。
+4. **构建期自证**：① 我们从不修改的上游文件（`ImageService.php` / `convention.php` / `public/index.php` /
+   `routes/web.php` / `composer.lock`）按上游 md5 校验 —— 保证 vendored 快照没被动过；
+   ② 补丁产物按预期 md5 校验 —— 改了就构建失败（见 Dockerfile「自证 1/2」）。
 5. CI 推到 GHCR（用仓库自带 `GITHUB_TOKEN`，不需要任何 secret）。**构建前**先跑 `test/` 里的 jsdom
    行为测试（补丁的每条分支），构建后把镜像拉回来做真机自证：核 md5 + 断言补丁标记 + 记录
    PHP/扩展/Debian 版本 + 真起容器 curl 安装页 + 核 Apache 实际吐出的 JS md5。
@@ -27,6 +38,30 @@
    一致就跳过（不换镜像重启零开销）。站点数据（`.env` / `database/` / `storage/` /
    `bootstrap/cache/` / `public/i`）任何情况下都不碰。
    于是「升级 = 换镜像」，不需要人工 cp 文件、也不需要手动清视图缓存。
+
+## 代码在仓库的哪里、怎么改
+
+```
+src/                                    ← 上游应用源码完整快照（= 实际构建出来的东西，改这里就是改产品）
+├── app/ config/ routes/ ...            ← PHP 后端：直接改、提交，CI 重建镜像即可，不用打补丁
+├── resources/js/context-js.js          ← 我们的补丁（可读源码那份）
+├── public/js/context-js/context-js.js  ← 我们的补丁（浏览器实际加载那份，内容必须与上面一致）
+└── resources/views/user/images.blade.php
+Dockerfile / entrypoint.sh              ← 构建与启动脚本（entrypoint 负责按版本标记把代码同步进卷）
+patches/ tools/ test/                   ← 补丁存档、维护脚本、jsdom 行为测试
+.github/workflows/build-image.yaml      ← 推 master 自动：跑测试 → 构建 → 真容器自证 → 推 GHCR
+```
+
+改代码的姿势：
+
+1. 直接编辑 `src/` 下对应文件（改 PHP 也一样，改完就是普通 commit）
+2. 若动了那三个补丁文件中的任何一个 → 同步更新 Dockerfile「自证 2」的 md5、`.code-revision`
+   里对应的行、workflow 的 `CONTEXT_JS_MD5` / `BLADE_MD5`，并把 blade 里的 `?v=ios-longpressN`
+   递增一位（击穿 Safari 的启发式缓存）
+3. `cd test && npm ci && npm test` 跑补丁的行为测试
+4. 提交 → 推 master → CI 跑测试 + 构建 + 真容器三场景自证；全绿才会 promote `latest`
+5. 服务器上 `docker compose pull && docker compose up -d --force-recreate`：入口脚本靠版本标记
+   自动把新代码同步进卷，站点数据一律不碰
 
 ## 这个补丁修的是什么
 
@@ -57,10 +92,10 @@
 
 **改动文件**：
 
-- `overlay/context-js.js` → 同时写入 `resources/js/context-js.js` 与 `public/js/context-js/context-js.js`
+- `src/resources/js/context-js.js` 与 `src/public/js/context-js/context-js.js`（同一内容两份，必须一致）
   （上游 `webpack.mix.js` 里本来也是 `mix.copy('resources/js/context-js.js', 'public/js/context-js')`，
   但仓库里 `public/` 下那份是旧工具链留下的压缩产物，一直没跟着源码更新，所以两个位置都要覆盖）
-- `overlay/images.blade.php` → 写入 `resources/views/user/images.blade.php`，只改一行：
+- `src/resources/views/user/images.blade.php`，只改一行（加资源版本串）：
   给脚本加 `?v=ios-longpress4`，避免 iOS/Safari 的启发式缓存把旧版 JS 一直喂给老用户（每次改补丁就递增这个串）
 - 完整 diff 见 `patches/ios-longpress.patch`（存档用，构建实际走 `overlay/`）
 
@@ -85,7 +120,7 @@
 紧接着元素淡出的那 100ms 里菜单看着还在、状态已经是关 —— 这时点别的图片就直通了。这也解释了它为什么"偶尔"：
 取决于菜单落在哪里、要不要出滚动条、浏览器是否触发滚动锚定。
 
-**改法**（都在 `overlay/context-js.js` 里，不动主题 CSS）：
+**改法**（都在 `src/` 下的 `context-js.js` 里，不动主题 CSS）：
 
 - **菜单守卫**（`installMenuGuard()`，装在 `document` 的**捕获阶段**）：菜单打开时，点菜单之外的任何位置
   → 关菜单 + `preventDefault` + `stopPropagation`。捕获阶段拦下 = 这一发事件永远不会到达页面自己的处理器
@@ -201,8 +236,8 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 
 ### 代价与影响
 
-1. **换镜像时，卷里对代码的手工修改会失效**（被镜像版本覆盖）。要长期保留的改动请提进 `overlay/`
-   或改镜像源码，别在卷里改。**不换镜像重启不会碰你的手改**（标记一致就跳过）。
+1. **换镜像时，卷里对代码的手工修改会失效**（被镜像版本覆盖）。要长期保留的改动请改 `src/` 并提交，
+   让镜像带上，别在卷里改。**不换镜像重启不会碰你的手改**（标记一致就跳过）。
 2. **回滚 = 连镜像一起回滚**（compose 的 image 换回旧 tag/digest → `up -d --force-recreate`）：
    旧镜像的标记与卷里的不同 → 会自动把代码同步回那一版。升级和回滚都因此是"换一行 image"，
    但请保留旧镜像的 tag 或 digest（如 `ghcr.io/mole404/lsky-pro-docker@sha256:...`）。
@@ -221,10 +256,12 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 
 镜像里这些文件的 md5（补丁之外的每个文件都应当与线上那份旧镜像一致）：
 
-- `public/js/context-js/context-js.js`：补丁前 `bab81ff5e43b50a760935c7b3ae6475c` → 补丁后 `e114c840101d021aa416239196925624`
-- `resources/js/context-js.js`：补丁前 `c8e57f6232848ca8277341ddf1a3a7a6` → 补丁后 `e114c840101d021aa416239196925624`
-- `resources/views/user/images.blade.php`：补丁前 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `f4e100c87d4becdcce163800db535775`
-- `app/Services/ImageService.php` `a7bcd8549c656501a057214637f10b45`、`config/convention.php` `674975e4e5561cc15c27626cb1ce5233`：**不变**
+- `public/js/context-js/context-js.js`：原始 `bab81ff5e43b50a760935c7b3ae6475c` → 补丁后 `e114c840101d021aa416239196925624`
+- `resources/js/context-js.js`：原始 `c8e57f6232848ca8277341ddf1a3a7a6` → 补丁后 `e114c840101d021aa416239196925624`（两份必须一致）
+- `resources/views/user/images.blade.php`：原始 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `f4e100c87d4becdcce163800db535775`
+- `app/Services/ImageService.php`：`a7bcd8549c656501a057214637f10b45`（旧 pin）→ `9fb843806abd6b778d8acd3366e2f0f1`（新 pin，含上游三个修复）
+- `config/convention.php`：`674975e4e5561cc15c27626cb1ce5233`（旧 pin）→ `c1adde95924944e07bd72e87bd5db2f7`（新 pin，默认允许 svg）
+- 除这三个补丁文件外，`src/` 里其他文件都应等于上游 `38d52c46…` 的原值（CI「自证 1」每次构建都会验）
 
 功能上要过的用例：
 
@@ -243,15 +280,16 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 
 ## 维护
 
-**想跟上游更新**（例如吃进 master 上的 SVG 支持等修复）：
+**上游已停止维护**（README 明示，最后一个提交是 2025-11-24），正常情况下不需要跟上上游。
+真要有新提交想跟：
 
-1. 改 `Dockerfile` 里的 `LSKY_COMMIT` 为新 commit
-2. 重新生成 `overlay/`：取出新 commit 的 `resources/js/context-js.js` 与
-   `resources/views/user/images.blade.php`，重新应用 `patches/ios-longpress.patch`
-3. 同步更新哈希：Dockerfile「自证 2」的 3 个 md5 + `.code-revision` 里的两行 md5 +
-   `.github/workflows/build-image.yaml` 的 `CONTEXT_JS_MD5` / `BLADE_MD5`；只要改了补丁，就把 blade 里的
-   `?v=ios-longpressN` 递增一位（击穿 Safari 的启发式缓存）
-4. 推 master，等 CI 自证通过
+1. `bash tools/vendor-upstream.sh <新 commit>` —— 拉来上游那棵树替换 `src/`，自动保留我们那三个补丁文件，
+   并把上游版本打印出来供比对；脚本结尾会列出接下来必须同步的东西
+2. 更新 `Dockerfile` 的 `ARG LSKY_COMMIT` 与「自证 1/2」的 md5 期望值
+3. `bash tools/diff-vs-upstream.sh` 生成 diff 存进 `patches/ios-longpress.patch`；它还会做白名单校验，
+   告诉你 `src/` 相对上游是不是只动了预期那三个文件
+4. 同步 `workflow` 的 `CONTEXT_JS_MD5` / `BLADE_MD5`；动了补丁就把 blade 的 `?v=ios-longpressN` 递增一位
+5. `cd test && npm test`，然后推 master 等 CI 全绿
 
 ## 环境变量
 
@@ -278,7 +316,8 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 
 ## 构建您自己的镜像
 
-Dockerfile 已经是多段构建，无需手动拉源码，也不需要 Node 工具链（补丁直接覆盖编译好的前端文件）：
+Dockerfile 是多段构建：应用源码取自仓库里的 `src/`，不需要 Node 工具链（补丁直接改编译好的前端文件）。
+构建时只有 `composer install` 需要联网（依赖版本由 `src/composer.lock` 钉死）：
 
 ```bash
 docker build -t lsky-pro-docker .
@@ -303,4 +342,5 @@ docker buildx build --platform linux/amd64 -t lsky-pro-docker .
 - Docker 打包：fork 自 [HalcyonAzure/lsky-pro-docker](https://github.com/HalcyonAzure/lsky-pro-docker)（AGPL-3.0）
 - `resources/js/context-js.js` 源自 Jacob Kelley 的 Context.js（MIT），上游由 WispX 修改
 
-本仓库保留上游 `LICENSE`（AGPL-3.0）与全部署名，未删除任何版权与致谢信息。
+- vendored 的应用源码保留上游 `src/LICENSE`（**GPL-3.0**）与全部署名；本仓库自身的打包脚本沿用
+  HalcyonAzure 那份 `LICENSE`（AGPL-3.0）。均未删除任何版权与致谢信息。
