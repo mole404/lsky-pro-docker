@@ -191,8 +191,30 @@ jobs:
           docker rm -f lsky-a lsky-b lsky-c >/dev/null 2>&1 || true
           docker volume rm -f "$VOL" >/dev/null 2>&1 || true
 
-          echo "== A) 空卷首次启动：应播种，且卷里不能出现 .env =="
+          echo "== A) 空卷首次启动：应播种，且播种阶段不能把镜像的 .env 带进卷 =="
+          # 关键：Lsky 的安装向导自己会创建 .env，所以必须在**发任何 HTTP 请求之前**
+          # 检查 .env 是否已经存在，否则分不清"镜像泄漏"和"向导生成"。
           docker run -d --name lsky-a -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
+          for i in $(seq 1 30); do
+            if docker exec lsky-a test -f /var/www/html/public/index.php; then break; fi
+            sleep 2
+          done
+          docker exec lsky-a test -f /var/www/html/public/index.php || { echo "::error::空卷没被播种"; exit 1; }
+          docker exec lsky-a test -f /var/www/html/.code-revision || { echo "::error::空卷里没有版本标记"; exit 1; }
+          EARLY=$(docker exec lsky-a sh -c '
+            if [ -e /var/www/html/.env ]; then
+              echo "ENVFILE=present"
+              echo "ENV_MD5=$(md5sum /var/www/html/.env | cut -d" " -f1)"
+              echo "EXAMPLE_MD5=$(md5sum /var/www/html/.env.example 2>/dev/null | cut -d" " -f1)"
+              echo "IMAGE_ENV_MD5=$(md5sum /var/www/lsky/.env 2>/dev/null | cut -d" " -f1)"
+            else
+              echo "ENVFILE=absent"
+            fi
+          ')
+          echo "播种后（未发任何请求）："; echo "$EARLY"
+          echo "$EARLY" | grep -q "ENVFILE=absent" || { echo "::error::播种阶段把镜像的 .env 带进了空卷（会让安装向导 500）"; exit 1; }
+
+          echo "== A2) 全新建站可用性：安装向导应能正常打开 =="
           A=000
           for i in $(seq 1 30); do
             A=$(docker exec lsky-a sh -c 'curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8089/install || true' 2>/dev/null || true)
@@ -205,17 +227,9 @@ jobs:
             echo "::error::空卷播种后安装页不是 200（HTTP $A）"
             exit 1
           fi
-          docker exec lsky-a sh -c '
-            echo "IDX=$(test -f /var/www/html/public/index.php && echo yes || echo no)"
-            echo "ENVFILE=$(test -e /var/www/html/.env && echo present || echo absent)"
-            echo "MARKER=$(head -1 /var/www/html/.code-revision 2>/dev/null || echo none)"
-          '
-          if [ "$(docker exec lsky-a sh -c 'test -e /var/www/html/.env && echo present || echo absent')" != "absent" ]; then
-            echo "::error::空卷里出现了镜像的 .env —— 这正是会让安装向导 500 的坑"
-            exit 1
-          fi
-          docker exec lsky-a test -f /var/www/html/.code-revision || { echo "::error::空卷里没有版本标记"; exit 1; }
-          echo "A) 通过：空卷已播种、无 .env、有版本标记、安装页 200"
+          echo "（此时 .env 由安装向导自己生成，属正常）"
+          docker exec lsky-a sh -c 'test -e /var/www/html/.env && echo "向导生成 .env：present" || echo "向导生成 .env：absent"'
+          echo "A) 通过：播种不带 .env、有版本标记、安装页 200"
           docker rm -f lsky-a >/dev/null
 
           echo "== B) 已有卷 + 旧版本标记：应自动同步代码，数据与配置一项都不许变 =="
@@ -246,7 +260,7 @@ jobs:
             echo "BLADE_MD5=$(md5sum /var/www/html/resources/views/user/images.blade.php | cut -d" " -f1)"
             echo "HANDBOOK_GONE=$(grep -c 手动修补过 /var/www/html/app/Services/ImageService.php || true)"
             echo "ENV_SENTINEL=$(grep -c SENTINEL_KEEP_ME /var/www/html/.env || true)"
-            echo "ENV_MODE=$(stat -c %a /var/www/html/.env)"
+            echo "ENV_MODE_INFO=$(stat -c %a /var/www/html/.env)"
             echo "DB_SENTINEL=$(cat /var/www/html/database/database.sqlite)"
             echo "UPLOAD_SENTINEL=$(cat /var/www/html/storage/app/uploads/keepme.txt)"
             echo "CONFIG_CACHE=$(cat /var/www/html/bootstrap/cache/config.php)"
@@ -257,7 +271,8 @@ jobs:
           echo "$B" | grep -q "BLADE_MD5=${BLADE_MD5}"             || { echo "::error::已有卷里的 blade 没被同步"; exit 1; }
           echo "$B" | grep -q "HANDBOOK_GONE=0"                    || { echo "::error::旧版本的手工改动没被同步覆盖（换镜像应等于换代码）"; exit 1; }
           echo "$B" | grep -q "ENV_SENTINEL=1"                     || { echo "::error::.env 被覆盖了（会丢 APP_KEY / S3 配置）"; exit 1; }
-          echo "$B" | grep -q "ENV_MODE=640"                       || { echo "::error::.env 的权限位被改了"; exit 1; }
+          # 注：.env 的权限位不在这里断言 —— 上游 entrypoint 自带 `chmod -R 755 /var/www/html/`，
+          # 它会把 .env 归一化成 755，与同步无关。这里只关心内容没被动。
           echo "$B" | grep -q "DB_SENTINEL=SENTINEL_DB"            || { echo "::error::数据库文件被覆盖了"; exit 1; }
           echo "$B" | grep -q "UPLOAD_SENTINEL=SENTINEL_UPLOAD"    || { echo "::error::上传文件被覆盖了"; exit 1; }
           echo "$B" | grep -q "CONFIG_CACHE=SENTINEL_CONFIG_CACHE" || { echo "::error::bootstrap/cache 被动过"; exit 1; }
@@ -269,7 +284,7 @@ jobs:
           docker run --rm -v "$VOL":/var/www/html --entrypoint sh "$IMAGE_REF" -c 'echo "<?php // 手动修补过" > /var/www/html/app/Services/ImageService.php'
           docker run -d --name lsky-c -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
           for i in $(seq 1 20); do
-            docker logs lsky-c 2>&1 | grep -q '\[lsky\]' && break
+            if docker logs lsky-c 2>&1 | grep -q '\[lsky\]'; then break; fi
             sleep 1
           done
           docker logs lsky-c 2>&1 | grep '\[lsky\]' || true
