@@ -35,8 +35,11 @@ ARG FORK_SHA=unknown
 WORKDIR /build
 
 # 安装必要的依赖
+#   curl  —— 装 composer
+#   unzip —— composer 解压 dist 包要用（去掉它会导致 composer install 直接失败：CI 实测踩过）
+#   git   —— 部分包会走 source 安装时的兜底
 RUN apt-get update && \
-    apt-get install -y curl && \
+    apt-get install -y curl unzip git && \
     curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
