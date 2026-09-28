@@ -315,8 +315,10 @@ jobs:
           [ "$SERVED" = "$CONTEXT_JS_MD5" ] || { echo "::error::跳过后对外服务的 JS 不是补丁版（期望 $CONTEXT_JS_MD5）"; exit 1; }
           echo "C) 通过：同版本跳过同步、手动修补保留、对外服务的 JS 仍是补丁版"
 
-          echo "== 同步开销（只在标记不一致时发生）=="
-          docker run --rm --entrypoint sh "$IMAGE_REF" -c 'du -sh /var/www/lsky; cd /var/www/lsky && time tar cf - --exclude=./.env --exclude=./storage --exclude=./database --exclude=./bootstrap/cache --exclude=./public/i . > /dev/null'
+          echo "== 同步开销（只在标记不一致时发生，纯信息不影响结论）=="
+          # 用 bash 跑：`time` 是 bash 内建，sh(dash) 里没有（踩过 exit 127）。
+          # 这段只是量体积/耗时，失败不该拦住发布，所以 || true。
+          docker run --rm --entrypoint bash "$IMAGE_REF" -c 'du -sh /var/www/lsky; cd /var/www/lsky && time tar cf - --exclude=./.env --exclude=./storage --exclude=./database --exclude=./bootstrap/cache --exclude=./public/i . > /dev/null' || echo "（测速失败，不影响结论）"
           docker rm -f lsky-c >/dev/null 2>&1 || true
           docker volume rm -f "$VOL" >/dev/null 2>&1 || true
 
