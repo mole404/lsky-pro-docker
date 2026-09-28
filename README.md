@@ -14,12 +14,13 @@
    证据：`halcyonazure/lsky-pro-docker:latest` 在 Docker Hub 上最后更新于 2024-04-29，
    而当时 lsky-pro 的 `master` HEAD 正是 `911275c`（2023-05-16，之后停更到 2024-12）。
    也就是说**这个镜像 = 当前线上那份代码 + 前端补丁**，除补丁外行为逐字节不变。
-2. **叠加 `overlay/` 前端补丁**：`context-js.js`（iOS 长按）+ `images.blade.php`（脚本版本串）。
+2. **叠加 `overlay/` 前端补丁**：`context-js.js`（iOS 长按 + 菜单收放/触摸端二级菜单）+ `images.blade.php`（脚本版本串）。
 3. 基础镜像显式写成 Debian **bookworm** 变体（与 2024-04 那版镜像同一 Debian 大版本），
    `install-php-extensions` 钉到具体版本（不再用 `latest`）。
 4. **构建期自证**：源码快照与补丁产物都用 md5 断言，对不上直接构建失败（见 Dockerfile「自证 1/2」）。
-5. CI 推到 GHCR（用仓库自带 `GITHUB_TOKEN`，不需要任何 secret），构建后把镜像拉回来做真机自证：
-   核 md5 + 记录 PHP/扩展/Debian 版本 + 真起容器 curl 安装页。
+5. CI 推到 GHCR（用仓库自带 `GITHUB_TOKEN`，不需要任何 secret）。**构建前**先跑 `test/` 里的 jsdom
+   行为测试（补丁的每条分支），构建后把镜像拉回来做真机自证：核 md5 + 断言补丁标记 + 记录
+   PHP/扩展/Debian 版本 + 真起容器 curl 安装页 + 核 Apache 实际吐出的 JS md5。
    上游的「每天定时重建」已去掉（源码钉死后定时重建没有意义）。
 6. **入口脚本按「代码版本标记」自动同步**（`entrypoint.sh`）：镜像里带一个 `.code-revision`
    （源码 commit + 补丁 md5），卷里也存一份；**两者不一致（= 换了镜像）才同步代码**，
@@ -60,8 +61,41 @@
   （上游 `webpack.mix.js` 里本来也是 `mix.copy('resources/js/context-js.js', 'public/js/context-js')`，
   但仓库里 `public/` 下那份是旧工具链留下的压缩产物，一直没跟着源码更新，所以两个位置都要覆盖）
 - `overlay/images.blade.php` → 写入 `resources/views/user/images.blade.php`，只改一行：
-  给脚本加 `?v=ios-longpress2`，避免 iOS/Safari 的启发式缓存把旧版 JS 一直喂给老用户（每次改补丁就递增这个串）
+  给脚本加 `?v=ios-longpress3`，避免 iOS/Safari 的启发式缓存把旧版 JS 一直喂给老用户（每次改补丁就递增这个串）
 - 完整 diff 见 `patches/ios-longpress.patch`（存档用，构建实际走 `overlay/`）
+
+## 第二个补丁：菜单收放与触摸端二级菜单（2026-09-28 追加）
+
+前一个补丁解决"菜单**能不能**弹出来"，这个解决"菜单**好不好用**"。两处都是上游 `context-js.js` 的交互设计问题：
+
+**问题 1：点菜单之外会点穿。** 上游的关闭逻辑只在 `document` 的**冒泡阶段** `fadeOut`，既不
+`preventDefault` 也不 `stopPropagation` —— 点别的图片时"关菜单"和"开预览"同时发生（Viewer.js 的 click
+挂在图片网格上）；手机上想关菜单只能去点浏览器地址栏，而地址栏又窄又难点。
+
+**问题 2：手机上二级菜单一点就没。** 二级菜单靠 CSS `:hover` 显示
+（`.dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}`），而手机没有光标：
+手指点"复制链接"时浏览器补发的合成 mouseenter 让二级菜单闪一下，紧接着那发 click 撞上关闭逻辑，
+整个菜单消失 —— "复制链接"里的 Url / Html / BBCode / Markdown 在手机上根本点不到。
+
+**改法**（都在 `overlay/context-js.js` 里，不动主题 CSS）：
+
+- **菜单守卫**（`installMenuGuard()`，装在 `document` 的**捕获阶段**）：菜单打开时，点菜单之外的任何位置
+  → 关菜单 + `preventDefault` + `stopPropagation`。捕获阶段拦下 = 这一发事件永远不会到达页面自己的处理器
+  （不开预览、不跳链接）。菜单**内部**的点击照旧放行，复制/重命名/删除等功能不受影响。
+- **跟手一点**：手机上是"手指按下"（`touchstart`）就收起来，随后补发的 click 用 700ms 时间窗吞掉。
+  拦截打在 click 上、**不拦 touchstart**，所以页面滚动与缩放完全不受影响。
+- **刚打开的保护窗**（`MENU_OPEN_GRACE = 800ms`）：菜单是手指还按着时就弹出来的，抬手补发的那发 click
+  目标正是刚被长按的图 —— 只吞掉它、**不关菜单**（否则菜单会"刚开就自己关"）。这条只对"紧随一次触摸"
+  的 click 生效，鼠标点击不受影响（`lastTouchAt` 判定）。
+- **触摸端二级菜单**：`matchMedia('(hover: none)')` 为真的设备上，点带二级菜单的父项 → 给它的 `<li>`
+  加 `touch-open` 类，并注入一条与 hover 那条等价的 CSS；再点一次收起，同层只留一个展开。
+  有鼠标/触摸板的设备继续用 hover，**桌面行为零改动**。
+- **收得干净**：滚动 / 旋转缩放（含 `#images-scroll` 这类内部滚动容器）、`Esc` 都关菜单；
+  菜单自身滚动不误关。
+
+**验证**：`test/longpress.test.mjs` 覆盖了以上每条（包含"长按抬手那发 click 不能把刚开的菜单关掉"
+这条回归 —— 它是这次最容易踩的坑）；CI 的镜像自证还会断言 `installMenuGuard` / `MENU_OPEN_GRACE` /
+`touch-open` / `isMenuOpen` 这些标记真的在镜像里。
 
 ## 使用方法
 
@@ -140,7 +174,7 @@ docker compose up -d --force-recreate
 
 # 3) 验证（核「Apache 实际吐给浏览器」的那份，比看磁盘文件更硬）
 curl -s http://127.0.0.1:8089/js/context-js/context-js.js | md5sum
-# 期望：528d32fc5adc0d306b6d8f773ee5caaf
+# 期望：64ead77d518007cbf4a22f42e3404017
 docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.image.source"}}'
 # 期望：https://github.com/mole404/lsky-pro-docker
 ```
@@ -166,14 +200,17 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 
 镜像里这些文件的 md5（补丁之外的每个文件都应当与线上那份旧镜像一致）：
 
-- `public/js/context-js/context-js.js`：补丁前 `bab81ff5e43b50a760935c7b3ae6475c` → 补丁后 `528d32fc5adc0d306b6d8f773ee5caaf`
-- `resources/js/context-js.js`：补丁前 `c8e57f6232848ca8277341ddf1a3a7a6` → 补丁后 `528d32fc5adc0d306b6d8f773ee5caaf`
-- `resources/views/user/images.blade.php`：补丁前 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `576929df685fdb93f9950c16d924bcdc`
+- `public/js/context-js/context-js.js`：补丁前 `bab81ff5e43b50a760935c7b3ae6475c` → 补丁后 `64ead77d518007cbf4a22f42e3404017`
+- `resources/js/context-js.js`：补丁前 `c8e57f6232848ca8277341ddf1a3a7a6` → 补丁后 `64ead77d518007cbf4a22f42e3404017`
+- `resources/views/user/images.blade.php`：补丁前 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `2c9380a6af19953ba6ccdd78f503797e`
 - `app/Services/ImageService.php` `a7bcd8549c656501a057214637f10b45`、`config/convention.php` `674975e4e5561cc15c27626cb1ce5233`：**不变**
 
 功能上要过的用例：
 
 - iOS Safari 长按图片 → 弹图床自己的菜单（系统菜单不冒头）→ 抬手不会顺手弹出大图预览
+- 菜单开着时点别处（含另一张图片）→ **只关菜单**，不开预览、不跳转；再点一次才恢复普通点击
+- 手机上点"复制链接" → 二级菜单展开（不再闪一下就没）→ 点 Url / Html / Markdown 能正常复制
+- 菜单开着时滚动、缩放、按 Esc → 菜单收起
 - Windows 右键、Android Chrome 长按 → 菜单照旧
 - 单击看大图、拖拽多选、复制链接、重命名、删除、上传、原图与缩略图访问、登录、API
 
@@ -187,7 +224,9 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 1. 改 `Dockerfile` 里的 `LSKY_COMMIT` 为新 commit
 2. 重新生成 `overlay/`：取出新 commit 的 `resources/js/context-js.js` 与
    `resources/views/user/images.blade.php`，重新应用 `patches/ios-longpress.patch`
-3. 同步更新 Dockerfile「自证 1/2」里的 md5，以及 `.github/workflows/build-image.yaml` 里的 `CONTEXT_JS_MD5`
+3. 同步更新哈希：Dockerfile「自证 2」的 3 个 md5 + `.code-revision` 里的两行 md5 +
+   `.github/workflows/build-image.yaml` 的 `CONTEXT_JS_MD5` / `BLADE_MD5`；只要改了补丁，就把 blade 里的
+   `?v=ios-longpressN` 递增一位（击穿 Safari 的启发式缓存）
 4. 推 master，等 CI 自证通过
 
 ## 环境变量

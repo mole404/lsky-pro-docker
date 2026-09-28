@@ -3,6 +3,8 @@ name: Build and push image to GHCR
 # 上游 workflow 是「每天定时拉 master 重新构建并推到 DockerHub」，本 fork 改成：
 #   - 只在 master 有推送时构建（源码已钉死，定时重建没有意义）
 #   - 推到 GHCR，用仓库自带的 GITHUB_TOKEN，不需要任何 secret
+#   - 只构建 linux/amd64（部署机是 x86_64，arm64 白烧一半时间）
+#   - 构建前先跑 test/ 里的 jsdom 行为测试（iOS 长按 / 菜单收放 / 触摸端二级菜单）
 #   - 先推到不可变的 sha tag → 真机自证 → 自证通过才把 latest 指过去
 #     这样自证失败时 latest 仍停在上一个已知可用的镜像，线上拉到的不会是坏版本
 on:
@@ -17,9 +19,9 @@ env:
   # 与 Dockerfile 里的 LSKY_COMMIT 保持一致，用于打第二个可追溯的 tag
   LSKY_COMMIT: 911275c13b038c7a8b710de44664f23887eeb6f6
   # 补丁后 context-js.js 的 md5（Dockerfile 里也断言了同一份）
-  CONTEXT_JS_MD5: 528d32fc5adc0d306b6d8f773ee5caaf
+  CONTEXT_JS_MD5: 64ead77d518007cbf4a22f42e3404017
   # 补丁后 images.blade.php 的 md5（blade 里改了资源版本串就会变）
-  BLADE_MD5: 576929df685fdb93f9950c16d924bcdc
+  BLADE_MD5: 2c9380a6af19953ba6ccdd78f503797e
 
 jobs:
   build:
@@ -31,6 +33,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # 补丁的行为测试（jsdom + jQuery）。镜像里那份 context-js.js 就是 overlay/context-js.js，
+      # 所以这里跑绿 = iOS 长按 / 菜单收放 / 触摸端二级菜单的每条分支都过了一遍。
+      # 放在构建之前：补丁写错了就早点红，不用白等十几分钟构建。
+      - name: Behavior tests (jsdom)
+        run: |
+          set -euo pipefail
+          cd test
+          npm ci --no-audit --no-fund
+          npm test
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -108,6 +120,8 @@ jobs:
             php -r "print_r(Imagick::getVersion());" 2>/dev/null | tr -d "\n" | head -c 300; echo
             echo "== 长按阈值 =="
             grep -n "LONG_PRESS_DELAY = " /var/www/lsky/public/js/context-js/context-js.js
+            echo "== 菜单交互补丁（标记行）=="
+            grep -n -e "MENU_OPEN_GRACE = " -e "installMenuGuard()" -e "touch-open" /var/www/lsky/public/js/context-js/context-js.js | head -20
             echo "== 补丁文件 md5 =="
             md5sum /var/www/lsky/public/js/context-js/context-js.js
             md5sum /var/www/lsky/resources/js/context-js.js
@@ -139,6 +153,15 @@ jobs:
           fi
           echo "长按阈值 250ms 校验通过"
 
+          # 菜单交互修复必须在镜像里（点菜单外只关菜单、触摸端二级菜单、滚动/缩放/Esc 关闭）
+          for marker in 'installMenuGuard' 'MENU_OPEN_GRACE' 'touch-open' 'isMenuOpen'; do
+            if ! echo "$REPORT" | grep -q "$marker"; then
+              echo "::error::镜像里的补丁缺少菜单交互修复标记：$marker"
+              exit 1
+            fi
+          done
+          echo "菜单交互修复标记校验通过（installMenuGuard / MENU_OPEN_GRACE / touch-open / isMenuOpen）"
+
           # 线上是 SQLite 数据库，扩展缺失会让站点直接挂，钉死这条断言
           if ! echo "$REPORT" | grep -q pdo_sqlite=1; then
             echo "::error::新镜像里 pdo_sqlite 没加载（线上是 SQLite 数据库，不能丢）"
@@ -161,6 +184,14 @@ jobs:
             exit 1
           fi
           curl -s -o /tmp/root.html -w 'GET / → %{http_code}\n' -L http://127.0.0.1:18089/
+
+          # 端到端：验 Apache 真正吐给浏览器的 JS（不是磁盘上的文件）
+          SERVED_JS=$(curl -s http://127.0.0.1:18089/js/context-js/context-js.js | md5sum | awk '{print $1}')
+          echo "Apache 对外吐出的 context-js.js md5：$SERVED_JS"
+          if [ "$SERVED_JS" != "${CONTEXT_JS_MD5}" ]; then
+            echo "::error::Apache 吐出的 JS（$SERVED_JS）不是补丁版（${CONTEXT_JS_MD5}）"
+            exit 1
+          fi
           docker exec lsky-smoke php -r 'echo "artisan 可用："; echo file_exists("/var/www/html/artisan") ? "yes" : "no"; echo PHP_EOL;'
           echo "== 播种到卷里的补丁文件（部署后真正被 Apache 读的那份）=="
           docker exec lsky-smoke md5sum /var/www/html/public/js/context-js/context-js.js
