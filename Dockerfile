@@ -21,6 +21,7 @@ ARG PHP_EXT_INSTALLER_VERSION=2.12.0
 FROM php:${PHP_VERSION}-cli-${DEBIAN_RELEASE} AS build
 
 ARG LSKY_COMMIT
+ARG FORK_SHA=unknown
 
 WORKDIR /build
 
@@ -73,6 +74,16 @@ RUN printf '%s\n' \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
     && grep -q 'LONG_PRESS_DELAY = 250' ./public/js/context-js/context-js.js \
     && grep -q 'LONG_PRESS_DELAY = 250' ./resources/js/context-js.js
+
+# 代码版本标记：入口脚本用它判断「卷里的代码是不是当前镜像这一版」，不一致才同步（见 entrypoint.sh）。
+# 它由源码 commit + 补丁 md5 组成，正好是上面刚断言过的值 —— 任何代码/补丁变化都会让它变。
+RUN printf '%s\n' \
+        "fork_sha=${FORK_SHA}" \
+        "lsky_commit=${LSKY_COMMIT}" \
+        "context_js_md5=528d32fc5adc0d306b6d8f773ee5caaf" \
+        "images_blade_md5=576929df685fdb93f9950c16d924bcdc" \
+        > .code-revision \
+    && cat .code-revision
 
 FROM php:${PHP_VERSION}-apache-${DEBIAN_RELEASE}
 
@@ -139,7 +150,12 @@ RUN grep -q -- '--exclude=.\/.env' /entrypoint.sh \
     && grep -q -- '--exclude=.\/database' /entrypoint.sh \
     && grep -q -- '--exclude=.\/bootstrap\/cache' /entrypoint.sh \
     && grep -q -- '--exclude=.\/public\/i' /entrypoint.sh \
-    && grep -q 'views/\*.php' /entrypoint.sh
+    && grep -q 'views/\*.php' /entrypoint.sh \
+    && grep -q 'code-revision' /entrypoint.sh \
+    && test -f /var/www/lsky/.code-revision \
+    && grep -q '^fork_sha=' /var/www/lsky/.code-revision \
+    && grep -q 'cp -a /var/www/lsky/\* /var/www/html/' /entrypoint.sh \
+    && grep -q 'cp -a /var/www/lsky/.env.example /var/www/html' /entrypoint.sh
 WORKDIR /var/www/html/
 VOLUME /var/www/html
 ENV WEB_PORT 8089
