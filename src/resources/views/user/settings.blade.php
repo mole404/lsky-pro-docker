@@ -2,24 +2,24 @@
 
 <x-app-layout>
     <div class="my-6 md:my-9">
-        <p class="mb-3 font-semibold text-lg text-gray-700">基础设置</p>
+        <p class="mb-3 font-semibold text-lg text-ink">基础设置</p>
         <form action="{{ route('settings.update') }}" method="POST">
             @csrf
-            <div class="overflow-hidden sm:rounded-md shadow-custom">
-                <div class="px-3 py-4 bg-white sm:p-6">
+            <div class="overflow-hidden sm:rounded-md shadow-card">
+                <div class="px-3 py-4 bg-surface sm:p-6">
                     <div class="grid grid-cols-6 gap-6">
                         <div class="col-span-6 sm:col-span-3">
-                            <label for="email" class="block text-sm font-medium text-gray-700">邮箱</label>
+                            <label for="email" class="block text-sm font-medium text-ink">邮箱</label>
                             <x-input type="text" id="email" autocomplete="email" value="{{ Auth::user()->email }}" disabled readonly/>
                         </div>
 
                         <div class="col-span-6 sm:col-span-3">
-                            <label for="name" class="block text-sm font-medium text-gray-700">昵称</label>
+                            <label for="name" class="block text-sm font-medium text-ink">昵称</label>
                             <x-input type="text" name="name" id="name" autocomplete="name" value="{{ Auth::user()->name }}"/>
                         </div>
 
                         <div class="col-span-6 sm:col-span-3">
-                            <label for="default_strategy" class="block text-sm font-medium text-gray-700">默认上传策略</label>
+                            <label for="default_strategy" class="block text-sm font-medium text-ink">默认上传策略</label>
                             <x-select id="default_strategy" name="configs[default_strategy]" autocomplete="default-strategy">
                                 @if(Auth::user()->group)
                                     <option value="0">未选择</option>
@@ -33,7 +33,7 @@
                         </div>
 
                         <div class="col-span-6 sm:col-span-3">
-                            <label for="default_album" class="block text-sm font-medium text-gray-700">默认上传相册</label>
+                            <label for="default_album" class="block text-sm font-medium text-ink">默认上传相册</label>
                             <x-select id="default_album" name="configs[default_album]" autocomplete="default-album">
                                 @if(Auth::user()->albums->isNotEmpty())
                                     <option value="0">未选择</option>
@@ -47,12 +47,12 @@
                         </div>
 
                         <div class="col-span-6">
-                            <label for="url" class="block text-sm font-medium text-gray-700">个人主页</label>
+                            <label for="url" class="block text-sm font-medium text-ink">个人主页</label>
                             <x-input type="url" name="url" id="url" autocomplete="url" value="{{ Auth::user()->url }}" placeholder="个人主页地址，http(s)://"/>
                         </div>
 
                         <div class="col-span-6">
-                            <label for="password" class="block text-sm font-medium text-gray-700">密码</label>
+                            <label for="password" class="block text-sm font-medium text-ink">密码</label>
                             <x-input type="password" name="password" id="password" placeholder="不修改请留空" autocomplete="new-password" />
                         </div>
 

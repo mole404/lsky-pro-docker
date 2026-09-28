@@ -20,20 +20,20 @@
 
 ::-webkit-scrollbar-thumb {
     border-radius: 6px;
-    background: #cad3e2;
+    background: var(--lsky-border-2);
 }
 
 ::-webkit-scrollbar-track {
     border-radius: 6px;
-    background: rgb(255, 255, 255);
+    background: var(--lsky-surface-2);
 }
 
 progress::-webkit-progress-bar {
-    background-color: #d7d7d7;
+    background-color: var(--lsky-surface-3);
 }
 
 progress::-webkit-progress-value {
-    background-color: #5dcafa;
+    background-color: var(--lsky-accent);
 }
 
 #capacity-progress {
@@ -68,10 +68,10 @@ progress::-webkit-progress-value {
     & > div {
         font-size: 13px;
         padding: 10px 10px 10px 50px;
-        box-shadow: 0 0 12px rgba(183, 183, 183, 0.47);
+        box-shadow: var(--lsky-shadow-pop);
 
         &:hover {
-            box-shadow: 0 0 12px rgba(161, 161, 161, 0.47);
+            box-shadow: var(--lsky-shadow-pop);
         }
     }
 }
@@ -93,12 +93,12 @@ progress::-webkit-progress-value {
     padding: 3rem 0;
     span {
         display: inline-flex;
-        color: #626262;
+        color: var(--lsky-text-2);
         font-size: .9em;
         cursor: pointer;
         &.disabled {
             cursor: not-allowed;
-            color: grey;
+            color: var(--lsky-text-3);
         }
     }
 }
@@ -106,7 +106,7 @@ progress::-webkit-progress-value {
 // 我的图片
 #images-grid {
     a:hover, a.ds-selected {
-        outline-color: #3b82f6;
+        outline-color: var(--lsky-accent);
 
         .image-selector {
             display: block;
@@ -116,7 +116,7 @@ progress::-webkit-progress-value {
             .image-selector {
                 i {
                     border-color: white;
-                    color: #0061ff;
+                    color: var(--lsky-accent);
                 }
             }
         }
@@ -140,7 +140,7 @@ progress::-webkit-progress-value {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #ccc;
+    background-color: var(--lsky-border-2);
     transition: .4s;
 }
 
@@ -151,16 +151,16 @@ progress::-webkit-progress-value {
     width: 24px;
     left: 4px;
     bottom: 3px;
-    background-color: white;
+    background-color: #fff;
     transition: 0.4s;
 }
 
 input:checked + .slider {
-    background-color: #2196F3;
+    background-color: var(--lsky-accent);
 }
 
 input:focus + .slider {
-    box-shadow: 0 0 1px #2196F3;
+    box-shadow: 0 0 0 3px var(--lsky-accent-soft);
 }
 
 input:checked + .slider:before {
@@ -174,4 +174,61 @@ input:checked + .slider:before {
 
 .slider.round:before {
     border-radius: 50%;
+}
+
+/* ---------------------------------------------------------------------------
+ * 暗色下给第三方组件的补丁
+ * toastr 的样式在 common.css 里（@import '~toastr'），能直接覆盖；
+ * sweetalert2 的样式是运行时由 JS 注入到 <head> 末尾的，所以这里统一用
+ * html.dark 提高优先级（比 .swal2-popup 多一层），避免用 !important。
+ * ------------------------------------------------------------------------- */
+html.dark {
+    #toast-container > div {
+        background-color: var(--lsky-surface);
+        background-image: none;
+        color: var(--lsky-text);
+        border: 1px solid var(--lsky-border);
+        opacity: .97;
+    }
+
+    #toast-container > div:hover {
+        box-shadow: var(--lsky-shadow-pop);
+    }
+
+    #toast-container .toast-progress {
+        background-color: var(--lsky-accent);
+    }
+
+    .swal2-popup {
+        background: var(--lsky-surface);
+        color: var(--lsky-text);
+        border: 1px solid var(--lsky-border);
+    }
+
+    .swal2-title,
+    .swal2-html-container {
+        color: var(--lsky-text);
+    }
+
+    .swal2-input,
+    .swal2-textarea,
+    .swal2-select {
+        background-color: var(--lsky-surface-2);
+        border-color: var(--lsky-border-2);
+        color: var(--lsky-text);
+    }
+
+    .swal2-styled.swal2-confirm {
+        background-color: var(--lsky-accent);
+    }
+
+    .swal2-styled.swal2-cancel {
+        background-color: var(--lsky-surface-3);
+        color: var(--lsky-text-2);
+    }
+
+    /* viewer.js 工具栏在暗色下用半透明深色即可，背景本来就是暗的 */
+    .viewer-toolbar > ul > li {
+        background-color: rgba(255, 255, 255, .12);
+    }
 }

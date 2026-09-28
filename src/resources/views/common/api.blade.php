@@ -2,18 +2,18 @@
 
 <x-app-layout>
     <div class="my-6 md:my-9">
-        <p class="text-xl mb-2 text-gray-800 font-semibold">接口说明</p>
-        <div class="space-y-4 bg-white p-3 rounded-md mb-10 shadow-custom">
+        <p class="text-xl mb-2 text-ink font-semibold">接口说明</p>
+        <div class="space-y-4 bg-surface p-3 rounded-md mb-10 shadow-card">
             <div>
-                <p class="text-lg text-gray-700 font-semibold">接口URL</p>
+                <p class="text-lg text-ink font-semibold">接口URL</p>
                 <x-code>{{ request()->getSchemeAndHttpHost() }}/api/v1</x-code>
             </div>
 
             <div>
-                <p class="text-lg text-gray-700 font-semibold">验证方式</p>
-                <div class="my-2 text-sm bg-white rounded-md p-4 overflow-x-auto">
+                <p class="text-lg text-ink font-semibold">验证方式</p>
+                <div class="my-2 text-sm bg-surface rounded-md p-4 overflow-x-auto">
                     当前版本接口采用 「HTTP 基本验证」的方式验证授权，获取到 token 后，通过设置请求 header 标头来验证请求(Bearer Token)，例如：
-                    <b class="block my-2 text-gray-600 text-sm">"Authorization": "Bearer 1|1bJbwlqBfnggmOMEZqXT5XusaIwqiZjCDs7r1Ob5"</b>
+                    <b class="block my-2 text-ink-2 text-sm">"Authorization": "Bearer 1|1bJbwlqBfnggmOMEZqXT5XusaIwqiZjCDs7r1Ob5"</b>
                     <p class="text-sm">如果未设置 Authorization 的情况下请求上传接口，将会被视为游客上传。</p>
                 </div>
             </div>
@@ -21,27 +21,27 @@
             <div class="my-4 overflow-x-auto">
                 <p class="text-sm mb-2">公共请求 headers 说明</p>
                 <table class="min-w-full">
-                    <thead class="bg-white border">
+                    <thead class="bg-surface border">
                     <tr>
-                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                             字段
                         </th>
-                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                             类型
                         </th>
-                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                             说明
                         </th>
                     </tr>
                     </thead>
-                    <tbody class="bg-white border divide-y text-sm">
+                    <tbody class="bg-surface border divide-y text-sm">
                     <tr>
                         <td class="px-3 py-2 whitespace-nowrap">Authorization</td>
                         <td class="px-3 py-2 whitespace-nowrap">String</td>
                         <td class="px-3 py-2 whitespace-nowrap">授权 Token，例如：Bearer 1|1bJbwlqBfnggmOMEZqXT5XusaIwqiZjCDs7r1Ob5</td>
                     </tr>
                     <tr>
-                        <td class="px-3 py-2 whitespace-nowrap"><span class="text-red-500">*</span>Accept</td>
+                        <td class="px-3 py-2 whitespace-nowrap"><span class="text-danger">*</span>Accept</td>
                         <td class="px-3 py-2 whitespace-nowrap">String</td>
                         <td class="px-3 py-2 whitespace-nowrap">必须设置为 application/json</td>
                     </tr>
@@ -52,20 +52,20 @@
             <div class="my-4 overflow-x-auto">
                 <p class="text-sm mb-2">公共响应 headers 说明</p>
                 <table class="min-w-full">
-                    <thead class="bg-white border">
+                    <thead class="bg-surface border">
                     <tr>
-                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                             字段
                         </th>
-                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                             类型
                         </th>
-                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                             说明
                         </th>
                     </tr>
                     </thead>
-                    <tbody class="bg-white border divide-y text-sm">
+                    <tbody class="bg-surface border divide-y text-sm">
                     <tr>
                         <td class="px-3 py-2 whitespace-nowrap">X-RateLimit-Limit</td>
                         <td class="px-3 py-2 whitespace-nowrap">Integer</td>
@@ -83,17 +83,17 @@
             <div class="my-4 overflow-x-auto">
                 <p class="text-sm mb-2">响应状态码 HTTP Status Code 说明</p>
                 <table class="min-w-full">
-                    <thead class="bg-white border">
+                    <thead class="bg-surface border">
                     <tr>
-                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                             状态码
                         </th>
-                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                             说明
                         </th>
                     </tr>
                     </thead>
-                    <tbody class="bg-white border divide-y text-sm">
+                    <tbody class="bg-surface border divide-y text-sm">
                     <tr>
                         <td class="px-3 py-2 whitespace-nowrap">401</td>
                         <td class="px-3 py-2 whitespace-nowrap">未登录或授权失败</td>
@@ -114,38 +114,38 @@
                 </table>
             </div>
 
-            <p class="text-sm my-2 text-red-500">文档中接口的请求参数，使用红色「*」符号标注，则表示为必传项。</p>
+            <p class="text-sm my-2 text-danger">文档中接口的请求参数，使用红色「*」符号标注，则表示为必传项。</p>
         </div>
 
-        <p class="text-xl mb-2 text-gray-800 font-semibold">授权相关</p>
-        <div class="space-y-4 bg-white p-3 rounded-md mb-10 shadow-custom">
+        <p class="text-xl mb-2 text-ink font-semibold">授权相关</p>
+        <div class="space-y-4 bg-surface p-3 rounded-md mb-10 shadow-card">
             <div>
-                <p class="text-lg text-gray-700 font-semibold">生成 Token</p>
+                <p class="text-lg text-ink font-semibold">生成 Token</p>
                 <x-code><span class="text-green-500 select-none">POST </span>/tokens</x-code>
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">请求参数(Body)</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
-                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-red-500">*</span>email</td>
+                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-danger">*</span>email</td>
                             <td class="px-3 py-2 whitespace-nowrap">String</td>
                             <td class="px-3 py-2 whitespace-nowrap">邮箱</td>
                         </tr>
                         <tr>
-                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-red-500">*</span>password</td>
+                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-danger">*</span>password</td>
                             <td class="px-3 py-2 whitespace-nowrap">String</td>
                             <td class="px-3 py-2 whitespace-nowrap">密码</td>
                         </tr>
@@ -155,20 +155,20 @@
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">返回参数</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">status</td>
                             <td class="px-3 py-2 whitespace-nowrap">Boolean</td>
@@ -194,25 +194,25 @@
                 </div>
             </div>
             <div>
-                <p class="text-lg text-gray-700 font-semibold">清空 Token</p>
+                <p class="text-lg text-ink font-semibold">清空 Token</p>
                 <x-code><span class="text-red-300 select-none">DELETE </span>/tokens</x-code>
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">返回参数</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">status</td>
                             <td class="px-3 py-2 whitespace-nowrap">Boolean</td>
@@ -233,25 +233,25 @@
                 </div>
             </div>
             <div>
-                <p class="text-lg text-gray-700 font-semibold">用户资料</p>
+                <p class="text-lg text-ink font-semibold">用户资料</p>
                 <x-code><span class="text-sky-500 select-none">GET </span>/profile</x-code>
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">返回参数</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">status</td>
                             <td class="px-3 py-2 whitespace-nowrap">Boolean</td>
@@ -318,29 +318,29 @@
             </div>
         </div>
 
-        <p class="text-xl mb-2 text-gray-800 font-semibold">策略相关</p>
-        <div class="space-y-4 bg-white p-3 rounded-md mb-10 shadow-custom">
+        <p class="text-xl mb-2 text-ink font-semibold">策略相关</p>
+        <div class="space-y-4 bg-surface p-3 rounded-md mb-10 shadow-card">
             <div>
-                <p class="text-lg text-gray-700 font-semibold">策略列表</p>
+                <p class="text-lg text-ink font-semibold">策略列表</p>
                 <x-code><span class="text-sky-500 select-none">GET </span>/strategies</x-code>
 
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">请求参数(Query)</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">keyword</td>
                             <td class="px-3 py-2 whitespace-nowrap">String</td>
@@ -353,20 +353,20 @@
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">返回参数</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">status</td>
                             <td class="px-3 py-2 whitespace-nowrap">Boolean</td>
@@ -403,31 +403,31 @@
             </div>
         </div>
 
-        <p class="text-xl mb-2 text-gray-800 font-semibold">图片相关</p>
-        <div class="space-y-4 bg-white p-3 rounded-md mb-10 shadow-custom">
+        <p class="text-xl mb-2 text-ink font-semibold">图片相关</p>
+        <div class="space-y-4 bg-surface p-3 rounded-md mb-10 shadow-card">
             <div>
-                <p class="text-lg text-gray-700 font-semibold">上传图片</p>
+                <p class="text-lg text-ink font-semibold">上传图片</p>
                 <x-code><span class="text-green-500 select-none">POST </span>/upload</x-code>
 
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">Headers</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
-                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-red-500">*</span>Content-Type</td>
+                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-danger">*</span>Content-Type</td>
                             <td class="px-3 py-2 whitespace-nowrap">String</td>
                             <td class="px-3 py-2 whitespace-nowrap">需要设置为 multipart/form-data</td>
                         </tr>
@@ -438,22 +438,22 @@
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">请求参数(Body)</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
-                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-red-500">*</span>file</td>
+                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-danger">*</span>file</td>
                             <td class="px-3 py-2 whitespace-nowrap">File</td>
                             <td class="px-3 py-2 whitespace-nowrap">图片文件</td>
                         </tr>
@@ -469,20 +469,20 @@
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">返回参数</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">status</td>
                             <td class="px-3 py-2 whitespace-nowrap">Boolean</td>
@@ -583,26 +583,26 @@
                 </div>
             </div>
             <div>
-                <p class="text-lg text-gray-700 font-semibold">图片列表</p>
+                <p class="text-lg text-ink font-semibold">图片列表</p>
                 <x-code><span class="text-sky-500 select-none">GET </span>/images</x-code>
 
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">请求参数(Query)</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">page</td>
                             <td class="px-3 py-2 whitespace-nowrap">Integer</td>
@@ -635,20 +635,20 @@
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">返回参数</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">status</td>
                             <td class="px-3 py-2 whitespace-nowrap">Boolean</td>
@@ -754,28 +754,28 @@
                 </div>
             </div>
             <div>
-                <p class="text-lg text-gray-700 font-semibold">删除图片</p>
+                <p class="text-lg text-ink font-semibold">删除图片</p>
                 <x-code><span class="text-red-300 select-none">DELETE </span>/images/:key</x-code>
 
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">请求参数(Params)</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
-                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-red-500">*</span>key</td>
+                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-danger">*</span>key</td>
                             <td class="px-3 py-2 whitespace-nowrap">String</td>
                             <td class="px-3 py-2 whitespace-nowrap">图片密钥</td>
                         </tr>
@@ -786,20 +786,20 @@
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">返回参数</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">status</td>
                             <td class="px-3 py-2 whitespace-nowrap">Boolean</td>
@@ -821,29 +821,29 @@
             </div>
         </div>
 
-        <p class="text-xl mb-2 text-gray-800 font-semibold">相册相关</p>
-        <div class="space-y-4 bg-white p-3 rounded-md mb-10 shadow-custom">
+        <p class="text-xl mb-2 text-ink font-semibold">相册相关</p>
+        <div class="space-y-4 bg-surface p-3 rounded-md mb-10 shadow-card">
             <div>
-                <p class="text-lg text-gray-700 font-semibold">相册列表</p>
+                <p class="text-lg text-ink font-semibold">相册列表</p>
                 <x-code><span class="text-sky-500 select-none">GET </span>/albums</x-code>
 
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">请求参数(Query)</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">page</td>
                             <td class="px-3 py-2 whitespace-nowrap">Integer</td>
@@ -866,20 +866,20 @@
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">返回参数</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">status</td>
                             <td class="px-3 py-2 whitespace-nowrap">Boolean</td>
@@ -945,28 +945,28 @@
                 </div>
             </div>
             <div>
-                <p class="text-lg text-gray-700 font-semibold">删除相册</p>
+                <p class="text-lg text-ink font-semibold">删除相册</p>
                 <x-code><span class="text-red-300 select-none">DELETE </span>/albums/:id</x-code>
 
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">请求参数(Params)</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
-                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-red-500">*</span>id</td>
+                            <td class="px-3 py-2 whitespace-nowrap"><span class="text-danger">*</span>id</td>
                             <td class="px-3 py-2 whitespace-nowrap">String</td>
                             <td class="px-3 py-2 whitespace-nowrap">相册自增 ID</td>
                         </tr>
@@ -977,20 +977,20 @@
                 <div class="my-4 overflow-x-auto">
                     <p class="text-sm mb-2">返回参数</p>
                     <table class="min-w-full">
-                        <thead class="bg-white border">
+                        <thead class="bg-surface border">
                         <tr>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 字段
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 类型
                             </th>
-                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-ink-2 uppercase tracking-wider whitespace-nowrap">
                                 说明
                             </th>
                         </tr>
                         </thead>
-                        <tbody class="bg-white border divide-y text-sm">
+                        <tbody class="bg-surface border divide-y text-sm">
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">status</td>
                             <td class="px-3 py-2 whitespace-nowrap">Boolean</td>

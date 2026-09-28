@@ -1,7 +1,7 @@
 <fieldset>
-    <legend class="text-base font-medium text-gray-900">{{ $title }}</legend>
+    <legend class="text-[15px] font-semibold text-ink">{{ $title }}</legend>
     @isset($faq)
-        <p class="text-sm text-gray-500">{!! $faq !!}</p>
+        <p class="text-[13px] text-ink-2">{!! $faq !!}</p>
     @endisset
     <div class="flex flex-wrap mt-4">
         {{ $slot }}

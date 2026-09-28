@@ -1,7 +1,7 @@
 @if($_is_notice)
-    <button type="button" class="bg-gray-800 flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white" id="open-notice" aria-expanded="false" aria-haspopup="true">
-        <div class="h-8 w-8 rounded-full flex items-center justify-center bg-white">
-            <i class="fas fa-envelope text-gray-900"></i>
+    <button type="button" class="ls-btn ls-btn-sm h-10 rounded-full px-1.5 gap-2" id="open-notice" aria-expanded="false" aria-haspopup="true">
+        <div class="h-7 w-7 rounded-full flex items-center justify-center bg-surface-2 border border-line">
+            <i class="fas fa-envelope text-ink-2 text-[13px]"></i>
         </div>
         <span class="px-2 sm:block hidden">公告</span>
     </button>

@@ -5,7 +5,7 @@
         <form action="{{ route('admin.groups') }}" method="get">
             <div class="mb-3 flex justify-between w-full">
                 <x-button type="button" onclick="window.location.href = '{{ route('admin.group.create') }}'">创建角色组</x-button>
-                <input class="px-2 text-sm rounded-md bg-white border-transparent focus:border-gray-500 focus:bg-white focus:ring-0" name="keywords" placeholder="输入名称回车搜索..." value="{{ request('keywords') }}" />
+                <input class="px-2 text-sm rounded-md ls-input h-9 text-[13px]" name="keywords" placeholder="输入名称回车搜索..." value="{{ request('keywords') }}" />
             </div>
         </form>
 
@@ -42,9 +42,9 @@
                 <td class="px-6 py-4 whitespace-nowrap">{{ $group->users_count }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ $group->strategies_count }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <a href="{{ route('admin.group.edit', ['id' => $group->id]) }}" class="text-indigo-600 hover:text-indigo-900">编辑</a>
+                    <a href="{{ route('admin.group.edit', ['id' => $group->id]) }}" class="text-brand hover:opacity-80">编辑</a>
                     @if(! $group->is_default && ! $group->is_guest)
-                    <a href="javascript:void(0)" data-operate="delete" class="text-red-600 hover:text-red-900">删除</a>
+                    <a href="javascript:void(0)" data-operate="delete" class="text-danger hover:opacity-80">删除</a>
                     @endif
                 </td>
             </tr>
