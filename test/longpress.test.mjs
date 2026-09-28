@@ -95,7 +95,7 @@ console.log('\n[iPhone Safari] 长按应弹出图床自己的菜单');
 {
     const { window, $, $item, img } = boot({ ua: UA.iphone });
     await longPress(window, $item[0]);
-    check('长按 500ms 后出现自定义菜单', !!menu(window), menuText(window));
+    check('长按（≥250ms）后出现自定义菜单', !!menu(window), menuText(window));
     check('菜单内容完整（header + 各项）', menuText(window).includes('图片操作') && menuText(window).includes('复制链接'));
     check('显示的是图片自己的菜单，没有被外层容器的"刷新"菜单盖掉', !menuText(window).includes('刷新'));
     check('beforeOpen 被调用且拿到元素', window.__calls.some((c) => c[0] === 'beforeOpen' && c[1] === 1), JSON.stringify(window.__calls));
@@ -135,7 +135,21 @@ console.log('\n[iPhone Safari] 长按的取消与边界');
     await sleep(200);
     touch(c.window, 'touchend', 100, 200, c.$item[0]);
     await sleep(500);
-    check('短按（<500ms 抬手）不触发菜单', !menu(c.window));
+    check('短按（<250ms 抬手）不触发菜单', !menu(c.window));
+
+    // 阈值回归：250ms 是新的分界线，压短了就必须守住边界（老师要求 500 -> 250）
+    const d = boot({ ua: UA.iphone });
+    touch(d.window, 'touchstart', 100, 200, d.$item[0]);
+    await sleep(320);
+    touch(d.window, 'touchend', 100, 200, d.$item[0]);
+    check('按住 320ms 抬手 → 菜单出现（确认阈值确实降到了 250ms）', !!menu(d.window));
+
+    const e = boot({ ua: UA.iphone });
+    touch(e.window, 'touchstart', 100, 200, e.$item[0]);
+    await sleep(160);
+    touch(e.window, 'touchend', 100, 200, e.$item[0]);
+    await sleep(200);
+    check('按住 160ms 抬手 → 不出现菜单（快速点按不能误触）', !menu(e.window));
 }
 
 // ---------------------------------------------------------------- iPad 桌面模式

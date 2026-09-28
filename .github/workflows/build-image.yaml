@@ -17,7 +17,9 @@ env:
   # 与 Dockerfile 里的 LSKY_COMMIT 保持一致，用于打第二个可追溯的 tag
   LSKY_COMMIT: 911275c13b038c7a8b710de44664f23887eeb6f6
   # 补丁后 context-js.js 的 md5（Dockerfile 里也断言了同一份）
-  CONTEXT_JS_MD5: 5e4426728badb7fad4805383f72a0604
+  CONTEXT_JS_MD5: 528d32fc5adc0d306b6d8f773ee5caaf
+  # 补丁后 images.blade.php 的 md5（blade 里改了资源版本串就会变）
+  BLADE_MD5: 576929df685fdb93f9950c16d924bcdc
 
 jobs:
   build:
@@ -102,6 +104,8 @@ jobs:
             apache2 -v | head -1
             echo "== imagick =="
             php -r "print_r(Imagick::getVersion());" 2>/dev/null | tr -d "\n" | head -c 300; echo
+            echo "== 长按阈值 =="
+            grep -n "LONG_PRESS_DELAY = " /var/www/lsky/public/js/context-js/context-js.js
             echo "== 补丁文件 md5 =="
             md5sum /var/www/lsky/public/js/context-js/context-js.js
             md5sum /var/www/lsky/resources/js/context-js.js
@@ -117,6 +121,21 @@ jobs:
             exit 1
           fi
           echo "补丁文件 md5 校验通过：$ACTUAL"
+
+          # blade 也要核：它决定浏览器拿到的资源版本串，漏了就白改
+          BLADE_ACTUAL=$(echo "$REPORT" | awk '/user\/images.blade.php$/ {print $1}')
+          if [ "$BLADE_ACTUAL" != "${BLADE_MD5}" ]; then
+            echo "::error::镜像里的 images.blade.php（$BLADE_ACTUAL）与预期（${BLADE_MD5}）不一致"
+            exit 1
+          fi
+          echo "blade md5 校验通过：$BLADE_ACTUAL"
+
+          # 长按阈值必须是 250ms（老师要求 500 -> 250）
+          if ! echo "$REPORT" | grep -q 'LONG_PRESS_DELAY = 250'; then
+            echo "::error::补丁里的长按阈值不是 250ms"
+            exit 1
+          fi
+          echo "长按阈值 250ms 校验通过"
 
           # 线上是 SQLite 数据库，扩展缺失会让站点直接挂，钉死这条断言
           if ! echo "$REPORT" | grep -q pdo_sqlite=1; then
@@ -153,6 +172,73 @@ jobs:
             echo "安装页 HTTP：$CODE"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # ------------------------------------------------------------------
+      # 强制同步自证（本次新增的数据安全关键路径）
+      #   1. 已有部署的卷：旧代码必须被镜像版本覆盖（换镜像 = 代码也换）
+      #   2. .env / database / storage / bootstrap/cache 一个都不许被碰
+      #   3. 编译视图缓存被清掉（否则 blade 改动不生效）
+      # 任何一条不满足就 exit 1 —— 自证不过就不会 promote latest。
+      # ------------------------------------------------------------------
+      - name: Verify forced code sync (existing volume, data must survive)
+        env:
+          IMAGE_REF: ${{ env.IMAGE }}:sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          VOL=lsky-sync-test
+          docker rm -f lsky-seed lsky-resync >/dev/null 2>&1 || true
+          docker volume rm -f "$VOL" >/dev/null 2>&1 || true
+
+          echo "== 1) 空卷首次启动（应全量播种）=="
+          docker run -d --name lsky-seed -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
+          for i in $(seq 1 30); do docker exec lsky-seed test -f /var/www/html/public/index.php && break; sleep 2; done
+          docker exec lsky-seed test -f /var/www/html/public/index.php && echo "空卷播种 OK"
+          docker rm -f lsky-seed >/dev/null
+
+          echo "== 2) 把卷改造成已有部署：旧代码 + 自己的配置/数据/缓存 =="
+          docker run --rm -v "$VOL":/var/www/html --entrypoint sh "$IMAGE_REF" -c '
+            set -e
+            echo "// OLD cached js" > /var/www/html/public/js/context-js/context-js.js
+            printf "APP_KEY=SENTINEL_KEEP_ME\n" >> /var/www/html/.env
+            mkdir -p /var/www/html/database
+            echo "SENTINEL_DB" > /var/www/html/database/database.sqlite
+            mkdir -p /var/www/html/storage/framework/views /var/www/html/storage/app/uploads /var/www/html/bootstrap/cache
+            echo "SENTINEL_COMPILED_VIEW" > /var/www/html/storage/framework/views/deadbeef.php
+            echo "SENTINEL_UPLOAD" > /var/www/html/storage/app/uploads/keepme.txt
+            echo "SENTINEL_CONFIG_CACHE" > /var/www/html/bootstrap/cache/config.php
+          '
+
+          echo "== 3) 再次启动（应走强制同步分支）=="
+          docker run -d --name lsky-resync -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
+          for i in $(seq 1 30); do
+            if docker exec lsky-resync md5sum /var/www/html/public/js/context-js/context-js.js 2>/dev/null | grep -q "$CONTEXT_JS_MD5"; then break; fi
+            sleep 2
+          done
+
+          REPORT=$(docker exec lsky-resync sh -c '
+            echo "JS_MD5=$(md5sum /var/www/html/public/js/context-js/context-js.js | cut -d" " -f1)"
+            echo "BLADE_MD5=$(md5sum /var/www/html/resources/views/user/images.blade.php | cut -d" " -f1)"
+            echo "ENV_SENTINEL=$(grep -c SENTINEL_KEEP_ME /var/www/html/.env || true)"
+            echo "DB_SENTINEL=$(cat /var/www/html/database/database.sqlite)"
+            echo "UPLOAD_SENTINEL=$(cat /var/www/html/storage/app/uploads/keepme.txt)"
+            echo "CONFIG_CACHE=$(cat /var/www/html/bootstrap/cache/config.php)"
+            echo "COMPILED_VIEWS=$(ls /var/www/html/storage/framework/views/ | wc -l)"
+          ')
+          echo "$REPORT"
+
+          echo "$REPORT" | grep -q "JS_MD5=${CONTEXT_JS_MD5}"            || { echo "::error::已有卷里的补丁 JS 没被同步成镜像版本"; exit 1; }
+          echo "$REPORT" | grep -q "BLADE_MD5=${BLADE_MD5}"              || { echo "::error::已有卷里的 blade 没被同步"; exit 1; }
+          echo "$REPORT" | grep -q "ENV_SENTINEL=1"                     || { echo "::error::.env 被覆盖了（会丢 APP_KEY / S3 配置）"; exit 1; }
+          echo "$REPORT" | grep -q "DB_SENTINEL=SENTINEL_DB"            || { echo "::error::数据库文件被覆盖了"; exit 1; }
+          echo "$REPORT" | grep -q "UPLOAD_SENTINEL=SENTINEL_UPLOAD"    || { echo "::error::上传文件被覆盖了"; exit 1; }
+          echo "$REPORT" | grep -q "CONFIG_CACHE=SENTINEL_CONFIG_CACHE" || { echo "::error::bootstrap/cache 被动过"; exit 1; }
+          echo "$REPORT" | grep -q "COMPILED_VIEWS=0"                   || { echo "::error::编译视图缓存没清，blade 改动不会生效"; exit 1; }
+          echo "强制同步自证通过：代码已更新，.env / 数据库 / 上传 / 配置缓存均未被碰"
+
+          echo "== 4) 同步开销（每次启动多花的拷贝时间）=="
+          docker run --rm --entrypoint sh "$IMAGE_REF" -c 'du -sh /var/www/lsky; cd /var/www/lsky && time tar cf - --exclude=./.env --exclude=./storage --exclude=./database --exclude=./bootstrap/cache --exclude=./public/i . > /dev/null'
+          docker rm -f lsky-resync >/dev/null 2>&1 || true
+          docker volume rm -f "$VOL" >/dev/null 2>&1 || true
 
       # 自证全过之后才动 latest：验证失败时 latest 保持在上一个已知可用版本
       - name: Promote verified image to latest

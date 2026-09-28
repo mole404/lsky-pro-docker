@@ -65,12 +65,14 @@ COPY overlay/images.blade.php ./resources/views/user/images.blade.php
 # 自证 2：补丁确实落盘、内容与预期完全一致；blade 的版本串也在。
 # 以后改 overlay/ 里的文件，记得同步更新这里的 md5（故意做成"改了不更新就构建失败"）。
 RUN printf '%s\n' \
-        '5e4426728badb7fad4805383f72a0604  ./public/js/context-js/context-js.js' \
-        '5e4426728badb7fad4805383f72a0604  ./resources/js/context-js.js' \
-        '864b0bad9c2b65161861d228776bb92f  ./resources/views/user/images.blade.php' \
+        '528d32fc5adc0d306b6d8f773ee5caaf  ./public/js/context-js/context-js.js' \
+        '528d32fc5adc0d306b6d8f773ee5caaf  ./resources/js/context-js.js' \
+        '576929df685fdb93f9950c16d924bcdc  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
-    && grep -q "context-js.js') . '?v=ios-longpress'" ./resources/views/user/images.blade.php \
-    && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js
+    && grep -q "context-js.js') . '?v=ios-longpress2'" ./resources/views/user/images.blade.php \
+    && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
+    && grep -q 'LONG_PRESS_DELAY = 250' ./public/js/context-js/context-js.js \
+    && grep -q 'LONG_PRESS_DELAY = 250' ./resources/js/context-js.js
 
 FROM php:${PHP_VERSION}-apache-${DEBIAN_RELEASE}
 
@@ -129,6 +131,15 @@ COPY --from=build /build /var/www/lsky/
 COPY ./000-default.conf.template /etc/apache2/sites-enabled/
 COPY ./ports.conf.template /etc/apache2/
 COPY entrypoint.sh /
+
+# 数据安全护栏：强制同步的排除清单缺任何一项都可能覆盖站点数据/配置，缺了就构建失败。
+# （镜像自带入口脚本运行时才会执行，这里只做静态断言，保证清单不被误删。）
+RUN grep -q -- '--exclude=.\/.env' /entrypoint.sh \
+    && grep -q -- '--exclude=.\/storage' /entrypoint.sh \
+    && grep -q -- '--exclude=.\/database' /entrypoint.sh \
+    && grep -q -- '--exclude=.\/bootstrap\/cache' /entrypoint.sh \
+    && grep -q -- '--exclude=.\/public\/i' /entrypoint.sh \
+    && grep -q 'views/\*.php' /entrypoint.sh
 WORKDIR /var/www/html/
 VOLUME /var/www/html
 ENV WEB_PORT 8089

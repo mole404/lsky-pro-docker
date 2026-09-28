@@ -6,13 +6,17 @@
 #   git checkout 911275c13b038c7a8b710de44664f23887eeb6f6
 #   git apply /path/to/ios-longpress.patch
 #
+# 本次阈值：LONG_PRESS_DELAY = 250ms（iOS 原生 callout 约 500ms，取一半更快响应），
+# 配套「手指移动 >10px 即取消」抵消阈值变短带来的误触；blade 里的资源版本串
+# 是 ?v=ios-longpress2（改过就递增，用来击穿 Safari 的启发式缓存）。
+#
 # 注意：public/js/context-js/context-js.js（浏览器实际加载的那份）在上游是旧的压缩产物，
 # 补丁里没有它的 diff（压缩版→可读版的 diff 没法看）。Dockerfile 会把 overlay/context-js.js
 # 同时写到 resources/js/context-js.js 和 public/js/context-js/context-js.js 两个位置。
 
 --- a/resources/js/context-js.js
 +++ b/resources/js/context-js.js
-@@ -2,9 +2,27 @@
+@@ -2,9 +2,28 @@
   * Context.js
   * Copyright Jacob Kelley, Modified by WispX
   * MIT License
@@ -32,7 +36,8 @@
   */
  window.context = window.context || (function () {
  
-+    const LONG_PRESS_DELAY = 500;   // 长按判定阈值（毫秒），贴近 iOS 原生 callout 的触发时机
++    const LONG_PRESS_DELAY = 250;   // 长按判定阈值（毫秒）。iOS 原生 callout 约 500ms，这里减半更快响应；
++                                    // 手指移动超过 LONG_PRESS_MOVE 即取消，用来抵消阈值变短带来的误触风险
 +    const LONG_PRESS_MOVE = 10;     // 手指移动超过这个像素数就取消长按，让位给滚动/框选
 +    const DEDUPE_WINDOW = 700;      // 长按已开菜单后，忽略紧随其后的 contextmenu（防将来 iOS 支持该事件后弹两次）
 +    const NEXT_CLICK_WINDOW = 700;  // 长按之后要吞掉的第一发 click
@@ -40,7 +45,7 @@
      let options = {
          fadeSpeed: 100,
          filter: function ($obj) {
-@@ -15,6 +33,142 @@
+@@ -15,6 +34,142 @@
          compress: false
      };
  
@@ -183,7 +188,7 @@
      function initialize(opts) {
  
          options = $.extend({}, options, opts);
-@@ -130,12 +284,15 @@
+@@ -130,12 +285,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -204,7 +209,7 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -149,27 +306,47 @@
+@@ -149,27 +307,47 @@
  
              if (typeof options.above == 'boolean' && options.above) {
                  $dd.addClass('dropdown-context-up').css({
@@ -268,7 +273,7 @@
          <script src="{{ asset('js/dragselect/ds.min.js') }}"></script>
 -        <script src="{{ asset('js/context-js/context-js.js') }}"></script>
 +        {{-- fork 补丁：加版本串，避免 iOS/Safari 的启发式缓存把旧版 context-js.js 一直喂给老用户 --}}
-+        <script src="{{ asset('js/context-js/context-js.js') . '?v=ios-longpress' }}"></script>
++        <script src="{{ asset('js/context-js/context-js.js') . '?v=ios-longpress2' }}"></script>
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>

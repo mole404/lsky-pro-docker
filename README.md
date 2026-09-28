@@ -21,6 +21,10 @@
 5. CI 推到 GHCR（用仓库自带 `GITHUB_TOKEN`，不需要任何 secret），构建后把镜像拉回来做真机自证：
    核 md5 + 记录 PHP/扩展/Debian 版本 + 真起容器 curl 安装页。
    上游的「每天定时重建」已去掉（源码钉死后定时重建没有意义）。
+6. **入口脚本每次启动强制同步代码**（`entrypoint.sh`）：已有部署的卷里，应用代码会被镜像版本覆盖，
+   站点数据（`.env` / `database/` / `storage/` / `bootstrap/cache/` / `public/i`）一律不碰。
+   于是「升级 = 换镜像」，不再需要人工 cp 文件、也不需要手动清视图缓存。
+   详细代价与回滚方式见下文「已有部署升级」。
 
 ## 这个补丁修的是什么
 
@@ -33,7 +37,8 @@
 
 **补法**（三层，缺一层都会残留问题）：
 
-- **长按识别**：`touchstart` + 500ms 定时器，复用同一段开菜单逻辑 —— 因为 iOS 收不到 `contextmenu`，只能自己判长按
+- **长按识别**：`touchstart` + **250ms** 定时器，复用同一段开菜单逻辑 —— 因为 iOS 收不到 `contextmenu`，只能自己判长按。
+  （iOS 原生 callout 约 500ms；这里取一半让响应更快，靠「手指移动 >10px 即取消」抵消阈值变短的误触风险）
 - **样式压制**：注入 `-webkit-touch-callout: none` / `user-select: none`（只作用于本库绑定的元素范围）
   —— 不压掉的话会「系统菜单 + 自定义菜单」同时冒出来
 - **点击兜底**：抬手时 `preventDefault`，并在捕获阶段吞掉紧随其后的那发 `click`
@@ -54,7 +59,7 @@
   （上游 `webpack.mix.js` 里本来也是 `mix.copy('resources/js/context-js.js', 'public/js/context-js')`，
   但仓库里 `public/` 下那份是旧工具链留下的压缩产物，一直没跟着源码更新，所以两个位置都要覆盖）
 - `overlay/images.blade.php` → 写入 `resources/views/user/images.blade.php`，只改一行：
-  给脚本加 `?v=ios-longpress`，避免 iOS/Safari 的启发式缓存把旧版 JS 一直喂给老用户
+  给脚本加 `?v=ios-longpress2`，避免 iOS/Safari 的启发式缓存把旧版 JS 一直喂给老用户（每次改补丁就递增这个串）
 - 完整 diff 见 `patches/ios-longpress.patch`（存档用，构建实际走 `overlay/`）
 
 ## 使用方法
@@ -105,61 +110,56 @@ location ^~ /
 }
 ```
 
-## 已有部署升级（重点：**别只 pull 换镜像**）
+## 已有部署升级（现在只需换镜像）
 
-容器启动脚本 `entrypoint.sh` 只在卷里**还没有 `public/index.php`** 时才把 `/var/www/lsky/*`
-播种到 `/var/www/html`。也就是说：**换镜像不会更新已有卷里的代码**，
-只 `docker pull && up -d` 会得到一个「镜像换了、代码还是旧的」的假象。
+入口脚本 `entrypoint.sh` 在**已有部署**（卷里已有 `public/index.php`）时，每次启动都会把镜像里的
+应用代码**强制同步**进卷：
 
-因此升级是「只替换补丁涉及的文件」：数据库、`.env`（APP_KEY）、`storage/app/uploads`
-里的图片、`public/i` 软链一个字节都不动。
+- 卷里被手工改过的代码、旧版本文件 → 一律被镜像版本覆盖（「换镜像 = 代码也换」）
+- 因模板改动而失效的编译视图缓存 → 自动清掉（不用再手打 `rm storage/framework/views/*`）
+- **绝不覆盖**：`.env`（APP_KEY / 数据库 / S3 密钥）、`database/`（SQLite 数据库）、
+  `storage/`（上传文件、日志、会话）、`bootstrap/cache/`（Laravel 运行时缓存）、`public/i`（本地存储软链）
+
+空卷（首次部署）仍是全量播种，与上游行为一致。
 
 ```bash
-# 1) 备份（SQLite 用户：先停容器再打包，保证数据库文件一致）
+# 1) 备份（老习惯，SQLite 用户先停容器再打包最稳）
 docker stop lsky-pro
 tar czf ~/lsky-pro-backup-$(date +%F-%H%M).tar.gz -C /root lsky-pro
 docker start lsky-pro
 
-# 2) 拉新镜像，先对比基础层（PHP / 扩展 / Debian 是否与现在一致）
-docker pull ghcr.io/mole404/lsky-pro-docker:latest
-docker run --rm --entrypoint sh ghcr.io/mole404/lsky-pro-docker:latest \
-  -c 'grep PRETTY_NAME /etc/os-release; php -v | head -1; php -m | sort | tr "\n" " "'
-docker exec lsky-pro sh \
-  -c 'grep PRETTY_NAME /etc/os-release; php -v | head -1; php -m | sort | tr "\n" " "'
-
-# 3) 把补丁文件写进卷（下面假定卷挂在 /root/lsky-pro/data，按实际情况改）
-docker run --rm --entrypoint cp -v /root/lsky-pro/data:/dst \
-  ghcr.io/mole404/lsky-pro-docker:latest \
-  /var/www/lsky/public/js/context-js/context-js.js /dst/public/js/context-js/context-js.js
-
-# 4) blade 改过一行，清掉编译视图缓存（只删缓存，不碰数据）
-docker exec lsky-pro rm -rf /var/www/html/storage/framework/views/*
-
-# 5) 切换镜像并重建（compose 里 image 改成 ghcr.io/mole404/lsky-pro-docker:latest）
+# 2) compose 里 image 改成 ghcr.io/mole404/lsky-pro-docker:latest，然后
+docker compose pull
 docker compose up -d --force-recreate
 
-# 6) 验证
-docker exec lsky-pro md5sum /var/www/html/public/js/context-js/context-js.js
-# 期望：5e4426728badb7fad4805383f72a0604
+# 3) 验证（核「Apache 实际吐给浏览器」的那份，比看磁盘文件更硬）
+curl -s http://127.0.0.1:8089/js/context-js/context-js.js | md5sum
+# 期望：528d32fc5adc0d306b6d8f773ee5caaf
+docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.image.source"}}'
+# 期望：https://github.com/mole404/lsky-pro-docker
 ```
 
-### 回滚（两步，都在一分钟内）
+### 代价与影响（「强制」换来的东西）
 
-```bash
-# a. 代码回滚：从备份里解出那个文件
-tar xzf ~/lsky-pro-backup-*.tar.gz -C /root lsky-pro/data/public/js/context-js/context-js.js
-docker exec lsky-pro rm -rf /var/www/html/storage/framework/views/*
-# b. 镜像回滚：compose 的 image 改回 halcyonazure/lsky-pro-docker:latest，然后
-docker compose up -d --force-recreate
-```
+1. **卷里对代码的手工修改会失效** —— 下次启动被镜像版本顶掉。要长期保留的改动请提进 `overlay/`
+   或直接改镜像源码，别在卷里改。
+2. **回滚方式变了**：不能再靠 `tar` 还原旧代码（下次启动又会被当前镜像覆盖）。回滚必须
+   **连镜像一起回滚**：compose 的 image 换回旧 tag/digest → `up -d --force-recreate`。
+   所以请保留旧镜像的 tag 或 digest（digest 形式如 `ghcr.io/mole404/lsky-pro-docker@sha256:...`）。
+3. **每次启动多一次拷贝**：把应用代码写进卷（只增改不删除）。CI 的
+   `Verify forced code sync` 步骤每次构建都会打印体积与实测耗时，可去 Actions 日志里看。
+4. **只增改、不删除**：新版镜像里删掉的旧文件不会从卷里消失。真要清干净得手动处理。
+5. **站点数据不受影响**：CI 里有一个专门的自证步骤，模拟「已有部署的卷」（塞入旧代码 +
+   `.env` / 数据库 / 上传文件 / 编译视图缓存），逐项断言代码被更新、而数据与配置一个都没被碰 ——
+   任一条件不满足就构建失败，不会 promote 到 `latest`。
 
 ## 验证清单
 
 镜像里这些文件的 md5（补丁之外的每个文件都应当与线上那份旧镜像一致）：
 
-- `public/js/context-js/context-js.js`：补丁前 `bab81ff5e43b50a760935c7b3ae6475c` → 补丁后 `5e4426728badb7fad4805383f72a0604`
-- `resources/js/context-js.js`：补丁前 `c8e57f6232848ca8277341ddf1a3a7a6` → 补丁后 `5e4426728badb7fad4805383f72a0604`
-- `resources/views/user/images.blade.php`：补丁前 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `864b0bad9c2b65161861d228776bb92f`
+- `public/js/context-js/context-js.js`：补丁前 `bab81ff5e43b50a760935c7b3ae6475c` → 补丁后 `528d32fc5adc0d306b6d8f773ee5caaf`
+- `resources/js/context-js.js`：补丁前 `c8e57f6232848ca8277341ddf1a3a7a6` → 补丁后 `528d32fc5adc0d306b6d8f773ee5caaf`
+- `resources/views/user/images.blade.php`：补丁前 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `576929df685fdb93f9950c16d924bcdc`
 - `app/Services/ImageService.php` `a7bcd8549c656501a057214637f10b45`、`config/convention.php` `674975e4e5561cc15c27626cb1ce5233`：**不变**
 
 功能上要过的用例：
