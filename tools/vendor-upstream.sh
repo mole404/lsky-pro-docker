@@ -40,13 +40,23 @@ REAL="$(git -C "$TMP/up" rev-parse HEAD)"
 echo "      实际 commit = $REAL"
 [ "$REAL" = "$COMMIT" ] || { echo "❌ 拉到的不是指定 commit，先停下" >&2; exit 1; }
 
-echo "[2/4] 把补丁文件先留档（免得被覆盖）…"
+# 源码已经 vendored 进仓库，src/ 下的改动就是产品本身 —— 擦除前必须确认都已提交，
+# 否则"重新 vendor"会把它们静默抹掉（这是唯一一处不可逆操作）。
+echo "[2/5] 安全检查：src/ 里不能有未提交的改动 …"
+if [ -n "$(git status --porcelain -- src)" ]; then
+    echo "❌ src/ 下有未提交的改动，请先 commit 或 stash，否则跑下去会丢：" >&2
+    git status --short -- src >&2
+    exit 1
+fi
+echo "      src/ 工作区干净 ✅"
+
+echo "[3/5] 把补丁文件先留档（免得被覆盖）…"
 mkdir -p "$TMP/patched"
 for f in $PATCHED; do
     cp -a "src/$f" "$TMP/patched/$(echo "$f" | tr / _)"
 done
 
-echo "[3/4] 替换 src/ …"
+echo "[4/5] 替换 src/ …"
 find src -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 tar -C "$TMP/up" --exclude=./.git -cf - . | tar -C src -xf -
 for f in $PATCHED; do
@@ -55,7 +65,7 @@ done
 echo "      完成，src/ 现在 = 上游 $REAL + 我们的三个补丁文件"
 
 echo
-echo "[4/4] 上游新版里这三个文件与我们的补丁版本的差异（人工看，必要时重新贴补丁）："
+echo "[5/5] 上游新版里这三个文件与我们的补丁版本的差异（人工看，必要时重新贴补丁）："
 for f in $PATCHED; do
     echo "---- $f"
     if diff -q "$TMP/up/$f" "src/$f" >/dev/null; then

@@ -17,9 +17,12 @@ if [ ! -e '/var/www/html/public/index.php' ]; then
     # 刻意**不**复制镜像里的 .env：镜像是带 .env 的（构建时由 .env.example 生成、
     # APP_KEY 为空），把它带进空卷会让 Lsky 的安装向导（自己生成 .env 的流程）直接 500。
     # 这条是实测踩过的坑，别"顺手"改成 cp -a /var/www/lsky/. 。
-    cp -a /var/www/lsky/* /var/www/html/
-    cp -a /var/www/lsky/.env.example /var/www/html
-    # 版本标记是 dotfile，上面那条通配符不会带上，单独拷贝
+    # 用 tar 而不是 `cp -a /var/www/lsky/*`：cp 的通配符**不带顶层点文件**
+    # （.env.example、.code-revision 都得单独补拷，以后新增别的顶层点文件就会静默漏掉），
+    # 而 tar 会完整带上，行为也与下面的「同步分支」完全一致。
+    # 只排除 .env：库里那份是构建期生成的空壳（APP_KEY 为空），带进空卷会让安装向导 500。
+    ( cd /var/www/lsky && tar cf - --exclude=./.env --exclude=./.code-revision . ) | ( cd /var/www/html && tar xf - )
+    # 版本标记**最后**写：它同时是"播种完成"的信号（CI 就盯它），必须等其它文件都落盘之后再写
     cp -a "$IMAGE_MARKER" "$VOLUME_MARKER"
     echo "[lsky] 空卷首次部署：已把镜像应用播种到 /var/www/html"
 elif [ ! -f "$VOLUME_MARKER" ] || [ "$(cat "$IMAGE_MARKER" 2>/dev/null)" != "$(cat "$VOLUME_MARKER" 2>/dev/null)" ]; then

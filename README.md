@@ -241,6 +241,12 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 2. **回滚 = 连镜像一起回滚**（compose 的 image 换回旧 tag/digest → `up -d --force-recreate`）：
    旧镜像的标记与卷里的不同 → 会自动把代码同步回那一版。升级和回滚都因此是"换一行 image"，
    但请保留旧镜像的 tag 或 digest（如 `ghcr.io/mole404/lsky-pro-docker@sha256:...`）。
+
+   > ⚠️ **回滚请用 `:sha-<本仓库提交>` 这类不可变 tag（或直接写 digest）。**
+   > 早期 CI 里把上游 pin 硬编码写死过，Dockerfile 升 pin 后它没跟着改，
+   > 于是新镜像被贴上了 `:911275c13b03…` 这个"旧快照"tag —— 那个 tag 现在指向的其实是新代码，
+   > **不要拿它当旧版本回滚**。该漂移问题已修（pin 改为从 Dockerfile 解析，CI 会断言镜像里的
+   > `lsky_commit` 与 Dockerfile 一致），但那批历史 tag 不会自动修正。
 3. **同步只在换镜像时发生**（不换镜像重启零拷贝）。要量体积/耗时：CI 的
    `Verify code sync (revision-gated) and data safety` 步骤每次构建都会打印实测值，见 Actions 日志。
 4. **只增改、不删除**：新版镜像里删掉的旧文件不会从卷里消失。真要清干净得手动处理。
@@ -291,6 +297,11 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 4. 同步 `workflow` 的 `CONTEXT_JS_MD5` / `BLADE_MD5`；动了补丁就把 blade 的 `?v=ios-longpressN` 递增一位
 5. `cd test && npm test`，然后推 master 等 CI 全绿
 
+顺带一提：CI 支持**试构建**——在 Actions 里手动 `Run workflow` 时填一个 `php_version`（如 `8.2` / `8.3`），
+就会用那个 PHP 版本构建并跑完整自证（不改仓库里的默认值），用来验证版本兼容性再决定要不要落进 Dockerfile。
+另外 CI 会硬断言「上游迁移文件个数」与基线一致 —— 换 pin 时若上游新增了数据库迁移，会直接报红提醒
+（entrypoint 不会自动跑 `migrate`，这类变更必须人工处理）。
+
 ## 环境变量
 
 跟上游一致：
@@ -310,7 +321,9 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 
 ## Docker-Compose部署参考
 
-使用`MySQL`来作为数据库的话可以参考原项目 [#256](https://github.com/lsky-org/lsky-pro/issues/256) 来创建`docker-compose.yaml`，本仓库的 `docker-compose.yaml` 是其参考内容（镜像地址已指向本 fork）。
+默认用 **SQLite**（镜像自带，不需要额外数据库服务，本 fork 线上就是这么跑的）。
+要用 MySQL 的话，`docker-compose.yaml` 里留了一份注释掉的参考 service —— 注意密码别写死在 yaml 里（用环境变量），
+镜像也别用已 EOL 的 `mysql:5.7`（原项目 issue [#256](https://github.com/lsky-org/lsky-pro/issues/256) 里有更多讨论）。
 
 原项目：[☁️兰空图床(Lsky Pro) - Your photo album on the cloud.](https://github.com/lsky-org/lsky-pro)
 

@@ -15,25 +15,25 @@ services:
     networks:
       - lsky-net
 
-  # 注：arm64的无法使用该镜像，请选择sqlite或自建数据库
-  mysql-lsky:
-    image: mysql:5.7.22
-    restart: unless-stopped
-    # 主机名，可作为"数据库连接地址"
-    hostname: mysql-lsky
-    # 容器名称
-    container_name: mysql-lsky
-    # 修改加密规则
-    command: --default-authentication-plugin=mysql_native_password
-    volumes:
-      - $PWD/mysql/data:/var/lib/mysql
-      - $PWD/mysql/conf:/etc/mysql
-      - $PWD/mysql/log:/var/log/mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: lAsWjb6rzSzENUYg # 数据库root用户密码，自行修改
-      MYSQL_DATABASE: lsky-data # 可作为"数据库名称/路径"
-    networks:
-      - lsky-net
+  # 默认用 SQLite（镜像自带，无需额外服务）—— 这也是本 fork 线上跑的方式。
+  #
+  # 想用 MySQL 就自己加一个 service，参考（注意两点：
+  #   ① 密码**不要写死在 yaml 里**，从环境变量取，例如同目录建一个 .env 写 MYSQL_ROOT_PASSWORD=...
+  #   ② 镜像别用 mysql:5.7（2018 年的版本、5.7 已 EOL），至少 8.0/8.4；
+  #      8.4 起默认认证插件变了，若沿用旧的 mysql_native_password 连接方式要先改应用侧配置）：
+  #
+  #  mysql-lsky:
+  #    image: mysql:8.0
+  #    restart: unless-stopped
+  #    hostname: mysql-lsky
+  #    container_name: mysql-lsky
+  #    volumes:
+  #      - $PWD/mysql/data:/var/lib/mysql
+  #    environment:
+  #      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 里设置 MYSQL_ROOT_PASSWORD}
+  #      MYSQL_DATABASE: lsky-data
+  #    networks:
+  #      - lsky-net
 
 networks:
   lsky-net: {}
