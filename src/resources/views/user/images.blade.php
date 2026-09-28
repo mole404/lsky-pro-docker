@@ -17,6 +17,7 @@
                 <a data-operate="detail" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
                 <a data-operate="rename" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
                 <a data-operate="delete" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
+                <a data-operate="deselect" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">取消选择</a>
             </div>
             <div class="block lg:hidden">
                 <x-dropdown direction="right">
@@ -32,6 +33,7 @@
                         <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
                         <x-dropdown-link data-operate="rename" class="hidden" href="javascript:void(0)" @click="open = false">重命名</x-dropdown-link>
                         <x-dropdown-link data-operate="delete" class="hidden" href="javascript:void(0)" @click="open = false">删除</x-dropdown-link>
+                        <x-dropdown-link data-operate="deselect" class="hidden" href="javascript:void(0)" @click="open = false">取消选择</x-dropdown-link>
                     </x-slot>
                 </x-dropdown>
             </div>
@@ -487,10 +489,10 @@
                     operates = ['refresh'];
                 }
                 if (selected.length === 1) {
-                    operates = ['refresh', 'movements', 'permission', 'detail', 'rename', 'delete'];
+                    operates = ['refresh', 'movements', 'permission', 'detail', 'rename', 'delete', 'deselect'];
                 }
                 if (selected.length > 1) {
-                    operates = ['refresh', 'movements', 'permission', 'delete'];
+                    operates = ['refresh', 'movements', 'permission', 'delete', 'deselect'];
                 }
                 if (selected.length && selectedAlbum.id !== undefined) {
                     operates.push('remove');
@@ -576,7 +578,7 @@
                 permission() {
                     Swal.fire({
                         title: '选择一个权限',
-                        text: '选择公开将会出现在画廊中(若平台开启了画廊)',
+                        text: '选择公开后所有用户都能看到这张图片',
                         input: 'select',
                         inputOptions: {
                             public: '公开',
@@ -853,6 +855,10 @@
                         break;
                     case 'delete': // 删除
                         methods.delete();
+                        break;
+                    case 'deselect': // 取消选择（清空当前选中的图片）
+                        ds.clearSelection();
+                        bindOperates();
                         break;
                 }
             });

@@ -55,13 +55,20 @@ RUN apt-get update && \
 COPY src/ /build/
 
 # 自证 1：vendored 快照确实是上游那一版。
-# 下面这些文件我们从不修改，md5 全部等于上游原值；任何一处对不上都说明 src/ 被误改
+# 下面这两个文件我们从不修改，md5 全部等于上游原值；任何一处对不上都说明 src/ 被误改
 # （或与 LSKY_COMMIT 不符）→ 直接构建失败，不产出不可信的镜像。
 RUN printf '%s\n' \
         '9fb843806abd6b778d8acd3366e2f0f1  ./app/Services/ImageService.php' \
-        'c1adde95924944e07bd72e87bd5db2f7  ./config/convention.php' \
         '3b58bff18126a61c142cc576457c82a6  ./public/index.php' \
-        '12b10ff822d7deb281664d6ff0c2c1e2  ./routes/web.php' \
+    | md5sum -c -
+
+# 自证 1b：有意偏离上游、但仍需锁死的文件。
+# config/convention.php 与 routes/web.php 被本 fork 改过 —— 移除了「画廊」与「系统升级」
+# 两个功能（删配置项常量、删路由表条目，详见 README）。md5 随改动更新，作用不变：
+# 这两个文件以后只要被改动（哪怕手滑），构建就会红。
+RUN printf '%s\n' \
+        'ee439977cfcb2e4d3545b25689198c71  ./config/convention.php' \
+        '4fb6cc0703bbd8df1dcddc03d0bf8f76  ./routes/web.php' \
     | md5sum -c -
 
 # 有意偏离上游的另一个文件：composer.lock。
@@ -101,7 +108,7 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 RUN printf '%s\n' \
         'e114c840101d021aa416239196925624  ./public/js/context-js/context-js.js' \
         'e114c840101d021aa416239196925624  ./resources/js/context-js.js' \
-        'fb65dc33a394fc28e14af5ab92272406  ./resources/views/user/images.blade.php' \
+        '298b1164e827f973707b3b2b78bfbbb9  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "context-js.js') . '?v=ios-longpress4'" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -118,7 +125,7 @@ RUN printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
         "context_js_md5=e114c840101d021aa416239196925624" \
-        "images_blade_md5=fb65dc33a394fc28e14af5ab92272406" \
+        "images_blade_md5=298b1164e827f973707b3b2b78bfbbb9" \
         > .code-revision \
     && cat .code-revision
 

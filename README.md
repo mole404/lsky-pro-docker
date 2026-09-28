@@ -318,6 +318,40 @@ cd src
 npm ci && npm run prod      # 产物直接覆盖 public/ 下的文件
 ```
 
+## 本 fork 的版本号 & 已移除的上游功能（2026-09-29）
+
+### 版本号
+后台「设置 → 关于」和控制台「软件信息 → 软件版本」显示的是：
+
+```
+v3.0 <7 位 commit>
+by mole404
+```
+
+- 版本号/作者来自 `config/app.php` 的 `version` / `author` —— **不走数据库配置**（原来读的是
+  `app_version` 配置项，改代码默认值对已装好的站点无效，坑过一次），改版本号就改这一行。
+- 后面那串是镜像里 `.code-revision` 标记的 `fork_sha` 前 7 位（Dockerfile 构建时写入、
+  entrypoint 首次启动同步进卷），读不到就只显示版本号，不会报错。**每次构建自动跟随 commit。**
+- 不再联网检查上游更新：上游已停更，这个 fork 自己维护。
+
+### 已移除的上游功能
+| 移除项 | 涉及位置 |
+| --- | --- |
+| 画廊 | 路由 `gallery`、`GalleryController`、`CheckIsEnableGallery` 中间件、`common/gallery.blade.php`、设置项 `is_enable_gallery`、侧栏入口、`ConfigKey::IsEnableGallery` |
+| 系统升级 | 设置页整块 UI 与轮询 JS、路由 `admin.settings.{check.update,upgrade,upgrade.progress}`、`SettingController` 的 3 个方法、`lsky:upgrade` 命令、`UpgradeService`、`ConfigKey::AppVersion` |
+
+数据库里遗留的 `is_enable_gallery` / `app_version` 配置行**不会被读取、也无需清理**（留着无害）。
+图片列表用的 `justified-gallery` / `viewer.js` / `dragselect` 是「我的图片」页的网格与多选库，与画廊功能无关，保留。
+
+### 另外两个小改动
+- **上传结果行带缩略图**：多图上传后，每个链接（URL / HTML / BBCode / Markdown…）左边带一张 40×40
+  缩略图，一眼看出哪个链接对应哪张图；非图片文件或取不到缩略图时自动不显示（`onerror` 兜底）。
+- **「我的图片」页新增「取消选择」**：在「删除」后面（手机端在折叠菜单里），一键清空当前多选。
+
+### 动过 `user/images.blade.php` 的注意
+该文件是 fork 补丁的一部分，md5 被 Dockerfile / CI 核对 —— 当前期望值
+`298b1164e827f973707b3b2b78bfbbb9`。改它就要同步 `Dockerfile` 里那两处（CI 会拦）。
+
 ## 运行时版本与依赖（2026-09-28 复核）
 
 - **PHP：8.3**（`Dockerfile` 的 `ARG PHP_VERSION`）。理由：8.1 已 EOL（2025-12-31），8.2 的 EOL 是

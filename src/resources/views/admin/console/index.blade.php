@@ -123,7 +123,9 @@
             <dl>
                 <div class="bg-surface-2 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                     <dt class="text-sm font-medium text-ink-2">软件版本</dt>
-                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">{{ \App\Utils::config(\App\Enums\ConfigKey::AppVersion) }}</dd>
+                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
+                        {{ config('app.version') }}@if(\App\Utils::shortCommit()) <span class="font-mono">{{ \App\Utils::shortCommit() }}</span>@endif
+                    </dd>
                 </div>
                 <div class="bg-surface px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                     <dt class="text-sm font-medium text-ink-2">官方网站</dt>

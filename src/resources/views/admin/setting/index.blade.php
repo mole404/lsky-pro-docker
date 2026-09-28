@@ -42,9 +42,6 @@
                 <x-fieldset title="是否启用注册" faq="启用或关闭系统注册功能">
                     <x-switch name="is_enable_registration" value="1" :checked="(bool) $configs->get('is_enable_registration')" />
                 </x-fieldset>
-                <x-fieldset title="是否启用画廊" faq="启用或关闭画廊功能，画廊只有已登录的用户可见，画廊中的图片均为所有用户公开的图片。">
-                    <x-switch name="is_enable_gallery" value="1" :checked="(bool) $configs->get('is_enable_gallery')" />
-                </x-fieldset>
                 <x-fieldset title="是否启用接口" faq="启用或关闭接口功能，关闭后将无法通过接口上传图片、管理图片等操作。">
                     <x-switch name="is_enable_api" value="1" :checked="(bool) $configs->get('is_enable_api')" />
                 </x-fieldset>
@@ -126,36 +123,15 @@
             </div>
         </div>
 
-        <p class="mb-3 font-semibold text-lg text-ink">系统升级</p>
+        <p class="mb-3 font-semibold text-lg text-ink">关于</p>
         <div class="relative p-4 rounded-md bg-surface mb-8 shadow-card">
-            <p id="check-update" class="text-ink-2 text-center p-4" style="display: none">
-                <i class="fas fa-cog animate-spin"></i> 正在检查更新...
+            <p class="text-center pt-2 text-ink">
+                {{ $version }}@if($commit) <span class="text-ink-2 font-mono">{{ $commit }}</span>@endif
             </p>
-            <p id="not-update" class="text-center p-6" style="display: none">
-                <span class="text-ink">{{ \App\Utils::config(\App\Enums\ConfigKey::AppVersion) }}</span>
-                <span class="text-ink-2">已是最新版本</span>
-            </p>
-            <div id="have-update" class="break-words" style="display: none"></div>
+            <p class="text-center pb-2 text-sm text-ink-2">by {{ $author }}</p>
         </div>
     </div>
 
-    <script type="text/html" id="update-tpl">
-        <div class="flex items-center">
-            <img id="icon" src="__icon__" alt="icon" class="rounded-full w-16" style="animation-duration: 5s">
-            <div class="flex flex-col text-ink ml-4">
-                <p class="font-semibold">Lsky Pro __name__</p>
-                <p class="text-sm">__size__</p>
-                <p class="text-sm">发布于 __pushed_at__</p>
-            </div>
-        </div>
-        <p id="upgrade-message" class="mt-4 text-sm text-ink-2"></p>
-        <div class="mt-4 text-sm markdown-body">
-            __changelog__
-        </div>
-        <div class="mt-6 text-right">
-            <a href="javascript:void(0)" id="install" class="rounded-md px-4 py-2 bg-brand text-white">立即安装</a>
-        </div>
-    </script>
 
     @push('scripts')
         <script>
@@ -209,81 +185,6 @@
                 })
             });
 
-            let timer;
-            let upgrade = function () {
-                return {
-                    start: function () {
-                        $('#icon').addClass('animate-spin')
-                        $('#install').attr('disabled', true).removeClass('bg-brand').addClass('cursor-not-allowed bg-surface-3').text('执行升级中...')
-                        $('#upgrade-message').text('准备升级...').removeClass('text-danger').addClass('text-ink-2');
-
-                        timer = setInterval(getProgress, 1500);
-                        axios.post('{{ route('admin.settings.upgrade') }}');
-                    },
-                    stop: function () {
-                        $('#icon').removeClass('animate-spin')
-                        $('#install').attr('disabled', false).removeClass('cursor-not-allowed bg-surface-3').addClass('bg-brand').text('立即安装')
-                        clearInterval(timer);
-                    }
-                };
-            };
-
-            let getVersion = function (callback) {
-                $('#check-update').show();
-                axios.get('{{ route('admin.settings.check.update') }}').then(response => {
-                    if (response.data.status && response.data.data.is_update) {
-                        $('#check-update').hide();
-                        let version = response.data.data.version;
-                        let html = $('#update-tpl').html()
-                            .replace(/__icon__/g, version.icon)
-                            .replace(/__name__/g, version.name)
-                            .replace(/__size__/g, version.size)
-                            .replace(/__pushed_at__/g, version.pushed_at)
-                            .replace(/__changelog__/g, version.changelog);
-                        $('#have-update').html(html).show();
-                        $('.markdown-body a').attr('target', '_blank');
-                        callback && callback(version);
-                    } else {
-                        $('#not-update').show();
-                        $('#check-update').hide();
-                    }
-                });
-            }
-
-            let getProgress = function () {
-                axios.get('{{ route('admin.settings.upgrade.progress') }}').then(response => {
-                    $('#upgrade-message').text(response.data.data.message);
-                    if (response.data.data.status === 'success') {
-                        $('#upgrade-message').removeClass('text-ink-2').addClass('text-green-500');
-                        $('#install').hide();
-                    }
-                    if (response.data.data.status === 'fail') {
-                        $('#upgrade-message').removeClass('text-ink-2').addClass('text-danger');
-                    }
-                    if (response.data.data.status !== 'installing') {
-                        upgrade().stop();
-                    }
-                });
-            };
-
-            $(document).on('click', '#install', function () {
-                if ($(this).attr('disabled')) {
-                    return;
-                }
-                upgrade().start();
-            });
-
-            @if(cache()->has('upgrade_progress'))
-                getVersion(() => {
-                    $('#icon').addClass('animate-spin')
-                    $('#install').attr('disabled', true).removeClass('bg-brand').addClass('cursor-not-allowed bg-surface-3').text('正在升级...')
-                    $('#upgrade-message').text('请稍等...').removeClass('text-danger').addClass('text-ink-2');
-
-                    timer = setInterval(getProgress, 1500);
-                });
-                @else
-                getVersion();
-            @endif
         </script>
     @endpush
 

@@ -2,11 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Enums\ConfigKey;
 use App\Http\Controllers\Controller;
 use App\Mail\Test;
 use App\Models\Config;
-use App\Services\UpgradeService;
 use App\Utils;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -19,7 +17,15 @@ class SettingController extends Controller
     public function index(): View
     {
         $configs = Utils::config();
-        return view('admin.setting.index', compact('configs'));
+
+        // fork：版本号来自代码（config/app.php），commit 来自镜像标记（.code-revision）。
+        // 不再读取数据库里的 app_version，也不再联网检查上游更新（上游早已停更）。
+        return view('admin.setting.index', [
+            'configs' => $configs,
+            'version' => config('app.version'),
+            'author'  => config('app.author'),
+            'commit'  => Utils::shortCommit(),
+        ]);
     }
 
     public function save(Request $request): Response
@@ -39,40 +45,5 @@ class SettingController extends Controller
             return $this->fail($e->getMessage());
         }
         return $this->success('发送成功');
-    }
-
-    public function checkUpdate(): Response
-    {
-        $version = Utils::config(ConfigKey::AppVersion);
-        $service = new UpgradeService($version);
-        try {
-            $data = [
-                'is_update' => $service->check(),
-            ];
-            if ($data['is_update']) {
-                $data['version'] = $service->getVersions()->first();
-            }
-        } catch (\Exception $e) {
-            return $this->fail($e->getMessage());
-        }
-
-        return $this->success('success', $data);
-    }
-
-    public function upgrade()
-    {
-        ignore_user_abort(true);
-        set_time_limit(0);
-
-        $version = Utils::config(ConfigKey::AppVersion);
-        $service = new UpgradeService($version);
-        $this->success()->send();
-        $service->upgrade();
-        flush();
-    }
-
-    public function upgradeProgress(): Response
-    {
-        return $this->success('success', Cache::get('upgrade_progress'));
     }
 }

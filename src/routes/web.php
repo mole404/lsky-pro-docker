@@ -12,7 +12,6 @@
 */
 
 use App\Http\Middleware\CheckIsEnableApi;
-use App\Http\Middleware\CheckIsEnableGallery;
 use App\Http\Middleware\CheckIsEnableGuestUpload;
 use Illuminate\Support\Facades\Route;
 use App\Http\Middleware\CheckIsInstalled;
@@ -20,7 +19,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\User\ImageController;
 use App\Http\Controllers\User\AlbumController;
-use App\Http\Controllers\Common\GalleryController;
 use App\Http\Controllers\Common\ApiController;
 
 use App\Http\Controllers\Admin\ConsoleController as AdminConsoleController;
@@ -39,8 +37,6 @@ Route::any('install', [Controller::class, 'install'])->name('install');
 Route::post('upload', [Controller::class, 'upload']);
 Route::group(['middleware' => ['auth']], function () {
     Route::get('dashboard', [UserController::class, 'dashboard'])->name('dashboard');
-    Route::get('gallery', [GalleryController::class, 'index'])->middleware(CheckIsEnableGallery::class)->name('gallery');
-
     Route::prefix('settings')->group(function () {
         Route::get('', [UserController::class, 'settings'])->name('settings');
         Route::put('', [UserController::class, 'update'])->name('settings.update');
@@ -109,9 +105,6 @@ Route::group(['prefix' => 'admin', 'middleware' => ['auth.admin']], function () 
         Route::get('', [AdminSettingController::class, 'index'])->name('admin.settings');
         Route::put('save', [AdminSettingController::class, 'save'])->name('admin.settings.save');
         Route::post('mail-test', [AdminSettingController::class, 'mailTest'])->name('admin.settings.mail.test');
-        Route::get('check-update', [AdminSettingController::class, 'checkUpdate'])->name('admin.settings.check.update');
-        Route::post('upgrade', [AdminSettingController::class, 'upgrade'])->name('admin.settings.upgrade');
-        Route::get('upgrade/progress', [AdminSettingController::class, 'upgradeProgress'])->name('admin.settings.upgrade.progress');
     });
 });
 
