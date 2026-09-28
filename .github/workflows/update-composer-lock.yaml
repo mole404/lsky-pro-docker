@@ -56,8 +56,16 @@ jobs:
               composer check-platform-reqs --no-interaction || true
               # ext-ftp 只是这个裸容器里没有（生产镜像有），不影响求解
               # --with-all-dependencies：允许连带升级这些包的下级依赖（否则常被旧约束卡住）
-              composer update --with-all-dependencies --no-interaction --no-progress \
+              # --prefer-stable 必须加：Lsky 的 composer.json 是 minimum-stability: dev，
+              # 不钉版本时求解器会把 laravel/framework 选成 9.x-dev（开发分支！），
+              # 而那个分支把 symfony 约束放宽到 ^7.0，会拖进一堆 Symfony 7 组件。
+              composer update --with-all-dependencies --no-interaction --no-progress --prefer-stable \
                 --ignore-platform-req=ext-ftp $PACKAGES
+
+              # 升级后的这套依赖，还能不能在更低的 PHP 上装？（能 → 回退 PHP 版本只需改一个 ARG）
+              echo "=== 这套新依赖在 PHP 8.2 上还装得动吗（无输出=可以） ==="
+              composer why-not php 8.2.0 --no-interaction 2>/dev/null || true
+              composer prohibits php 8.2.0 --no-interaction 2>/dev/null || true
               composer validate --no-check-publish
               echo "=== composer audit（升级后的已知漏洞，仅供参考） ==="
               composer audit --no-interaction || true
