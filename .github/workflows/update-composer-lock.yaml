@@ -16,6 +16,14 @@ on:
         description: 'PHP 版本（用于解析平台约束）'
         required: true
         default: '8.3'
+      ignore_advisory_policy:
+        description: '是否显式关闭 Composer 的「拒绝带未修公告的版本」策略（Laravel 9 整线被公告覆盖，不关无法解析）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 permissions:
   contents: read
@@ -43,12 +51,22 @@ jobs:
           docker run --rm -v "$PWD/src:/app" -w /app \
             -e PACKAGES="$PACKAGES" \
             -e PHPVER="$PHPVER" \
+            -e ADVPOL="${{ inputs.ignore_advisory_policy }}" \
             "php:${PHPVER}-cli" bash -lc '
               set -euo pipefail
               apt-get update -qq >/dev/null
               apt-get install -yqq git unzip >/dev/null
               curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer >/dev/null
               composer --version
+              if [ "${ADVPOL:-true}" = "true" ]; then
+                echo "==================== 注意 ===================="
+                echo "显式关闭 Composer 的「拒绝带未修公告版本」策略。"
+                echo "原因：整条 laravel/framework 9.x 线被 5 条公告覆盖（PKSA-*），不关掉就无法重新解析任何依赖。"
+                echo "这**不新增风险**：线上本来就跑在这条线上（9.52.17），只是把既有事实写明。"
+                echo "根治之道是升级 Laravel 大版本（另立项）。"
+                echo "=============================================="
+                composer config policy.advisories.block false
+              fi
               # 诊断：先说清楚"为什么当前依赖集上不了这个 PHP 版本"
               echo "=== composer why-not php $PHPVER（谁把版本卡住了） ==="
               composer why-not "php" "$PHPVER" --no-interaction || true
