@@ -188,6 +188,8 @@ jobs:
         run: |
           set -euo pipefail
           VOL=lsky-sync-test
+          # 失败时自动把三个容器的日志打出来，省得下次还得翻 run 日志
+          trap 'echo "::group::诊断：容器日志"; for c in lsky-a lsky-b lsky-c; do echo "--- $c"; docker logs "$c" 2>&1 | tail -25 || true; done; echo "::endgroup::"' ERR
           docker rm -f lsky-a lsky-b lsky-c >/dev/null 2>&1 || true
           docker volume rm -f "$VOL" >/dev/null 2>&1 || true
 
@@ -297,11 +299,20 @@ jobs:
           docker logs lsky-c 2>&1 | grep -q '跳过同步' || { echo "::error::同版本标记时应跳过同步"; exit 1; }
           C=$(docker exec lsky-c sh -c '
             echo "HANDBOOK_KEPT=$(grep -c 手动修补过 /var/www/html/app/Services/ImageService.php || true)"
-            echo "SERVED_JS=$(curl -s http://127.0.0.1:8089/js/context-js/context-js.js | md5sum | cut -d" " -f1)"
           ')
           echo "$C"
-          echo "$C" | grep -q "HANDBOOK_KEPT=1"            || { echo "::error::同版本时手动修补被覆盖了（不该同步）"; exit 1; }
-          echo "$C" | grep -q "SERVED_JS=${CONTEXT_JS_MD5}" || { echo "::error::跳过后对外服务的 JS 不是补丁版"; exit 1; }
+          echo "$C" | grep -q "HANDBOOK_KEPT=1" || { echo "::error::同版本时手动修补被覆盖了（不该同步）"; exit 1; }
+          # 端到端：验 Apache 实际吐给浏览器的那份（不是磁盘文件）。
+          # 注意 `[lsky]` 日志行是在 exec apache 之前打的，所以这里必须等就绪再 curl ——
+          # 直接 curl 会拿到空响应（空串 md5 = d41d8cd9...），实测踩过。
+          SERVED=d41d8cd98f00b204e9800998ecf8427e
+          for i in $(seq 1 30); do
+            SERVED=$(docker exec lsky-c sh -c 'curl -s http://127.0.0.1:8089/js/context-js/context-js.js | md5sum | cut -d" " -f1' 2>/dev/null || true)
+            if [ "$SERVED" = "$CONTEXT_JS_MD5" ]; then break; fi
+            sleep 2
+          done
+          echo "对外服务的 JS md5（Apache 实际吐出）=$SERVED"
+          [ "$SERVED" = "$CONTEXT_JS_MD5" ] || { echo "::error::跳过后对外服务的 JS 不是补丁版（期望 $CONTEXT_JS_MD5）"; exit 1; }
           echo "C) 通过：同版本跳过同步、手动修补保留、对外服务的 JS 仍是补丁版"
 
           echo "== 同步开销（只在标记不一致时发生）=="
