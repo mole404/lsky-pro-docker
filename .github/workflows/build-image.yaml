@@ -77,6 +77,13 @@ jobs:
             php -v | head -2
             echo "== php -m =="
             php -m | sort | tr "\n" " "; echo
+            echo "== 关键扩展断言 =="
+            php -r 'echo "pdo_sqlite=", (int)extension_loaded("pdo_sqlite"), " imagick=", (int)extension_loaded("imagick"), " redis=", (int)extension_loaded("redis"), " pdo_mysql=", (int)extension_loaded("pdo_mysql"), PHP_EOL;'
+            echo "== opcache 加载情况排查 =="
+            ls /usr/local/etc/php/conf.d/
+            grep -rn "zend_extension\|opcache" /usr/local/etc/php/conf.d/ || true
+            php -v 2>&1 | head -3
+            php -m | grep -ci "opcache" || true
             echo "== apache2 -v =="
             apache2 -v | head -1
             echo "== imagick =="
@@ -96,6 +103,12 @@ jobs:
             exit 1
           fi
           echo "补丁文件 md5 校验通过：$ACTUAL"
+
+          # 老师线上用的是 SQLite，缺 pdo_sqlite 会直接挂，钉死这条断言
+          if ! echo "$REPORT" | grep -q 'pdo_sqlite=1'; then
+            echo "::error::新镜像里 pdo_sqlite 没加载（线上是 SQLite 数据库，不能丢）"
+            exit 1
+          fi
 
           # 真起一次容器：默认 8089 端口，入口脚本会把应用播种到 /var/www/html
           docker run -d --name lsky-smoke -p 18089:8089 -e WEB_PORT=8089 "${IMAGE}:latest"
