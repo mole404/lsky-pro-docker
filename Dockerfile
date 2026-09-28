@@ -76,8 +76,13 @@ RUN printf '%s\n' \
         '9dfc7d029808dbca37cc239560e8f49f  ./composer.lock' \
     | md5sum -c -
 
+# --no-dev：镜像只装运行时依赖。开发包（debugbar / ignition / whoops / phpunit / faker / sail…）
+# 对线上没有用途，留着既是体积也是暴露面（debugbar 那类在调试模式下会漏内部信息）。
+# 连带项：卷里的 bootstrap/cache/packages.php 是"当年装着开发包"时生成的，里面记着这些包的
+# ServiceProvider 类名 —— 包没了之后，Laravel 引导时加载该清单会 Class not found → 整站 500。
+# 所以 entrypoint 的同步分支会作废这份清单（连同 services.php），CI 里也有对应的回归断言。
 RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
-    && composer install
+    && composer install --no-dev
 
 # ---------------------------------------------------------------------------
 # fork 补丁：iOS 长按菜单修复 + 菜单交互修复（已就地在 src/ 里，这里只做校验）

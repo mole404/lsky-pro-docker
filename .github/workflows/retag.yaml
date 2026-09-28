@@ -1,0 +1,80 @@
+name: Retag (repoint a tag to an existing image)
+
+# 用途：把某个 tag 重新指向仓库里**已经存在**的镜像（例如历史上被贴错的 `:911275c…`）。
+# 只改指向、不重新构建，所以很快。目标 tag 的历史镜像不会被删（GHCR 仍保留旧的 manifest）。
+#
+# 安全闸：
+#   · 不允许把 `latest` 当目标（线上拉取目标只能由 build-image 的 Promote 步骤动）
+#   · 源必须是不可变 tag（`sha-<commit>`），避免把某个浮动 tag 的当前指向误复制过去
+#   · 打印改前/改后 digest，便于核对
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_tag:
+        description: '源 tag（必须是已存在的不可变 tag，例如 sha-3a1136c924c42eaf4dc23203d8f09163fc4ea063）'
+        required: true
+      to_tag:
+        description: '目标 tag（例如 911275c13b038c7a8b710de44664f23887eeb6f6；不允许 latest）'
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: retag-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  retag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 校验输入
+        env:
+          FROM: ${{ inputs.from_tag }}
+          TO: ${{ inputs.to_tag }}
+        run: |
+          set -euo pipefail
+          if [ "$TO" = "latest" ]; then
+            echo "::error::不允许把 latest 当目标（线上拉取目标只能由 build-image 的 Promote 步骤动）"
+            exit 1
+          fi
+          case "$TO" in
+            *:*) echo "::error::目标 tag 里不能带冒号"; exit 1;;
+          esac
+          case "$FROM" in
+            sha-*) ;;
+            *) echo "::error::源必须是不可变 tag（sha-<commit>）"; exit 1;;
+          esac
+          echo "把 :${FROM} 指向的镜像同时打上 :${TO}"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Retag（打印改前/改后 digest）
+        env:
+          FROM: ${{ inputs.from_tag }}
+          TO: ${{ inputs.to_tag }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/mole404/lsky-pro-docker"
+          # 注意：本步骤带 set -o pipefail，`cmd | head` 会因 SIGPIPE 退出 255 把整步搞红
+          # （这个坑以前踩过）→ 一律先写文件再 head。
+          echo "== 改前：:${TO} =="
+          docker buildx imagetools inspect "${IMAGE}:${TO}" > /tmp/before.txt 2>&1 || echo "（该 tag 当前不存在）" > /tmp/before.txt
+          head -6 /tmp/before.txt || true
+          echo "== 源：:${FROM} =="
+          docker buildx imagetools inspect "${IMAGE}:${FROM}" > /tmp/from.txt 2>&1
+          head -6 /tmp/from.txt || true
+          docker buildx imagetools create -t "${IMAGE}:${TO}" "${IMAGE}:${FROM}"
+          echo "== 改后：:${TO} =="
+          docker buildx imagetools inspect "${IMAGE}:${TO}" > /tmp/after.txt 2>&1
+          head -6 /tmp/after.txt || true
