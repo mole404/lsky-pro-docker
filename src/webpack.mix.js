@@ -42,7 +42,11 @@ mix.copy('node_modules/dragselect/dist/ds.min.js', 'public/js/dragselect')
 
 // context-menu.min.js
 mix.less('resources/css/context-js.less', 'public/css/context-js')
-mix.copy('resources/js/context-js.js', 'public/js/context-js')
+// 注意：这一份【不能】用 mix.copy —— --production 下 webpack 会对 copy 过去的文件做压缩改名，
+// 结果 public/js 里的补丁版被 terser 处理（isIOSWebKit / LONG_PRESS_DELAY = 250 / installMenuGuard
+// 这些标记全丢），既让 Dockerfile 的补丁自证 grep 失败，也与 resources/js 那份不再字节一致。
+// 改由 npm run prod 收尾做字节级拷贝（scripts/copy-patched-assets.js），保证两份始终一致。
+// mix.copy('resources/js/context-js.js', 'public/js/context-js')
 
 // apache echarts
 mix.copy('node_modules/echarts/dist/echarts.min.js', 'public/js/echarts')
