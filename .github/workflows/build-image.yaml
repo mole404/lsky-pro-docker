@@ -94,6 +94,8 @@ jobs:
             ls /usr/local/etc/php/conf.d/
             echo "-- 含 zend_extension 的 ini 内容 --"
             grep -rn zend_extension /usr/local/etc/php/conf.d/ || true
+            echo "-- php -m 里段头与 opcache 的行号（判断是重复加载还是分段显示）--"
+            php -m | grep -n -e "^\[" -e opcache || true
             echo "-- php --ini --"
             php --ini
             echo "== apache2 -v =="
@@ -161,4 +163,5 @@ jobs:
             -t "${IMAGE}:${LSKY_COMMIT}" \
             "${IMAGE}:sha-${GITHUB_SHA}"
           echo "已把 sha-${GITHUB_SHA} 提升为 :latest 与 :${LSKY_COMMIT}"
-          docker buildx imagetools inspect "${IMAGE}:latest" | head -20
+          docker buildx imagetools inspect "${IMAGE}:latest" > /tmp/promoted.txt
+          head -20 /tmp/promoted.txt
