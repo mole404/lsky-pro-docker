@@ -10,8 +10,9 @@
 
     <title>{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</title>
 
-    {{-- 首屏主题：必须在样式之前执行，否则暗色下会先闪一下白屏。
-         这里只做"读 + 加类"这一件事，真正的状态管理在 resources/js/stores/theme.js --}}
+    {{-- 首屏主题 + 侧栏折叠状态：必须在样式之前执行，否则暗色会先闪白屏、
+         折叠的侧栏会先展开再收起地抖一下。这里只做"读 + 加类"这一件事，
+         真正的状态管理在 resources/js/stores/{theme,sidebar}.js --}}
     <script>
         (function () {
             try {
@@ -23,6 +24,15 @@
                 }
             } catch (e) {
                 // localStorage 不可用（隐私模式等）时静默降级为亮色
+            }
+
+            try {
+                // 手机端不受影响：折叠样式整段都在 @media (min-width: 640px) 里
+                if (localStorage.getItem('lsky-sidebar') === 'collapsed') {
+                    document.documentElement.classList.add('sidebar-collapsed');
+                }
+            } catch (e) {
+                // 同上，读不到就当展开
             }
         })();
     </script>

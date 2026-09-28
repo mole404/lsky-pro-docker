@@ -512,6 +512,26 @@
             ds.subscribe('elementselect', _ => bindOperates());
             ds.subscribe('elementunselect', _ => bindOperates());
 
+            // 侧栏折叠/展开会改变图片墙的可用宽度：justifiedGallery 是按容器宽度算布局的，
+            // 不重排就会挤成一团或留一大块空白。等 300ms 的宽度动画结束再重排，期间不动它，
+            // 免得按"动画中间"的宽度算。viewer（看图器）与框选目标也要跟着更新。
+            window.addEventListener('lsky:sidebar-toggled', () => {
+                setTimeout(() => {
+                    if (! $photos.find(IMAGES_ITEM).length) {
+                        return; // 没数据时 justifiedGallery 是销毁状态，重排会报错
+                    }
+
+                    try {
+                        $photos.justifiedGallery('norewind');
+                        viewer.update();
+                        ds.setSelectables($photos.find(IMAGES_ITEM));
+                    } catch (e) {
+                        // 重排失败也不影响页面：下次翻页/切相册会重新走一遍布局
+                        console.warn('sidebar re-layout skipped:', e);
+                    }
+                }, 320);
+            });
+
             $photos.on('click', '.image-selector', function () {
                 ds.toggleSelection($(this).closest('a'));
                 bindOperates();

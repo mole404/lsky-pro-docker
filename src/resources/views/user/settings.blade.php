@@ -1,8 +1,8 @@
-@section('title', '设置')
+@section('title', '用户设置')
 
 <x-app-layout>
     <div class="my-6 md:my-9">
-        <p class="mb-3 font-semibold text-lg text-ink">基础设置</p>
+        <p class="mb-3 font-semibold text-lg text-ink">用户设置</p>
         <form action="{{ route('settings.update') }}" method="POST">
             @csrf
             <div class="overflow-hidden sm:rounded-md shadow-card">

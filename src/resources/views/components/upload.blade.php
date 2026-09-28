@@ -18,20 +18,25 @@
         </div>
     </div>
 
-    <div id="links-container" class="hidden mb-4 p-4 bg-surface rounded-md relative group shadow-card">
-        <div class="absolute top-2 right-2 flex">
-            <span id="copy-all" class="px-2 py-1 rounded-md text-xs text-ink bg-surface-3 cursor-pointer hidden group-hover:block">复制全部</span>
-            <span id="clear-all" class="ml-1 px-2 py-1 rounded-md text-xs text-ink bg-surface-3 cursor-pointer hidden group-hover:block">清除</span>
+    <div id="links-container" class="hidden mb-4 bg-surface rounded-md shadow-card">
+        {{-- 标签栏与「复制全部 / 清除」并排：标签栏自己横向滚动，按钮固定在右侧，
+             不会再压在 Markdown with link / Thumbnail url 上面（原来按钮是绝对定位盖上去的）。
+             按钮改成常显：手机上根本没有 hover，原来那种 hover 才出现等于点不到。 --}}
+        <div class="flex items-end gap-3 px-4 pt-2 border-b border-line">
+            <div id="link-tabs" class="flex flex-nowrap overflow-scroll scrollbar-none text-sm flex-1 min-w-0">
+                <a href="javascript:void(0)" data-tab-name="url" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-brand active">URL</a>
+                <a href="javascript:void(0)" data-tab-name="html" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">HTML</a>
+                <a href="javascript:void(0)" data-tab-name="bbcode" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">BBCode</a>
+                <a href="javascript:void(0)" data-tab-name="markdown" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">Markdown</a>
+                <a href="javascript:void(0)" data-tab-name="markdown_with_link" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent whitespace-nowrap">Markdown with link</a>
+                <a href="javascript:void(0)" data-tab-name="thumbnail_url" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent whitespace-nowrap">Thumbnail url</a>
+            </div>
+            <div class="flex items-center gap-1 shrink-0 pb-2">
+                <span id="copy-all" class="px-2 py-1 rounded-md text-xs text-ink-2 bg-surface-3 hover:bg-surface-2 cursor-pointer">复制全部</span>
+                <span id="clear-all" class="px-2 py-1 rounded-md text-xs text-ink-2 bg-surface-3 hover:bg-surface-2 cursor-pointer">清除</span>
+            </div>
         </div>
-        <div id="link-tabs" class="flex flex-nowrap overflow-scroll scrollbar-none text-sm">
-            <a href="javascript:void(0)" data-tab-name="url" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-brand active">URL</a>
-            <a href="javascript:void(0)" data-tab-name="html" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">HTML</a>
-            <a href="javascript:void(0)" data-tab-name="bbcode" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">BBCode</a>
-            <a href="javascript:void(0)" data-tab-name="markdown" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">Markdown</a>
-            <a href="javascript:void(0)" data-tab-name="markdown_with_link" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent whitespace-nowrap">Markdown with link</a>
-            <a href="javascript:void(0)" data-tab-name="thumbnail_url" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent whitespace-nowrap">Thumbnail url</a>
-        </div>
-        <div id="links" class="mt-2">
+        <div id="links" class="p-4">
             <div data-tab="url" class="space-y-2"></div>
             <div data-tab="html" class="hidden space-y-2"></div>
             <div data-tab="bbcode" class="hidden space-y-2"></div>

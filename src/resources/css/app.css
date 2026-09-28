@@ -197,4 +197,37 @@
     }
 
     .ls-menu-item:hover { @apply bg-surface-2 text-ink; }
+
+    /* ---------- 侧栏折叠（仅桌面端；手机端保持抽屉式，完全不受影响）---------- */
+    /* 折叠状态由 <html class="sidebar-collapsed"> 驱动（见 stores/sidebar.js + app.blade.php 首屏脚本）。
+       这些规则靠选择器权重压过工具类（sm:w-64 / sm:ml-64），所以不依赖 CSS 打包顺序 ——
+       工具类总是在 components 层之后，纯靠顺序会被它们盖掉。 */
+    @media (min-width: 640px) {
+        html.sidebar-collapsed #app-sidebar {
+            width: 4rem;
+        }
+
+        html.sidebar-collapsed #app-sidebar .ls-brand {
+            padding-left: .75rem;
+            padding-right: .75rem;
+        }
+
+        /* 折叠后只留图标：文字、分组标题、容量区全部收起 */
+        html.sidebar-collapsed #app-sidebar .ls-brand-name,
+        html.sidebar-collapsed #app-sidebar .ls-group-title,
+        html.sidebar-collapsed #app-sidebar .ls-nav-item > span,
+        html.sidebar-collapsed #app-sidebar #capacity-progress {
+            display: none;
+        }
+
+        html.sidebar-collapsed #app-sidebar .ls-nav-item {
+            justify-content: center;
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        html.sidebar-collapsed .app-content {
+            margin-left: 4rem;
+        }
+    }
 }
