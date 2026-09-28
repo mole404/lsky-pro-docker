@@ -128,8 +128,8 @@
         <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item flex justify-between items-center group px-2 h-7 rounded-lg w-full bg-surface-2 text-ink hover:bg-surface-3 hover:text-ink">
             <span class="text-sm truncate w-[80%] name">__name__</span>
             <div class="flex items-center justify-center space-x-1 hidden group-hover:block">
-                <span class="update"><i class="fas fa-edit text-xs"></i></span>
-                <span class="delete"><i class="fas fa-trash-alt text-xs text-danger"></i></span>
+                <span class="update"><i class="fas fa-edit text-[13.5px]"></i></span>
+                <span class="delete"><i class="fas fa-trash-alt text-[13.5px] text-danger"></i></span>
             </div>
             <span class="group-hover:hidden text-[13.5px]">__image_num__</span>
         </a>

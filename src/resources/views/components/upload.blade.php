@@ -66,7 +66,7 @@
             </div>
             <div class="flex justify-end flex-col ml-2 w-[80%] opacity-70">
                 <p class="text-sm truncate">__name__</p>
-                <p class="text-xs truncate">
+                <p class="text-[13.5px] truncate">
                     <span>__info__</span>, <span class="upload-info">等待上传</span>
                 </p>
             </div>
