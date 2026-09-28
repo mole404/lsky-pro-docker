@@ -1,0 +1,125 @@
+name: Build and push image to GHCR
+
+# 上游 workflow 是「每天定时拉 master 重新构建并推到 DockerHub」，本 fork 改成：
+#   - 只在 master 有推送时构建（源码已钉死，定时重建没有意义）
+#   - 推到 GHCR，用仓库自带的 GITHUB_TOKEN，不需要任何 secret
+#   - 构建完做一次真机自证：拉回镜像跑起来、对补丁文件核 md5、并且真起一次容器 curl 首页
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+env:
+  TZ: Asia/Shanghai
+  IMAGE: ghcr.io/mole404/lsky-pro-docker
+  # 与 Dockerfile 里的 LSKY_COMMIT 保持一致，用于打第二个可追溯的 tag
+  LSKY_COMMIT: 911275c13b038c7a8b710de44664f23887eeb6f6
+  # 补丁后 context-js.js 的 md5（Dockerfile 里也断言了同一份）
+  CONTEXT_JS_MD5: 5e4426728badb7fad4805383f72a0604
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ env.LSKY_COMMIT }}
+          build-args: |
+            FORK_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ------------------------------------------------------------------
+      # 自证：不只看「构建成功」，而是把推上去的镜像拉回来实测
+      #   1. 核对补丁文件 md5（确认 overlay 真的进了镜像）
+      #   2. 记录 PHP / 扩展 / Debian / ImageMagick 版本（换基础镜像时的对比基线）
+      #   3. 真起一个容器 curl 首页，确认 Apache + PHP + 应用真的能跑
+      # ------------------------------------------------------------------
+      - name: Verify published image
+        run: |
+          set -euo pipefail
+
+          docker pull "${IMAGE}:latest"
+
+          REPORT=$(docker run --rm --entrypoint sh "${IMAGE}:latest" -c '
+            set -e
+            echo "== /etc/os-release =="
+            grep -E "^(PRETTY_NAME|VERSION_ID)=" /etc/os-release
+            echo "== php -v =="
+            php -v | head -2
+            echo "== php -m =="
+            php -m | sort | tr "\n" " "; echo
+            echo "== apache2 -v =="
+            apache2 -v | head -1
+            echo "== imagick =="
+            php -r "print_r(Imagick::getVersion());" 2>/dev/null | tr -d "\n" | head -c 300; echo
+            echo "== 补丁文件 md5 =="
+            md5sum /var/www/lsky/public/js/context-js/context-js.js
+            md5sum /var/www/lsky/resources/js/context-js.js
+            md5sum /var/www/lsky/resources/views/user/images.blade.php
+            echo "== 应用入口 =="
+            ls -l /var/www/lsky/public/index.php
+          ')
+          echo "$REPORT"
+
+          ACTUAL=$(echo "$REPORT" | awk '/context-js\/context-js.js$/ {print $1}')
+          if [ "$ACTUAL" != "${CONTEXT_JS_MD5}" ]; then
+            echo "::error::镜像里的 context-js.js（$ACTUAL）与预期补丁（${CONTEXT_JS_MD5}）不一致"
+            exit 1
+          fi
+          echo "补丁文件 md5 校验通过：$ACTUAL"
+
+          # 真起一次容器：默认 8089 端口，入口脚本会把应用播种到 /var/www/html
+          docker run -d --name lsky-smoke -p 18089:8089 -e WEB_PORT=8089 "${IMAGE}:latest"
+          CODE=000
+          for i in $(seq 1 30); do
+            CODE=$(curl -s -L -o /tmp/install.html -w '%{http_code}' http://127.0.0.1:18089/install || true)
+            [ "$CODE" = "200" ] && break
+            sleep 2
+          done
+          echo "安装页 HTTP 状态：$CODE"
+          if [ "$CODE" != "200" ]; then
+            docker logs lsky-smoke || true
+            echo "::error::容器起来了但安装页返回 $CODE"
+            exit 1
+          fi
+          curl -s -o /tmp/root.html -w 'GET / → %{http_code}\n' -L http://127.0.0.1:18089/
+          docker exec lsky-smoke php -r 'echo "artisan 可用："; echo file_exists("/var/www/html/artisan") ? "yes" : "no"; echo PHP_EOL;'
+          docker rm -f lsky-smoke
+
+          {
+            echo "## 镜像自证（linux/amd64）"
+            echo ""
+            echo '```'
+            echo "$REPORT"
+            echo "安装页 HTTP：$CODE"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

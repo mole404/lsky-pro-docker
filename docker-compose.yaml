@@ -1,7 +1,8 @@
 version: '3'
 services:
   lskypro:
-    image: halcyonazure/lsky-pro-docker:latest
+    # 本 fork 的镜像（含 iOS 长按菜单修复）
+    image: ghcr.io/mole404/lsky-pro-docker:latest
     restart: unless-stopped
     hostname: lskypro
     container_name: lskypro
