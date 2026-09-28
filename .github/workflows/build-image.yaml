@@ -34,10 +34,10 @@ env:
   # 从 Dockerfile 解析（单一事实来源）。
   # 原因（真事故）：这里曾硬编码 911275c，Dockerfile 升到 38d52c46 后它没跟着改，
   # 于是新镜像被贴上了「911275c」这个 represent-旧快照的 tag → 用那个 tag 回滚会拿到新代码。
-  # 补丁后 context-js.js 的 md5（Dockerfile 里也断言了同一份）
-  CONTEXT_JS_MD5: e114c840101d021aa416239196925624
-  # 补丁后 images.blade.php 的 md5（blade 里改了资源版本串就会变）
-  BLADE_MD5: f4e100c87d4becdcce163800db535775
+  # 补丁文件（context-js.js / images.blade.php）的期望 md5 **不在这里写死**，
+  # 由下方校验步骤从 Dockerfile 的 .code-revision 生成段解析（单一事实来源）。
+  # 原因（同类事故第二次）：这里曾硬编码 f4e100c8，界面改造改了 blade 之后没跟着改，
+  # 于是镜像明明是对的（构建期 md5sum -c 已断言过），却被这一步判成失败。
   # 上游快照里的数据库迁移文件个数。换 pin 时若这个数变了，说明有 schema 变更，
   # 而 entrypoint 不会自动跑 migrate —— 那种情况必须人工处理，所以在 CI 里钉住提醒。
   UPSTREAM_MIGRATION_COUNT: "10"
@@ -192,17 +192,26 @@ jobs:
           ')
           echo "$REPORT"
 
+          # 期望值从 Dockerfile 解析（单一事实来源；构建期已用 md5sum -c 断言过这些常量）
+          EXP_CTX=$(grep -oE 'context_js_md5=[0-9a-f]{32}' Dockerfile | head -1 | cut -d= -f2)
+          EXP_BLADE=$(grep -oE 'images_blade_md5=[0-9a-f]{32}' Dockerfile | head -1 | cut -d= -f2)
+          if [ -z "$EXP_CTX" ] || [ -z "$EXP_BLADE" ]; then
+            echo "::error::无法从 Dockerfile 解析补丁 md5（.code-revision 生成段里的 *_md5= 常量）"
+            exit 1
+          fi
+          echo "期望值（取自 Dockerfile）：context-js=$EXP_CTX  blade=$EXP_BLADE"
+
           ACTUAL=$(echo "$REPORT" | awk '/context-js\/context-js.js$/ {print $1}')
-          if [ "$ACTUAL" != "${CONTEXT_JS_MD5}" ]; then
-            echo "::error::镜像里的 context-js.js（$ACTUAL）与预期补丁（${CONTEXT_JS_MD5}）不一致"
+          if [ "$ACTUAL" != "$EXP_CTX" ]; then
+            echo "::error::镜像里的 context-js.js（$ACTUAL）与预期补丁（$EXP_CTX）不一致"
             exit 1
           fi
           echo "补丁文件 md5 校验通过：$ACTUAL"
 
           # blade 也要核：它决定浏览器拿到的资源版本串，漏了就白改
           BLADE_ACTUAL=$(echo "$REPORT" | awk '/user\/images.blade.php$/ {print $1}')
-          if [ "$BLADE_ACTUAL" != "${BLADE_MD5}" ]; then
-            echo "::error::镜像里的 images.blade.php（$BLADE_ACTUAL）与预期（${BLADE_MD5}）不一致"
+          if [ "$BLADE_ACTUAL" != "$EXP_BLADE" ]; then
+            echo "::error::镜像里的 images.blade.php（$BLADE_ACTUAL）与预期（$EXP_BLADE）不一致"
             exit 1
           fi
           echo "blade md5 校验通过：$BLADE_ACTUAL"
