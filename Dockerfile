@@ -63,12 +63,13 @@ RUN printf '%s\n' \
     | md5sum -c -
 
 # 自证 1b：有意偏离上游、但仍需锁死的文件。
-# config/convention.php 与 routes/web.php 被本 fork 改过 —— 移除了「画廊」与「系统升级」
+# config/convention.php 与 routes/web.php 被本 fork 改过 —— 移除了「画廊」「系统升级」，
+# 且首页 / 在登录状态下改为跳转「我的图片」（游客上传页只留给未登录用户）
 # 两个功能（删配置项常量、删路由表条目，详见 README）。md5 随改动更新，作用不变：
 # 这两个文件以后只要被改动（哪怕手滑），构建就会红。
 RUN printf '%s\n' \
         'ee439977cfcb2e4d3545b25689198c71  ./config/convention.php' \
-        '4fb6cc0703bbd8df1dcddc03d0bf8f76  ./routes/web.php' \
+        'f6167a0726f8f2892494952a14c2bf49  ./routes/web.php' \
     | md5sum -c -
 
 # 有意偏离上游的另一个文件：composer.lock。
