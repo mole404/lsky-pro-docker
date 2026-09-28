@@ -221,11 +221,13 @@ Dockerfile 已经是多段构建，无需手动拉源码，也不需要 Node 工
 docker build -t lsky-pro-docker .
 ```
 
-多架构：
+指定平台（CI 只构建 amd64 —— 部署机是 x86_64，arm64 白烧一半构建时间；要 arm64 就把
+下面这行改成 `--platform linux/amd64,linux/arm64`，同时改 `.github/workflows/build-image.yaml`
+里的 `platforms:`）：
 
 ```bash
 docker buildx create --use
-docker buildx build --platform linux/amd64,linux/arm64 -t lsky-pro-docker .
+docker buildx build --platform linux/amd64 -t lsky-pro-docker .
 ```
 
 ## 手动备份/升级
