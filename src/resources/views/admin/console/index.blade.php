@@ -78,9 +78,8 @@
         </div>
 
         <p class="mb-3 font-semibold text-lg text-ink">趋势</p>
-        <div class="relative p-4 rounded-md bg-surface h-80 mb-8 shadow-card" id="chart">
-            <canvas></canvas>
-        </div>
+        {{-- ECharts 自己会往容器里建画布，这里不用手写 canvas --}}
+        <div class="relative p-4 rounded-md bg-surface h-80 mb-8 shadow-card" id="chart"></div>
 
         <p class="mb-3 font-semibold text-lg text-ink">系统情况</p>
         <div class="relative rounded-md bg-surface mb-8 overflow-hidden shadow-card">
@@ -145,53 +144,102 @@
                 'use strict'
                 let chartDom = document.getElementById('chart');
                 let myChart = echarts.init(chartDom);
-                let options;
-
-                options = {
-                    responsive: true,
-                    title: {
-                        text: '近 30 天内统计'
-                    },
-                    tooltip: {
-                        trigger: 'axis'
-                    },
-                    legend: {
-                        top: '10%',
-                        type: 'scroll',
-                        data: @json($fields)
-                    },
-                    grid: {
-                        left: '3%',
-                        right: '3%',
-                        bottom: '3%',
-                        containLabel: true
-                    },
-                    toolbox: {
-                        show: true,
-                        feature: {
-                            magicType: {
-                                type: ["line", "bar"]
-                            },
-                            saveAsImage: {}
-                        }
-                    },
-                    xAxis: {
-                        type: 'category',
-                        boundaryGap: false,
-                        data: @json($dates)
-                    },
-                    yAxis: {
-                        type: 'value',
-                        minInterval: 1,
-                    },
-                    series: @json($datasets)
-                };
-
-                options && myChart.setOption(options);
-
-                window.onresize = function() {
-                    myChart.resize();
+                // fork 补丁 1：字色跟随主题。ECharts 默认文字是深灰，暗色下几乎看不清 ——
+                // 这里统一读应用的设计令牌（--lsky-*），亮/暗两套配色自动对上。
+                // fork 补丁 2：侧栏折叠改的是**容器宽度**，不会触发 window.resize，画布会留在旧宽度上
+                // （图表跟卡片边框对不上）；改用侧栏 hook，在 300ms 宽度动画结束后再 resize。
+                function chartColors() {
+                    let css = getComputedStyle(document.documentElement);
+                    let token = function (name, fallback) {
+                        let value = css.getPropertyValue(name);
+                        return (value && value.trim()) || fallback;
+                    };
+                    return {
+                        text: token('--lsky-text', '#16191d'),
+                        text2: token('--lsky-text-2', '#5a6472'),
+                        text3: token('--lsky-text-3', '#8b95a3'),
+                        border: token('--lsky-border', '#e9ecf0'),
+                        border2: token('--lsky-border-2', '#dde2e8'),
+                        surface: token('--lsky-surface', '#ffffff')
+                    };
                 }
+
+                function chartOptions() {
+                    let c = chartColors();
+                    return {
+                        textStyle: {color: c.text2},
+                        title: {
+                            text: '近 30 天内统计',
+                            textStyle: {color: c.text}
+                        },
+                        tooltip: {
+                            trigger: 'axis',
+                            backgroundColor: c.surface,
+                            borderColor: c.border2,
+                            textStyle: {color: c.text}
+                        },
+                        legend: {
+                            top: '10%',
+                            type: 'scroll',
+                            data: @json($fields),
+                            textStyle: {color: c.text2},
+                            inactiveColor: c.text3,
+                            pageTextStyle: {color: c.text2},
+                            pageIconColor: c.text2,
+                            pageIconInactiveColor: c.text3
+                        },
+                        grid: {
+                            left: '3%',
+                            right: '3%',
+                            bottom: '3%',
+                            containLabel: true
+                        },
+                        toolbox: {
+                            show: true,
+                            iconStyle: {borderColor: c.text3},
+                            feature: {
+                                magicType: {
+                                    type: ["line", "bar"]
+                                },
+                                saveAsImage: {}
+                            }
+                        },
+                        xAxis: {
+                            type: 'category',
+                            boundaryGap: false,
+                            data: @json($dates),
+                            axisLabel: {color: c.text2},
+                            axisLine: {lineStyle: {color: c.border2}}
+                        },
+                        yAxis: {
+                            type: 'value',
+                            minInterval: 1,
+                            axisLabel: {color: c.text2},
+                            axisLine: {lineStyle: {color: c.border2}},
+                            splitLine: {lineStyle: {color: c.border}}
+                        },
+                        series: @json($datasets)
+                    };
+                }
+
+                myChart.setOption(chartOptions());
+
+                // 亮/暗/跟随系统切换 → 重画（颜色是读 CSS 变量来的，不重画就还是旧色）
+                window.addEventListener('lsky:theme-changed', function () {
+                    myChart.setOption(chartOptions(), true);
+                });
+
+                // 侧栏折叠/展开 → 容器宽度变了，等过渡动画结束再同步画布
+                window.addEventListener('lsky:sidebar-toggled', function () {
+                    setTimeout(function () {
+                        myChart.resize();
+                    }, 320);
+                });
+
+                // 窗口缩放照旧；用 addEventListener，window.onresize = 会覆盖别人挂的处理
+                window.addEventListener('resize', function () {
+                    myChart.resize();
+                });
             })
         </script>
     @endpush

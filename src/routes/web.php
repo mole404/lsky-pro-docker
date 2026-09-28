@@ -28,7 +28,9 @@ use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\SettingController as AdminSettingController;
 use App\Http\Controllers\Admin\ImageController as AdminImageController;
 
-Route::get('/', fn () => view('welcome'))
+// fork：登录状态下首页直接进「我的图片」（游客上传页是给未登录的人用的，原来是唯一入口）。
+// 未登录保持不变：游客上传开着就还是那个上传页，关着则由 CheckIsEnableGuestUpload 送去登录页。
+Route::get('/', fn () => auth()->check() ? redirect()->route('images') : view('welcome'))
     ->name('/')
     ->middleware(CheckIsInstalled::class)
     ->middleware(CheckIsEnableGuestUpload::class);

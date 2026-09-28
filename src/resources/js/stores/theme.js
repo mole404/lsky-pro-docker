@@ -46,6 +46,10 @@ export default {
     apply() {
         this.resolved = this.mode === 'system' ? (this.systemPrefersDark() ? 'dark' : 'light') : this.mode;
         document.documentElement.classList.toggle('dark', this.resolved === 'dark');
+        // fork：通知需要跟随主题重绘的地方（控制台趋势图的字色就是读 CSS 变量画的）
+        window.dispatchEvent(new CustomEvent('lsky:theme-changed', {
+            detail: {dark: this.resolved === 'dark'}
+        }));
     },
 
     set(mode) {

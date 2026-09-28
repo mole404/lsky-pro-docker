@@ -16,20 +16,19 @@
     <div class="flex flex-col justify-between container mx-auto px-3 py-4 pb-12 h-full overflow-scroll overscroll-contain scrollbar-none">
         <div>
             <div class="flex flex-col space-y-1 mb-5">
+                <p class="ls-group-title">我的</p>
+                {{-- fork：仪表盘不再单独占一组，并入「我的」；组内顺序 仪表盘 → 我的图片 → 上传图片 → 用户设置 --}}
                 <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                     <x-slot name="icon"><i class="fas fa-tachometer-alt fa-fw"></i></x-slot>
                     <x-slot name="name">仪表盘</x-slot>
                 </x-nav-link>
-            </div>
-            <div class="flex flex-col space-y-1 mb-5">
-                <p class="ls-group-title">我的</p>
-                <x-nav-link :href="route('upload')" :active="request()->routeIs('upload')">
-                    <x-slot name="icon"><i class="fas fa-cloud-upload-alt fa-fw"></i></x-slot>
-                    <x-slot name="name">上传图片</x-slot>
-                </x-nav-link>
                 <x-nav-link :href="route('images')" :active="request()->routeIs('images')">
                     <x-slot name="icon"><i class="fas fa-images fa-fw"></i></x-slot>
                     <x-slot name="name">我的图片</x-slot>
+                </x-nav-link>
+                <x-nav-link :href="route('upload')" :active="request()->routeIs('upload')">
+                    <x-slot name="icon"><i class="fas fa-cloud-upload-alt fa-fw"></i></x-slot>
+                    <x-slot name="name">上传图片</x-slot>
                 </x-nav-link>
                 <x-nav-link :href="route('settings')" :active="request()->routeIs('settings')">
                     <x-slot name="icon"><i class="fas fa-user-cog fa-fw"></i></x-slot>
