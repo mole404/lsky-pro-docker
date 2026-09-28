@@ -102,7 +102,7 @@
     /* ---------- 按钮 ---------- */
     .ls-btn {
         @apply inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-lg border border-line-2
-               bg-surface text-[13px] font-medium text-ink cursor-pointer whitespace-nowrap;
+               bg-surface text-[13.5px] font-medium text-ink cursor-pointer whitespace-nowrap;
         transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
     }
 
@@ -133,11 +133,11 @@
         background: var(--lsky-danger-soft);
     }
 
-    .ls-btn-sm { @apply h-8 px-3 text-[12.5px]; }
+    .ls-btn-sm { @apply h-8 px-3 text-[13.5px]; }
 
     /* ---------- 表单 ---------- */
     .ls-input {
-        @apply block w-full h-9 px-3 rounded-lg border border-line-2 bg-surface text-[13.5px] text-ink;
+        @apply block w-full h-9 px-3 rounded-lg border border-line-2 bg-surface text-[14px] text-ink;
         transition: border-color .15s ease, box-shadow .15s ease;
     }
 
@@ -149,34 +149,34 @@
     .ls-input::placeholder { @apply text-ink-3; }
 
     .ls-label {
-        @apply block mb-1.5 text-[12.5px] font-medium text-ink-2;
+        @apply block mb-1.5 text-[13.5px] font-medium text-ink-2;
     }
 
     /* ---------- 表格 ---------- */
     .ls-table { @apply w-full border-collapse; }
 
     .ls-th {
-        @apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-3 whitespace-nowrap;
+        @apply px-4 py-2.5 text-left text-[12.5px] font-semibold uppercase tracking-wider text-ink-3 whitespace-nowrap;
     }
 
     .ls-td {
-        @apply px-4 py-3 text-[13.5px] text-ink border-t border-line align-middle;
+        @apply px-4 py-3 text-[14px] text-ink border-t border-line align-middle;
     }
 
     .ls-tr:hover .ls-td { @apply bg-surface-2; }
 
     /* ---------- 徽标 / 分组标题 ---------- */
     .ls-badge {
-        @apply inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-surface-3 text-ink-2;
+        @apply inline-flex items-center px-2 py-0.5 rounded-full text-[12.5px] font-medium bg-surface-3 text-ink-2;
     }
 
     .ls-group-title {
-        @apply px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3;
+        @apply px-3 mb-1.5 text-[12.5px] font-semibold uppercase tracking-wider text-ink-3;
     }
 
     /* ---------- 侧栏导航项 ---------- */
     .ls-nav-item {
-        @apply flex items-center gap-2.5 h-9 px-3 rounded-lg text-[13.5px] text-ink-2;
+        @apply flex items-center gap-2.5 h-9 px-3 rounded-lg text-[14px] text-ink-2;
         transition: background-color .15s ease, color .15s ease;
     }
 
@@ -193,7 +193,7 @@
     }
 
     .ls-menu-item {
-        @apply block px-3.5 py-2 text-[13px] text-ink-2 truncate cursor-pointer;
+        @apply block px-3.5 py-2 text-[13.5px] text-ink-2 truncate cursor-pointer;
     }
 
     .ls-menu-item:hover { @apply bg-surface-2 text-ink; }

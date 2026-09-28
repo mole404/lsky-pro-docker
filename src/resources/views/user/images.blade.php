@@ -104,7 +104,7 @@
             <div class="image-mask absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
                 <div class="absolute left-2 bottom-2 text-white z-[2] w-[90%]">
                     <p class="text-sm truncate filename" title="__name__">__name__</p>
-                    <p class="text-xs date" title="__human_date__">__date__</p>
+                    <p class="text-[13.5px] date" title="__human_date__">__date__</p>
                 </div>
             </div>
             <img alt="__name__" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
@@ -131,7 +131,7 @@
                 <span class="update"><i class="fas fa-edit text-xs"></i></span>
                 <span class="delete"><i class="fas fa-trash-alt text-xs text-danger"></i></span>
             </div>
-            <span class="group-hover:hidden text-xs">__image_num__</span>
+            <span class="group-hover:hidden text-[13.5px]">__image_num__</span>
         </a>
     </script>
 

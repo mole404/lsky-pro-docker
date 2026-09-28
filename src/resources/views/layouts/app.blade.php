@@ -45,7 +45,7 @@
     <link rel="stylesheet" href="{{ asset('css/common.css') }}?v={{ \App\Utils::assetVersion('css/common.css') }}">
     <link rel="stylesheet" href="{{ asset('css/app.css') }}?v={{ \App\Utils::assetVersion('css/app.css') }}">
 </head>
-<body class="font-sans antialiased overflow-hidden">
+<body class="font-sans antialiased">
 <div class="min-h-screen bg-bg text-ink" x-data x-cloak>
     @include('layouts.sidebar')
     @include('layouts.header')
@@ -65,7 +65,7 @@
     >
 
     </div>
-    <x-container class="flex flex-col overflow-y-auto absolute pb-14 top-14 left-0 right-0 bottom-0 transition-all duration-300 min-h-screen h-full">
+    <x-container class="flex flex-col pt-14 pb-14 min-h-screen transition-all duration-300">
         {{ $slot }}
     </x-container>
 </div>

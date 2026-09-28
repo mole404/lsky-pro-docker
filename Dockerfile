@@ -107,9 +107,9 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 # 改 src/ 里这三个文件后必须同步更新这里的 md5（故意做成"改了不更新就构建失败"），
 # 并重新生成 patches/ios-longpress.patch（tools/diff-vs-upstream.sh）。
 RUN printf '%s\n' \
-        '078a0d9869eeb2569bfc7a189d9ad093  ./public/js/context-js/context-js.js' \
-        '078a0d9869eeb2569bfc7a189d9ad093  ./resources/js/context-js.js' \
-        '5d1926d2d390945af5371a20a5364b79  ./resources/views/user/images.blade.php' \
+        '2e2c42ff1147a732ed5d297dbaacc8ff  ./public/js/context-js/context-js.js' \
+        '2e2c42ff1147a732ed5d297dbaacc8ff  ./resources/js/context-js.js' \
+        '6fbd6760fc153286c6844a631b99ad65  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -119,7 +119,9 @@ RUN printf '%s\n' \
     && grep -q 'MENU_OPEN_GRACE' ./public/js/context-js/context-js.js \
     && grep -q 'touch-open' ./public/js/context-js/context-js.js \
     && grep -q 'fitSubmenu' ./public/js/context-js/context-js.js \
-    && grep -q 'clampMenu' ./resources/js/context-js.js
+    && grep -q 'clampMenu' ./resources/js/context-js.js \
+    && grep -q 'submenu-inplace' ./public/js/context-js/context-js.js \
+    && grep -q 'SUBMENU_GUARD' ./public/js/context-js/context-js.js
 
 # 代码版本标记：入口脚本用它判断「卷里的代码是不是当前镜像这一版」，不一致才同步（见 entrypoint.sh）。
 # 它由源码 commit + 补丁 md5 组成，正好是上面刚断言过的值 —— 任何代码/补丁变化都会让它变。
@@ -127,8 +129,8 @@ RUN printf '%s\n' \
 RUN printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
-        "context_js_md5=078a0d9869eeb2569bfc7a189d9ad093" \
-        "images_blade_md5=5d1926d2d390945af5371a20a5364b79" \
+        "context_js_md5=2e2c42ff1147a732ed5d297dbaacc8ff" \
+        "images_blade_md5=6fbd6760fc153286c6844a631b99ad65" \
         > .code-revision \
     && cat .code-revision
 

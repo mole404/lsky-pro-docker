@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# fork 补丁存档：iOS 长按菜单 + 菜单交互修复 + 菜单边界钳制
+# fork 补丁存档：iOS 长按菜单 + 菜单交互修复 + 菜单边界钳制 + 手机端二级菜单
 #
 #   ┌ 这个文件只是「给人看的 diff 存档」，**不参与构建**。
 #   └ 构建用的就是仓库里 src/ 下这三个文件本身（改它们 = 改产品）。
@@ -24,11 +24,19 @@
 #      fitSubmenu()：hover 与 touch-open 两条路径都调用；每次从默认态重算，左右翻不够用
 #                   内联 left 兜底、纵向用内联 top 回拉、超高转内部滚动。
 #      只动定位，不碰显示/隐藏逻辑（长按与点击防护依赖 CSS :hover 的真实可见性）。
+#   6) 手机窄屏的二级菜单：上游/早期补丁都是"侧开"（left:100%），窄屏上要么被夹得乱跑、
+#      要么直接盖住主菜单；更糟的是按住不放时手指抬起正好压在第一项上，会被判成选中
+#      （实测点「复制链接」直接被当成「Url」并立刻复制）。
+#      做法：触摸端把面板**就地替换**成二级菜单（隐藏其它项，二级 ul 改 position:static
+#            + 顶部插一行「返回」），不覆盖、不需要额外宽度；
+#      另加 SUBMENU_GUARD=350ms 防误触窗口：二级菜单刚出现这段时间内的触摸点击一律吞掉，
+#      并要求 new touchstart 才能选中 —— "按住不放"那种手势永远选不中任何一项。
+#      桌面端不受影响：仍是 hover 侧开 + fitSubmenu 钳制。
 #
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
-#   078a0d9869eeb2569bfc7a189d9ad093  src/resources/js/context-js.js
-#   078a0d9869eeb2569bfc7a189d9ad093  src/public/js/context-js/context-js.js
-#   5d1926d2d390945af5371a20a5364b79  src/resources/views/user/images.blade.php
+#   3f845ab5321c2605dcd0f369290fcc7b  src/resources/js/context-js.js
+#   3f845ab5321c2605dcd0f369290fcc7b  src/public/js/context-js/context-js.js
+#   6fbd6760fc153286c6844a631b99ad65  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
@@ -87,7 +95,7 @@
      let options = {
          fadeSpeed: 100,
          filter: function ($obj) {
-@@ -15,14 +55,578 @@
+@@ -15,14 +55,693 @@
          compress: false
      };
  
@@ -239,7 +247,10 @@
 +    let debugBuffer = [];           // 诊断环缓冲
 +    let debugToConsole = false;     // context.debug = true 时实时打控制台
 +    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
-+    let suppressClickUntil = 0;     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
++    let suppressClickUntil = 0;
++    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
++    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
++    let armedGestureId = 0;         // 二级菜单是在哪一次手势里被打开的     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
 +    let menuStylesInjected = false;
 +    let menuGuardInstalled = false;
 +
@@ -263,6 +274,18 @@
 +        // 桌面端永远不会加上这个类，所以那条路径零影响。
 +        $('<style id="context-js-touch-submenu">').appendTo('head').text(
 +            '.dropdown-context .dropdown-submenu.touch-open > .dropdown-menu { display: block; }'
++            // 手机：二级菜单就地在面板里展开（不侧开、不覆盖、不占额外宽度）
++            + '.dropdown-context.submenu-inplace > li { display: none !important; }'
++            + '.dropdown-context.submenu-inplace > li.submenu-active,'
++            + ' .dropdown-context.submenu-inplace > li.submenu-back { display: block !important; }'
++            + '.dropdown-context.submenu-inplace > li.submenu-active > a { display: none !important; }'
++            + '.dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu {'
++            + ' position: static !important; float: none !important; display: block !important;'
++            + ' min-width: 0 !important; margin: 0 !important; padding: 0 !important;'
++            + ' border: 0 !important; border-radius: 0 !important; box-shadow: none !important;'
++            + ' background: transparent !important; }'
++            + '.dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu:before,'
++            + ' .dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu:after { display: none !important; }'
 +        );
 +    }
 +
@@ -335,6 +358,8 @@
 +        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
 +        menuClosingUntil = Date.now() + options.fadeSpeed + MENU_FADE_GUARD;
 +
++        exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
++
 +        $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
 +            $('.dropdown-context').css({ display: '' });
 +            $('.dropdown-context .drop-left').removeClass('drop-left');
@@ -357,6 +382,7 @@
 +    // 这里统一收口：菜单与子菜单在展开后按视口夹回来，装不下就给内部滚动，保证每一项都点得到。
 +    // 只改定位，不碰显示/隐藏逻辑 —— 长按与点击防护依赖 CSS :hover 的真实可见性，动不得。
 +    const EDGE_MARGIN = 8;
++    const SUBMENU_GUARD = 350;      // 二级菜单「就地替换」后这段毫秒内，触摸点击一律吞掉（防按住误选）
 +
 +    function viewportSize() {
 +        const de = document.documentElement;
@@ -487,6 +513,57 @@
 +        }
 +    }
 +
++    // 手机窄屏没有空间放「侧开」的二级菜单：一开就盖住主菜单，手指还没抬起就会压到第一项上。
++    // 做法：把面板就地换成二级菜单（顶部插一行「返回」），既不需要额外宽度也不会重叠；
++    // 再配合 SUBMENU_GUARD 时间窗，按住不放那一发绝不可能选中任何一项。
++    function rootMenuFor($li) {
++        return $li.closest('.dropdown-context:not(.dropdown-context-sub)');
++    }
++
++    // 打开某个父项的二级菜单：手机惯例是「按下就开」，这样抬手那发合成 click 也有东西可吞。
++    function openSubmenuFor($li) {
++        $li.siblings('.dropdown-submenu').removeClass('touch-open');
++        $li.addClass('touch-open');
++        enterSubmenuInplace($li);
++    }
++
++    function enterSubmenuInplace($li) {
++        const $menu = rootMenuFor($li);
++        if (! $menu.length) {
++            return;
++        }
++
++        exitSubmenuInplace(true);                       // 先清掉上一次的
++        $menu.addClass('submenu-inplace');
++        $li.addClass('submenu-active');
++        $li.find('.dropdown-context-sub:first').removeClass('drop-left')
++            .css({left: '', top: '', maxHeight: '', overflowY: ''});
++
++        if (! $menu.children('.submenu-back').length) {
++            $menu.prepend($('<li class="submenu-back"><a href="javascript:void(0)" tabindex="-1">' +
++                '<i class="fas fa-chevron-left mr-1"></i>返回</a></li>'));
++        }
++
++        submenuInplaceAt = Date.now();
++        clampMenu($menu);                               // 面板高度变了，重新夹一次视口
++    }
++
++    function exitSubmenuInplace(keepGuard) {
++        const $menu = $('.dropdown-context.submenu-inplace');
++        if (! $menu.length) {
++            return;
++        }
++
++        $menu.removeClass('submenu-inplace').children('.submenu-back').remove();
++        $menu.children('.submenu-active').removeClass('submenu-active touch-open')
++            .find('.dropdown-context-sub:first').removeClass('drop-left')
++            .css({left: '', top: '', maxHeight: '', overflowY: ''});
++
++        if (! keepGuard) {
++            clampMenu($menu);
++        }
++    }
++
 +    function handleSubmenuTap(e) {
 +        if (! isTouchInput()) {
 +            return false;
@@ -512,13 +589,11 @@
 +
 +        if (wasOpen) {
 +            $li.removeClass('touch-open');
++            exitSubmenuInplace(false);
 +            return true;
 +        }
 +
-+        $li.addClass('touch-open');
-+
-+        // 展开（有尺寸了）之后按视口夹一次：左右翻 + 上下拉回 + 装不下就内部滚动
-+        fitSubmenu($li);
++        openSubmenuFor($li);
 +
 +        return true;
 +    }
@@ -562,7 +637,34 @@
 +
 +            if (isInsideMenu(e.target)) {
 +                logMenuEvent('click   target=' + describeNode(e.target) + ' → 菜单内部，放行（交给原有逻辑）');
-+                handleSubmenuTap(e);        // 菜单内部：只处理二级菜单的点击展开
++                const sameGesture = armedGestureId && armedGestureId === touchGestureId;
++                if (isTouchInput() && (sameGesture || (Date.now() - submenuInplaceAt) < SUBMENU_GUARD)) {
++                    logMenuEvent('click   target=' + describeNode(e.target) + ' → 吞掉（防误触：'
++                        + (sameGesture ? '同一根手指那一发' : (Date.now() - submenuInplaceAt) + 'ms 内') + '）');
++                    e.__contextjsClickSwallowed = true;
++                    e.preventDefault();
++                    e.stopPropagation();
++                    return;
++                }
++
++                if (handleSubmenuTap(e)) {   // 点的是带二级菜单的父项：展开/收起，已消费
++                    return;
++                }
++
++                // 防误触（必须排在父项处理与「返回」之前）：真机触摸带粘滞 :hover，二级菜单会先于
++                // 抬手出现，抬手那发合成 click 就落在菜单项上（老师实测点「复制链接」被判成「Url」，
++                // 按住久一点（实测 700ms）也照样中招 —— 所以判据是「同一根手指那一发」而不是时长）。
++                // 判据：这次 click 属于「打开二级菜单的那次手指按下」→ 一律吞掉，什么都不做。
++
++                // 二级菜单顶部的「返回」：切回主菜单，这一发到此为止
++                if ($(e.target).closest('.submenu-back').length) {
++                    e.__contextjsClickSwallowed = true;
++                    e.preventDefault();
++                    e.stopPropagation();
++                    exitSubmenuInplace(false);
++                    return;
++                }
++
 +                return;                     // 其它内部点击照旧（执行动作 + 原有逻辑关菜单）
 +            }
 +
@@ -593,6 +695,27 @@
 +        // 触摸：手指一按下就把菜单收起来，比等抬手更跟手。
 +        // **不拦截 touchstart 本身**（没有 preventDefault），所以页面滚动/缩放完全不受影响；
 +        // 随后补发的那发 click 用时间窗吞掉。
++        // 手指一按到「带二级菜单的父项」上：立刻就地切换 + 武装防误触窗口。
++        // 这一步必须在 touchstart 做 —— 真机的粘滞 :hover 会让二级菜单先出现，
++        // 等抬手才处理就晚了（那时 click 已经落在菜单项上了）。
++        document.addEventListener('touchstart', function (e) {
++            touchGestureId++;                       // 新手势：上一发的防误触自动失效
++
++            // 只看「手指底下这个 a 的直接父级」—— 二级菜单的项嵌在父 li 里面，
++            // 用 closest('li.dropdown-submenu') 会把二级菜单里的项也误判成父行。
++            const $a = $(e.target).closest('a');
++            const $row = $a.parent();
++            if ($row.hasClass('dropdown-submenu') && $row.closest('.dropdown-context').length) {
++                if ($row.hasClass('submenu-active')) {
++                    exitSubmenuInplace(false);      // 再按一次同一行 → 收起
++                } else {
++                    openSubmenuFor($row);
++                }
++                submenuInplaceAt = Date.now();
++                armedGestureId = touchGestureId;    // 武装到本次手势：这根手指抬起来的那发 click 必吞
++            }
++        }, true);
++
 +        document.addEventListener('touchstart', function (e) {
 +            lastTouchAt = Date.now();
 +
@@ -669,7 +792,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +634,8 @@
+@@ -30,13 +749,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -685,7 +808,7 @@
          });
  
      }
-@@ -130,12 +729,15 @@
+@@ -130,12 +844,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -706,7 +829,13 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -149,37 +751,102 @@
+@@ -144,42 +861,108 @@
+             $('body').append($menu);
+ 
+             $('.dropdown-context:not(.dropdown-context-sub)').hide();
++            exitSubmenuInplace(true);   // 兜底：别把上一次的就地替换状态带进新菜单
+ 
+             let $dd = $("#dropdown-" + id);
  
              if (typeof options.above == 'boolean' && options.above) {
                  $dd.addClass('dropdown-context-up').css({
@@ -819,10 +948,9 @@
 +
 +    return api;
  })();
-
 --- a/public/js/context-js/context-js.js
 +++ b/public/js/context-js/context-js.js
-@@ -1 +1,852 @@
+@@ -1 +1,968 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1029,7 +1157,10 @@
 +    let debugBuffer = [];           // 诊断环缓冲
 +    let debugToConsole = false;     // context.debug = true 时实时打控制台
 +    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
-+    let suppressClickUntil = 0;     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
++    let suppressClickUntil = 0;
++    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
++    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
++    let armedGestureId = 0;         // 二级菜单是在哪一次手势里被打开的     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
 +    let menuStylesInjected = false;
 +    let menuGuardInstalled = false;
 +
@@ -1053,6 +1184,18 @@
 +        // 桌面端永远不会加上这个类，所以那条路径零影响。
 +        $('<style id="context-js-touch-submenu">').appendTo('head').text(
 +            '.dropdown-context .dropdown-submenu.touch-open > .dropdown-menu { display: block; }'
++            // 手机：二级菜单就地在面板里展开（不侧开、不覆盖、不占额外宽度）
++            + '.dropdown-context.submenu-inplace > li { display: none !important; }'
++            + '.dropdown-context.submenu-inplace > li.submenu-active,'
++            + ' .dropdown-context.submenu-inplace > li.submenu-back { display: block !important; }'
++            + '.dropdown-context.submenu-inplace > li.submenu-active > a { display: none !important; }'
++            + '.dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu {'
++            + ' position: static !important; float: none !important; display: block !important;'
++            + ' min-width: 0 !important; margin: 0 !important; padding: 0 !important;'
++            + ' border: 0 !important; border-radius: 0 !important; box-shadow: none !important;'
++            + ' background: transparent !important; }'
++            + '.dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu:before,'
++            + ' .dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu:after { display: none !important; }'
 +        );
 +    }
 +
@@ -1125,6 +1268,8 @@
 +        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
 +        menuClosingUntil = Date.now() + options.fadeSpeed + MENU_FADE_GUARD;
 +
++        exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
++
 +        $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
 +            $('.dropdown-context').css({ display: '' });
 +            $('.dropdown-context .drop-left').removeClass('drop-left');
@@ -1147,6 +1292,7 @@
 +    // 这里统一收口：菜单与子菜单在展开后按视口夹回来，装不下就给内部滚动，保证每一项都点得到。
 +    // 只改定位，不碰显示/隐藏逻辑 —— 长按与点击防护依赖 CSS :hover 的真实可见性，动不得。
 +    const EDGE_MARGIN = 8;
++    const SUBMENU_GUARD = 350;      // 二级菜单「就地替换」后这段毫秒内，触摸点击一律吞掉（防按住误选）
 +
 +    function viewportSize() {
 +        const de = document.documentElement;
@@ -1277,6 +1423,57 @@
 +        }
 +    }
 +
++    // 手机窄屏没有空间放「侧开」的二级菜单：一开就盖住主菜单，手指还没抬起就会压到第一项上。
++    // 做法：把面板就地换成二级菜单（顶部插一行「返回」），既不需要额外宽度也不会重叠；
++    // 再配合 SUBMENU_GUARD 时间窗，按住不放那一发绝不可能选中任何一项。
++    function rootMenuFor($li) {
++        return $li.closest('.dropdown-context:not(.dropdown-context-sub)');
++    }
++
++    // 打开某个父项的二级菜单：手机惯例是「按下就开」，这样抬手那发合成 click 也有东西可吞。
++    function openSubmenuFor($li) {
++        $li.siblings('.dropdown-submenu').removeClass('touch-open');
++        $li.addClass('touch-open');
++        enterSubmenuInplace($li);
++    }
++
++    function enterSubmenuInplace($li) {
++        const $menu = rootMenuFor($li);
++        if (! $menu.length) {
++            return;
++        }
++
++        exitSubmenuInplace(true);                       // 先清掉上一次的
++        $menu.addClass('submenu-inplace');
++        $li.addClass('submenu-active');
++        $li.find('.dropdown-context-sub:first').removeClass('drop-left')
++            .css({left: '', top: '', maxHeight: '', overflowY: ''});
++
++        if (! $menu.children('.submenu-back').length) {
++            $menu.prepend($('<li class="submenu-back"><a href="javascript:void(0)" tabindex="-1">' +
++                '<i class="fas fa-chevron-left mr-1"></i>返回</a></li>'));
++        }
++
++        submenuInplaceAt = Date.now();
++        clampMenu($menu);                               // 面板高度变了，重新夹一次视口
++    }
++
++    function exitSubmenuInplace(keepGuard) {
++        const $menu = $('.dropdown-context.submenu-inplace');
++        if (! $menu.length) {
++            return;
++        }
++
++        $menu.removeClass('submenu-inplace').children('.submenu-back').remove();
++        $menu.children('.submenu-active').removeClass('submenu-active touch-open')
++            .find('.dropdown-context-sub:first').removeClass('drop-left')
++            .css({left: '', top: '', maxHeight: '', overflowY: ''});
++
++        if (! keepGuard) {
++            clampMenu($menu);
++        }
++    }
++
 +    function handleSubmenuTap(e) {
 +        if (! isTouchInput()) {
 +            return false;
@@ -1302,13 +1499,11 @@
 +
 +        if (wasOpen) {
 +            $li.removeClass('touch-open');
++            exitSubmenuInplace(false);
 +            return true;
 +        }
 +
-+        $li.addClass('touch-open');
-+
-+        // 展开（有尺寸了）之后按视口夹一次：左右翻 + 上下拉回 + 装不下就内部滚动
-+        fitSubmenu($li);
++        openSubmenuFor($li);
 +
 +        return true;
 +    }
@@ -1352,7 +1547,34 @@
 +
 +            if (isInsideMenu(e.target)) {
 +                logMenuEvent('click   target=' + describeNode(e.target) + ' → 菜单内部，放行（交给原有逻辑）');
-+                handleSubmenuTap(e);        // 菜单内部：只处理二级菜单的点击展开
++                const sameGesture = armedGestureId && armedGestureId === touchGestureId;
++                if (isTouchInput() && (sameGesture || (Date.now() - submenuInplaceAt) < SUBMENU_GUARD)) {
++                    logMenuEvent('click   target=' + describeNode(e.target) + ' → 吞掉（防误触：'
++                        + (sameGesture ? '同一根手指那一发' : (Date.now() - submenuInplaceAt) + 'ms 内') + '）');
++                    e.__contextjsClickSwallowed = true;
++                    e.preventDefault();
++                    e.stopPropagation();
++                    return;
++                }
++
++                if (handleSubmenuTap(e)) {   // 点的是带二级菜单的父项：展开/收起，已消费
++                    return;
++                }
++
++                // 防误触（必须排在父项处理与「返回」之前）：真机触摸带粘滞 :hover，二级菜单会先于
++                // 抬手出现，抬手那发合成 click 就落在菜单项上（老师实测点「复制链接」被判成「Url」，
++                // 按住久一点（实测 700ms）也照样中招 —— 所以判据是「同一根手指那一发」而不是时长）。
++                // 判据：这次 click 属于「打开二级菜单的那次手指按下」→ 一律吞掉，什么都不做。
++
++                // 二级菜单顶部的「返回」：切回主菜单，这一发到此为止
++                if ($(e.target).closest('.submenu-back').length) {
++                    e.__contextjsClickSwallowed = true;
++                    e.preventDefault();
++                    e.stopPropagation();
++                    exitSubmenuInplace(false);
++                    return;
++                }
++
 +                return;                     // 其它内部点击照旧（执行动作 + 原有逻辑关菜单）
 +            }
 +
@@ -1383,6 +1605,27 @@
 +        // 触摸：手指一按下就把菜单收起来，比等抬手更跟手。
 +        // **不拦截 touchstart 本身**（没有 preventDefault），所以页面滚动/缩放完全不受影响；
 +        // 随后补发的那发 click 用时间窗吞掉。
++        // 手指一按到「带二级菜单的父项」上：立刻就地切换 + 武装防误触窗口。
++        // 这一步必须在 touchstart 做 —— 真机的粘滞 :hover 会让二级菜单先出现，
++        // 等抬手才处理就晚了（那时 click 已经落在菜单项上了）。
++        document.addEventListener('touchstart', function (e) {
++            touchGestureId++;                       // 新手势：上一发的防误触自动失效
++
++            // 只看「手指底下这个 a 的直接父级」—— 二级菜单的项嵌在父 li 里面，
++            // 用 closest('li.dropdown-submenu') 会把二级菜单里的项也误判成父行。
++            const $a = $(e.target).closest('a');
++            const $row = $a.parent();
++            if ($row.hasClass('dropdown-submenu') && $row.closest('.dropdown-context').length) {
++                if ($row.hasClass('submenu-active')) {
++                    exitSubmenuInplace(false);      // 再按一次同一行 → 收起
++                } else {
++                    openSubmenuFor($row);
++                }
++                submenuInplaceAt = Date.now();
++                armedGestureId = touchGestureId;    // 武装到本次手势：这根手指抬起来的那发 click 必吞
++            }
++        }, true);
++
 +        document.addEventListener('touchstart', function (e) {
 +            lastTouchAt = Date.now();
 +
@@ -1572,6 +1815,7 @@
 +            $('body').append($menu);
 +
 +            $('.dropdown-context:not(.dropdown-context-sub)').hide();
++            exitSubmenuInplace(true);   // 兜底：别把上一次的就地替换状态带进新菜单
 +
 +            let $dd = $("#dropdown-" + id);
 +
@@ -1676,7 +1920,6 @@
 +
 +    return api;
 +})();
-
 --- a/resources/views/user/images.blade.php
 +++ b/resources/views/user/images.blade.php
 @@ -7,21 +7,22 @@
@@ -1761,7 +2004,7 @@
              </div>
              <div id="drawer-content" class="overflow-y-auto"></div>
          </div>
-@@ -96,7 +98,7 @@
+@@ -96,13 +98,13 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -1770,7 +2013,14 @@
                  </div>
              </div>
              <div class="image-mask absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
-@@ -114,20 +116,20 @@
+                 <div class="absolute left-2 bottom-2 text-white z-[2] w-[90%]">
+                     <p class="text-sm truncate filename" title="__name__">__name__</p>
+-                    <p class="text-xs date" title="__human_date__">__date__</p>
++                    <p class="text-[13.5px] date" title="__human_date__">__date__</p>
+                 </div>
+             </div>
+             <img alt="__name__" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
+@@ -114,22 +116,22 @@
              <div id="album-add" class="flex flex-col w-full hidden border rounded p-2">
                  <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
                  <form class="w-full space-y-2" action="/user/albums">
@@ -1794,8 +2044,11 @@
 -                <span class="delete"><i class="fas fa-trash-alt text-xs text-red-400"></i></span>
 +                <span class="delete"><i class="fas fa-trash-alt text-xs text-danger"></i></span>
              </div>
-             <span class="group-hover:hidden text-xs">__image_num__</span>
+-            <span class="group-hover:hidden text-xs">__image_num__</span>
++            <span class="group-hover:hidden text-[13.5px]">__image_num__</span>
          </a>
+     </script>
+ 
 @@ -137,9 +139,9 @@
          <div id="album-edit" data-id="__id__" class="flex flex-col w-full border rounded p-2">
              <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
@@ -1963,4 +2216,3 @@
                  }
              });
          </script>
-
