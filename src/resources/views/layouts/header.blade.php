@@ -4,7 +4,10 @@
             {{-- 桌面上这个按钮折叠/展开侧栏，手机上仍开关抽屉（同一个语义：开关侧栏） --}}
             <a href="javascript:void(0)" @click="$store.sidebar.toggleSmart()" title="开关侧栏"
                class="w-9 h-9 rounded-lg -ml-1 mr-2 flex justify-center items-center text-ink-2 hover:bg-surface-2">
-                <i class="fas fa-bars text-lg"></i>
+                {{-- 手机：抽屉（☰）；桌面：箭头，方向表示侧栏会往哪边收 --}}
+                <i class="fas fa-bars text-lg sm:hidden"></i>
+                <i class="hidden sm:inline-block fas text-sm"
+                   :class="$store.sidebar.collapsed ? 'fa-chevron-right' : 'fa-chevron-left'"></i>
             </a>
             <a href="" class="text-[15px] font-semibold truncate text-ink" id="header-title">@yield('title', \App\Utils::config(\App\Enums\ConfigKey::AppName))</a>
         </div>

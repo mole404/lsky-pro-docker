@@ -42,8 +42,8 @@
     @stack('styles')
 
     <!-- Styles -->
-    <link rel="stylesheet" href="{{ asset('css/common.css') }}?t=20260928ui">
-    <link rel="stylesheet" href="{{ asset('css/app.css') }}?t=20260928ui">
+    <link rel="stylesheet" href="{{ asset('css/common.css') }}?v={{ \App\Utils::assetVersion('css/common.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/app.css') }}?v={{ \App\Utils::assetVersion('css/app.css') }}">
 </head>
 <body class="font-sans antialiased overflow-hidden">
 <div class="min-h-screen bg-bg text-ink" x-data x-cloak>
@@ -71,7 +71,7 @@
 </div>
 </body>
 <!-- Scripts -->
-<script src="{{ asset('js/app.js') }}?t=20260928ui"></script>
+<script src="{{ asset('js/app.js') }}?v={{ \App\Utils::assetVersion('js/app.js') }}"></script>
 @include('common.notice')
 <script>
     // 开关组件默认值

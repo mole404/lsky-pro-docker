@@ -193,6 +193,20 @@ class Utils
     }
 
     /**
+     * fork：给静态资源生成版本号（用于 ?v= 打缓存失效）。
+     *
+     * 用文件修改时间：镜像每次构建、卷每次同步都会刷新它 —— 前端资源一改，
+     * 浏览器立刻拿到新的，不会像写死 ?t=20260928ui 那样一直吃旧 app.js
+     * （曾经因此出现"侧栏折叠按钮点了没反应"：新按钮调用的函数在旧的 bundle 里不存在）。
+     */
+    public static function assetVersion(string $path): string
+    {
+        $full = public_path($path);
+
+        return file_exists($full) ? (string) filemtime($full) : '0';
+    }
+
+    /**
      * fork：取镜像内记录的短 commit（7 位）。
      *
      * 值来自镜像里的 .code-revision 标记（Dockerfile 构建时写入 fork_sha=…，
