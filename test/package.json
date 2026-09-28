@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node longpress.test.mjs",
+    "test": "node longpress.test.mjs && node sidebar.test.mjs",
     "repro": "node repro-clickthrough.mjs"
   },
   "devDependencies": {

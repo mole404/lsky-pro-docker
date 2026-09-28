@@ -1,13 +1,13 @@
-<nav class="transition-all duration-300 -left-[600px] sm:left-0 w-3/4 sm:w-64 h-screen bg-surface border-r border-line fixed z-10" :class="{
+<nav id="app-sidebar" class="transition-all duration-300 -left-[600px] sm:left-0 w-3/4 sm:w-64 h-screen bg-surface border-r border-line fixed z-10" :class="{
     '-left-[600px]': ! $store.sidebar.open,
     'left-0': $store.sidebar.open
 }">
-    <div class="px-5 h-14 flex justify-between sm:justify-center items-center border-b border-line">
+    <div class="ls-brand px-5 h-14 flex justify-between items-center border-b border-line">
         <a href="/" class="flex items-center gap-2.5 truncate">
             <span class="w-7 h-7 rounded-lg bg-brand text-white flex items-center justify-center shrink-0">
                 <i class="fas fa-image text-[13px]"></i>
             </span>
-            <span class="text-[15px] font-semibold text-ink truncate">{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</span>
+            <span class="ls-brand-name text-[15px] font-semibold text-ink truncate">{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</span>
         </a>
         <a href="javascript:void(0)" class="sm:hidden block w-8 h-8 rounded-lg flex items-center justify-center text-ink-2 hover:bg-surface-2"
            @click="$store.sidebar.open = false"><i class="fas fa-times"></i></a>
@@ -33,7 +33,7 @@
                 </x-nav-link>
                 <x-nav-link :href="route('settings')" :active="request()->routeIs('settings')">
                     <x-slot name="icon"><i class="fas fa-user-cog fa-fw"></i></x-slot>
-                    <x-slot name="name">设置</x-slot>
+                    <x-slot name="name">用户设置</x-slot>
                 </x-nav-link>
             </div>
             @if(\App\Utils::config(\App\Enums\ConfigKey::IsEnableApi))
