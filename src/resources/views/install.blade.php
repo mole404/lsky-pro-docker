@@ -122,7 +122,7 @@
                     <p>你可以点击 <a class="text-green-500" href="{{ route('/') }}">这里</a> 去首页。</p>
                     <p>更多帮助请访问 <a class="text-green-500" href="https://www.lsky.pro" target="_blank">https://www.lsky.pro</a>。</p>
                     <p>使用过程中出现任何问题请务必阅读 <a class="text-green-500" href="https://docs.lsky.pro" target="_blank">官方文档</a>。</p>
-                    <p>如果你觉得兰空图床给你带来帮助，不妨请我喝一杯咖啡☕️  <a class="text-green-500" href="https://github.com/wisp-x/lsky-pro#-%E6%8D%90%E8%B5%A0" target="_blank">去打赏</a>。</p>
+                    <p>项目仓库（本 fork）：<a class="text-green-500" href="https://github.com/mole404/lsky-pro-docker" target="_blank">https://github.com/mole404/lsky-pro-docker</a>。</p>
                     <p>这个页面将在下次访问时返回 404 错误，如果你想要重新安装，请删除程序根目录中的 installed.lock 文件，然后重新访问首页。</p>
                 </div>
             </div>
