@@ -3,7 +3,8 @@ name: Build and push image to GHCR
 # 上游 workflow 是「每天定时拉 master 重新构建并推到 DockerHub」，本 fork 改成：
 #   - 只在 master 有推送时构建（源码已钉死，定时重建没有意义）
 #   - 推到 GHCR，用仓库自带的 GITHUB_TOKEN，不需要任何 secret
-#   - 构建完做一次真机自证：拉回镜像跑起来、对补丁文件核 md5、并且真起一次容器 curl 首页
+#   - 先推到不可变的 sha tag → 真机自证 → 自证通过才把 latest 指过去
+#     这样自证失败时 latest 仍停在上一个已知可用的镜像，线上拉到的不会是坏版本
 on:
   push:
     branches:
@@ -42,6 +43,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # 只推不可变 tag；latest 由最后的 Promote 步骤在自证通过后才指过来
       - name: Build and push (linux/amd64, linux/arm64)
         uses: docker/build-push-action@v7
         with:
@@ -50,8 +52,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE }}:latest
-            ${{ env.IMAGE }}:${{ env.LSKY_COMMIT }}
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
           build-args: |
             FORK_SHA=${{ github.sha }}
           cache-from: type=gha
@@ -61,29 +62,40 @@ jobs:
       # 自证：不只看「构建成功」，而是把推上去的镜像拉回来实测
       #   1. 核对补丁文件 md5（确认 overlay 真的进了镜像）
       #   2. 记录 PHP / 扩展 / Debian / ImageMagick 版本（换基础镜像时的对比基线）
-      #   3. 真起一个容器 curl 首页，确认 Apache + PHP + 应用真的能跑
+      #   3. 关键扩展硬断言（pdo_sqlite 缺了线上 SQLite 站点直接挂）
+      #   4. 真起一个容器 curl 首页，确认 Apache + PHP + 应用真的能跑
+      # 注意：本段整体被外层单引号包着（sh -c '...'），里面只能出现双引号，
+      #       写单引号会把脚本提前截断 → syntax error near unexpected token `('
       # ------------------------------------------------------------------
       - name: Verify published image
+        env:
+          IMAGE_REF: ${{ env.IMAGE }}:sha-${{ github.sha }}
         run: |
           set -euo pipefail
 
-          docker pull "${IMAGE}:latest"
+          docker pull "$IMAGE_REF"
 
-          REPORT=$(docker run --rm --entrypoint sh "${IMAGE}:latest" -c '
+          REPORT=$(docker run --rm --entrypoint sh "$IMAGE_REF" -c '
             set -e
             echo "== /etc/os-release =="
             grep -E "^(PRETTY_NAME|VERSION_ID)=" /etc/os-release
-            echo "== php -v =="
-            php -v | head -2
+            echo "== php -v（含启动警告）=="
+            php -v 2>&1 | head -3
             echo "== php -m =="
             php -m | sort | tr "\n" " "; echo
             echo "== 关键扩展断言 =="
-            php -r 'echo "pdo_sqlite=", (int)extension_loaded("pdo_sqlite"), " imagick=", (int)extension_loaded("imagick"), " redis=", (int)extension_loaded("redis"), " pdo_mysql=", (int)extension_loaded("pdo_mysql"), PHP_EOL;'
+            for ext in pdo_sqlite sqlite3 imagick redis pdo_mysql bcmath; do
+              if php -m | grep -qix "$ext"; then echo "$ext=1"; else echo "$ext=0"; fi
+            done
             echo "== opcache 加载情况排查 =="
+            echo -n "php -m 里匹配 opcache 的行数："
+            php -m | grep -ci opcache || true
+            echo "-- conf.d 下的 ini --"
             ls /usr/local/etc/php/conf.d/
-            grep -rn "zend_extension\|opcache" /usr/local/etc/php/conf.d/ || true
-            php -v 2>&1 | head -3
-            php -m | grep -ci "opcache" || true
+            echo "-- 含 zend_extension 的 ini 内容 --"
+            grep -rn zend_extension /usr/local/etc/php/conf.d/ || true
+            echo "-- php --ini --"
+            php --ini
             echo "== apache2 -v =="
             apache2 -v | head -1
             echo "== imagick =="
@@ -104,14 +116,15 @@ jobs:
           fi
           echo "补丁文件 md5 校验通过：$ACTUAL"
 
-          # 老师线上用的是 SQLite，缺 pdo_sqlite 会直接挂，钉死这条断言
-          if ! echo "$REPORT" | grep -q 'pdo_sqlite=1'; then
+          # 线上是 SQLite 数据库，扩展缺失会让站点直接挂，钉死这条断言
+          if ! echo "$REPORT" | grep -q pdo_sqlite=1; then
             echo "::error::新镜像里 pdo_sqlite 没加载（线上是 SQLite 数据库，不能丢）"
             exit 1
           fi
+          echo "关键扩展断言通过（pdo_sqlite / sqlite3 等）"
 
           # 真起一次容器：默认 8089 端口，入口脚本会把应用播种到 /var/www/html
-          docker run -d --name lsky-smoke -p 18089:8089 -e WEB_PORT=8089 "${IMAGE}:latest"
+          docker run -d --name lsky-smoke -p 18089:8089 -e WEB_PORT=8089 "$IMAGE_REF"
           CODE=000
           for i in $(seq 1 30); do
             CODE=$(curl -s -L -o /tmp/install.html -w '%{http_code}' http://127.0.0.1:18089/install || true)
@@ -126,6 +139,8 @@ jobs:
           fi
           curl -s -o /tmp/root.html -w 'GET / → %{http_code}\n' -L http://127.0.0.1:18089/
           docker exec lsky-smoke php -r 'echo "artisan 可用："; echo file_exists("/var/www/html/artisan") ? "yes" : "no"; echo PHP_EOL;'
+          echo "== 播种到卷里的补丁文件（部署后真正被 Apache 读的那份）=="
+          docker exec lsky-smoke md5sum /var/www/html/public/js/context-js/context-js.js
           docker rm -f lsky-smoke
 
           {
@@ -136,3 +151,14 @@ jobs:
             echo "安装页 HTTP：$CODE"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # 自证全过之后才动 latest：验证失败时 latest 保持在上一个已知可用版本
+      - name: Promote verified image to latest
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            -t "${IMAGE}:latest" \
+            -t "${IMAGE}:${LSKY_COMMIT}" \
+            "${IMAGE}:sha-${GITHUB_SHA}"
+          echo "已把 sha-${GITHUB_SHA} 提升为 :latest 与 :${LSKY_COMMIT}"
+          docker buildx imagetools inspect "${IMAGE}:latest" | head -20
