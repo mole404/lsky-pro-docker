@@ -239,7 +239,8 @@ jobs:
           echo "上游 pin 校验通过：$MARKER_PIN"
 
           # PHP 版本必须是本次请求的那个（build-arg 真的生效了）
-          PHP_ACTUAL=$(echo "$REPORT" | sed -n 's/^PHP \([0-9]*\.[0-9]*\).*/\1/p')
+          # 注意：报告里不止一行以 "PHP " 开头 → 必须 head -1，否则变量会变成 "8.1\n8.1"
+          PHP_ACTUAL=$(echo "$REPORT" | sed -n 's/^PHP \([0-9]\{1,2\}\.[0-9]\{1,2\}\).*/\1/p' | head -1)
           if [ "$PHP_ACTUAL" != "${{ steps.pin.outputs.php_version }}" ]; then
             echo "::error::镜像里的 PHP 版本（$PHP_ACTUAL）与本次请求的（${{ steps.pin.outputs.php_version }}）不一致"
             exit 1
