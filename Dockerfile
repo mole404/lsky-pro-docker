@@ -15,7 +15,7 @@
 #   3. 基础镜像显式写成 Debian bookworm 变体（与 2024-04 那版线上镜像同一 Debian 大版本）
 #   4. install-php-extensions 钉到具体版本，不再用 latest
 #   5. 构建期自证：① 我们从不修改的上游文件按上游 md5 校验（快照没被动过）
-#      ② 补丁产物按预期 md5 校验（改了不更新期望值就构建失败）
+#      ② 补丁产物与「有意偏离上游」的 composer.lock 按预期 md5 校验（改了不更新就构建失败）
 #
 # 构建：docker build -t lsky-pro-docker .
 # ---------------------------------------------------------------------------
@@ -23,7 +23,11 @@
 # 上游源码快照的版本号（只用于版本标记与镜像元数据；代码本体是仓库里的 src/）。
 # 改这里 = 必须同时用 tools/vendor-upstream.sh 重新 vendor src/，否则标记与实际代码不符（自证 1 会失败）。
 ARG LSKY_COMMIT=38d52c4609eb85236b45ac75acac2ced55174953
-ARG PHP_VERSION=8.1
+# PHP 版本：8.1 已于 2025-12-31 EOL，8.2 的 EOL 是 2026-12-31（都太近），
+# 所以选 8.3（安全维护到 2027-12-31）。依赖侧配套升到同一大版本线内的最新：
+# laravel/framework 9.52.21（9.x 最后一个补丁）+ symfony/* 6.4 LTS（Laravel 9 的 ^6.0 正好允许）。
+# 要回退 PHP：改这个数字即可，但请连镜像 tag 一起回退（新 lock 里的包可能要求 ≥8.3）。
+ARG PHP_VERSION=8.3
 ARG DEBIAN_RELEASE=bookworm
 ARG PHP_EXT_INSTALLER_VERSION=2.12.0
 
@@ -55,7 +59,18 @@ RUN printf '%s\n' \
         'c1adde95924944e07bd72e87bd5db2f7  ./config/convention.php' \
         '3b58bff18126a61c142cc576457c82a6  ./public/index.php' \
         '12b10ff822d7deb281664d6ff0c2c1e2  ./routes/web.php' \
-        'c9f7a17cc136bf1dbd5c83fcbd14b7d1  ./composer.lock' \
+    | md5sum -c -
+
+# 有意偏离上游的另一个文件：composer.lock。
+# 上游冻结在 2024-12 的解析结果（laravel 9.52.17 / symfony 6.0.x —— 两者都已 EOL），
+# 我们把它升到「同一大版本线内的安全版本」：
+#   laravel/framework 9.52.21（9.x 最后一个补丁）、symfony/* 6.4 LTS（Laravel 9 的 ^6.0 允许）、
+#   guzzlehttp/guzzle 7.15.5、guzzlehttp/psr7 2.13.1、phpseclib 3.0.57、
+#   league/commonmark 2.10.3、aws/aws-sdk-php 3.398.1、laminas-diactoros 2.26.0
+#   —— 修掉了除「Laravel 9 框架自身那几条（9.x 线没有修复版本）」以外的已知公告。
+# 所以它不再等于上游值 —— 但仍钉 md5：任何改动都必须同步更新这里（防止有人别处悄悄改）。
+RUN printf '%s\n' \
+        '9dfc7d029808dbca37cc239560e8f49f  ./composer.lock' \
     | md5sum -c -
 
 RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
