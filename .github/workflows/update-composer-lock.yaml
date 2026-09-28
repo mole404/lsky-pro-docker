@@ -1,0 +1,67 @@
+name: Update composer.lock (targeted)
+
+# 用途：本机/CI 里没有 php，composer.lock 只能在容器里重算。
+# 这个 workflow 只做一件事：在指定 PHP 版本里对**指定包**跑 composer update，
+# 把新的 composer.lock 作为 artifact 上传（**不自动提交**，人工看过再 commit）。
+# 这样"升依赖"这件事不会意外改动我们没打算动的包。
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: '要升级的包（空格分隔，传给 composer update）'
+        required: true
+        default: 'laravel/framework symfony/* league/commonmark guzzlehttp/guzzle guzzlehttp/psr7 phpseclib/phpseclib aws/aws-sdk-php'
+      php_version:
+        description: 'PHP 版本（用于解析平台约束）'
+        required: true
+        default: '8.3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-lock-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: composer update（结果只上传，不自动提交）
+        env:
+          PACKAGES: ${{ inputs.packages }}
+          PHPVER: ${{ inputs.php_version }}
+        run: |
+          set -euo pipefail
+          echo "目标包：$PACKAGES"
+          echo "解析用 PHP：$PHPVER"
+          docker run --rm -v "$PWD/src:/app" -w /app \
+            -e PACKAGES="$PACKAGES" \
+            "php:${PHPVER}-cli" bash -lc '
+              set -euo pipefail
+              apt-get update -qq >/dev/null
+              apt-get install -yqq git unzip >/dev/null
+              curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer >/dev/null
+              composer --version
+              # --with-all-dependencies：允许连带升级这些包的下级依赖（否则常被旧约束卡住）
+              composer update --with-all-dependencies --no-interaction --no-progress $PACKAGES
+              composer validate --no-check-publish
+              echo "=== composer audit（升级后的已知漏洞，仅供参考） ==="
+              composer audit --no-interaction || true
+            '
+          echo "=== composer.lock 的改动规模 ==="
+          git diff --stat -- src/composer.lock
+          echo "=== 版本变化（升级前后对照） ==="
+          git diff -U0 -- src/composer.lock | grep -E '^[+-]\s+"version"' | head -60 || true
+
+      - name: Upload composer.lock
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: composer-lock-php${{ inputs.php_version }}
+          path: src/composer.lock
+          if-no-files-found: error
