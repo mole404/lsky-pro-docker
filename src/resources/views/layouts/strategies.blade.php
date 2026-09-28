@@ -4,7 +4,7 @@
         <button type="button" class="ls-btn ls-btn-sm h-10 rounded-full px-1.5 gap-2" aria-expanded="false" aria-haspopup="true">
             <span class="sr-only">Open strategies menu</span>
             <div class="h-7 w-7 rounded-full flex items-center justify-center bg-surface-2 border border-line">
-                <i class="fas fa-server text-ink-2 text-[13px]"></i>
+                <i class="fas fa-server text-ink-2 text-[13.5px]"></i>
             </div>
             <span class="px-2 sm:block hidden" id="strategy-selected" data-id="0">获取中...</span>
         </button>

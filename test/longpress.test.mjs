@@ -322,19 +322,54 @@ console.log('\n[iPhone Safari] 二级菜单：点击展开/收起，不再"闪�
     check('点"复制链接"：父项默认行为被阻止（不会跳转）', evOpen.defaultPrevented === true);
     check('点"复制链接"：没有点穿到页面（页面收不到这发 click）', window.__pageClicks.filter((t) => t === sub).length === 0);
 
-    // 再点一次收起
+    // 再点一次收起（真机时序：touchstart 触发切换，随后那发 click 会被防误触吞掉）
+    touch(window, 'touchstart', 110, 210, sub);
     tapClick(window, sub);
     check('再点一次"复制链接"：二级菜单收起', openSub(window) === false);
     check('再点一次"复制链接"：菜单仍开着', menuOpen(window) === true);
+    check('收起这一发：没有误触发任何菜单动作', window.__copied === 0);
 
-    // 展开后点叶子项（模拟 ClipboardJS 的 .copy）
+    // 再按一次展开（同一行，重新就地切换）
+    touch(window, 'touchstart', 110, 210, sub);
     tapClick(window, sub);
+    check('重新展开：二级菜单又开了', openSub(window) === true);
+
+    // —— 手机端二级菜单：就地替换（不侧开、不覆盖主菜单）——
+    const doc = window.document;
+    check('就地替换：菜单根节点带 submenu-inplace',
+        !!doc.querySelector('.dropdown-context.submenu-inplace'));
+    check('就地替换：顶部插入了「返回」', !!(doc.querySelector('.dropdown-context .submenu-back a')));
+    const subUl = doc.querySelector('.dropdown-context-sub');
+    check('就地替换：二级 ul 改为 static（不再侧开）',
+        window.getComputedStyle(subUl).position === 'static', window.getComputedStyle(subUl).position);
+    const otherLi = doc.querySelector('.dropdown-context > li:not(.submenu-active):not(.submenu-back)');
+    check('就地替换：主菜单其它项被隐藏', window.getComputedStyle(otherLi).display === 'none');
+    check('就地替换：整块面板仍完整在视口内', (() => {
+        const r = doc.querySelector('.dropdown-context').getBoundingClientRect();
+        return r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight;
+    })());
+
+    // —— 防误触：老师手机上报的场景（手指还按着，二级菜单出现在手指底下）——
     window.__copied = 0;
-    const leaf = window.document.querySelector('.dropdown-context-sub a.copy');
+    const leaf = doc.querySelector('.dropdown-context-sub a.copy');
     check('二级菜单里有叶子项（Url/Html）', !!leaf);
     leaf.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
-    check('点二级菜单叶子项：复制逻辑照旧执行（ClipboardJS 的 .copy 收到 click）', window.__copied === 1, `copied=${window.__copied}`);
-    check('点二级菜单叶子项：菜单关闭', menuOpen(window) === false);
+    check('防误触：展开后 350ms 内的点击被吞掉（不会误复制）', window.__copied === 0, `copied=${window.__copied}`);
+    check('防误触：菜单保持打开、二级菜单也还在', menuOpen(window) === true && openSub(window) === true);
+
+    // 换一根手指（新的 touchstart = 新手势）再点：这才是真实的一次新点击，应当正常生效
+    await new Promise((r) => setTimeout(r, 380));
+    touch(window, 'touchstart', 110, 240, leaf);
+    leaf.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    if (window.__copied !== 1) {
+        const dump = (window.context && window.context.debugDump) ? window.context.debugDump() : '(no dump)';
+        console.log('--- 诊断 ---\n' + dump.split('\n').slice(-9).join('\n'));
+        console.log('--- leaf 还在吗 ---', !!window.document.querySelector('.dropdown-context-sub a.copy'),
+            '| 菜单还在:', !!window.document.querySelector('.dropdown-context'),
+            '| inplace:', !!window.document.querySelector('.dropdown-context.submenu-inplace'));
+    }
+    check('新手势点叶子项：复制逻辑照旧执行（ClipboardJS 的 .copy 收到 click）', window.__copied === 1, `copied=${window.__copied}`);
+    check('新手势点叶子项：菜单关闭', menuOpen(window) === false);
 
     check('已注入触摸端二级菜单样式（用类触发，等价于 hover 那条）',
         touchSubmenuStyle(window).includes('.dropdown-submenu.touch-open > .dropdown-menu'), touchSubmenuStyle(window).slice(0, 80));

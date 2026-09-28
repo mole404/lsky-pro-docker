@@ -34,8 +34,8 @@
                 <a href="javascript:void(0)" data-tab-name="thumbnail_url" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent whitespace-nowrap">Thumbnail url</a>
             </div>
             <div class="flex items-center gap-1 shrink-0 pb-2 ml-auto">
-                <span id="copy-all" class="px-2 py-1 rounded-md text-xs text-ink-2 bg-surface-3 hover:bg-surface-2 cursor-pointer">复制全部</span>
-                <span id="clear-all" class="px-2 py-1 rounded-md text-xs text-ink-2 bg-surface-3 hover:bg-surface-2 cursor-pointer">清除</span>
+                <span id="copy-all" class="px-2 py-1 rounded-md text-[13.5px] text-ink-2 bg-surface-3 hover:bg-surface-2 cursor-pointer">复制全部</span>
+                <span id="clear-all" class="px-2 py-1 rounded-md text-[13.5px] text-ink-2 bg-surface-3 hover:bg-surface-2 cursor-pointer">清除</span>
             </div>
         </div>
         <div id="links" class="p-4">

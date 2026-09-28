@@ -5,7 +5,7 @@
     <div class="ls-brand px-5 h-14 flex justify-between items-center border-b border-line">
         <a href="/" class="flex items-center gap-2.5 truncate">
             <span class="w-7 h-7 rounded-lg bg-brand text-white flex items-center justify-center shrink-0">
-                <i class="fas fa-image text-[13px]"></i>
+                <i class="fas fa-image text-[13.5px]"></i>
             </span>
             <span class="ls-brand-name text-[15px] font-semibold text-ink truncate">{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</span>
         </a>
@@ -78,9 +78,9 @@
         </div>
 
         <div id="capacity-progress" class="flex flex-col space-y-2 mb-5 px-2 w-full mt-10">
-            <p class="text-ink-2 text-[12.5px]">容量使用</p>
+            <p class="text-ink-2 text-[13.5px]">容量使用</p>
             <progress class="w-full h-1.5" value="{{ Auth::user()->use_capacity }}" max="{{ Auth::user()->capacity }}"></progress>
-            <p class="text-ink-3 text-[12.5px] truncate">
+            <p class="text-ink-3 text-[13.5px] truncate">
                 <span class="used">{{ \App\Utils::formatSize(Auth::user()->use_capacity * 1024) }}</span>
                 /
                 <span class="total">{{ \App\Utils::formatSize(Auth::user()->capacity * 1024) }}</span>
