@@ -168,8 +168,8 @@ RUN grep -q -- '--exclude=.\/.env' /entrypoint.sh \
     && grep -q 'code-revision' /entrypoint.sh \
     && test -f /var/www/lsky/.code-revision \
     && grep -q '^fork_sha=' /var/www/lsky/.code-revision \
-    && grep -q 'cp -a /var/www/lsky/\* /var/www/html/' /entrypoint.sh \
-    && grep -q 'cp -a /var/www/lsky/.env.example /var/www/html' /entrypoint.sh
+    && grep -q 'tar cf - --exclude=./.env --exclude=./.code-revision' /entrypoint.sh \
+    && grep -q 'cp -a "$IMAGE_MARKER" "$VOLUME_MARKER"' /entrypoint.sh
 WORKDIR /var/www/html/
 VOLUME /var/www/html
 ENV WEB_PORT 8089
