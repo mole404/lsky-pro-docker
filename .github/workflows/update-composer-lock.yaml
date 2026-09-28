@@ -65,7 +65,9 @@ jobs:
                 echo "这**不新增风险**：线上本来就跑在这条线上（9.52.17），只是把既有事实写明。"
                 echo "根治之道是升级 Laravel 大版本（另立项）。"
                 echo "=============================================="
-                composer config policy.advisories.block false
+                # 必须用 --global：写进容器内的 ~/.composer/config.json，不碰仓库里的 composer.json
+                # （否则 lock 的 content-hash 会与 composer.json 不一致，镜像构建期的 composer install 会失败）
+                composer config --global policy.advisories.block false
               fi
               # 诊断：先说清楚"为什么当前依赖集上不了这个 PHP 版本"
               echo "=== composer why-not php $PHPVER（谁把版本卡住了） ==="
@@ -88,6 +90,13 @@ jobs:
               echo "=== composer audit（升级后的已知漏洞，仅供参考） ==="
               composer audit --no-interaction || true
             '
+          echo "=== 锁与 composer.json 是否一致（必须 OK，否则镜像构建会报 lock file is not up to date）==="
+          git status --short -- src/composer.json
+          docker run --rm -v "$PWD/src:/app" -w /app "php:${PHPVER}-cli" bash -lc '
+            curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer >/dev/null 2>&1
+            composer validate --no-check-publish --no-interaction 2>&1 | tail -4
+          '
+
           echo "=== composer.lock 的改动规模 ==="
           git diff --stat -- src/composer.lock
           echo "=== 版本变化（升级前后对照） ==="
