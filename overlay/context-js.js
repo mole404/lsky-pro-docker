@@ -18,7 +18,8 @@
  */
 window.context = window.context || (function () {
 
-    const LONG_PRESS_DELAY = 500;   // 长按判定阈值（毫秒），贴近 iOS 原生 callout 的触发时机
+    const LONG_PRESS_DELAY = 250;   // 长按判定阈值（毫秒）。iOS 原生 callout 约 500ms，这里减半更快响应；
+                                    // 手指移动超过 LONG_PRESS_MOVE 即取消，用来抵消阈值变短带来的误触风险
     const LONG_PRESS_MOVE = 10;     // 手指移动超过这个像素数就取消长按，让位给滚动/框选
     const DEDUPE_WINDOW = 700;      // 长按已开菜单后，忽略紧随其后的 contextmenu（防将来 iOS 支持该事件后弹两次）
     const NEXT_CLICK_WINDOW = 700;  // 长按之后要吞掉的第一发 click
