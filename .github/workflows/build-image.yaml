@@ -152,7 +152,8 @@ jobs:
             echo "== php -m =="
             php -m | sort | tr "\n" " "; echo
             echo "== 关键扩展断言 =="
-            for ext in pdo_sqlite sqlite3 imagick redis pdo_mysql bcmath; do
+            # ftp 是 2026-09-28 换 PHP 8.3 时踩到的：官方镜像不再自带 ftp，必须显式装 + 断言
+            for ext in pdo_sqlite sqlite3 imagick redis pdo_mysql bcmath ftp; do
               if php -m | grep -qix "$ext"; then echo "$ext=1"; else echo "$ext=0"; fi
             done
             echo "== opcache 加载情况排查 =="
