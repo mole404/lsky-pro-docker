@@ -309,6 +309,14 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
   只是把既有事实写明。真正的根治是把 Lsky 升到 Laravel 11/12（工程量：breeze / sanctum /
   fruitcake-cors / intervention-image v3 / 各家云存储 SDK 全要动），属于另立项的事。
 - 其余依赖的已知公告已经跟进（guzzle / psr7 / phpseclib / commonmark / aws-sdk / diactoros）。
+- **镜像用 `composer install --no-dev`**（2026-09-28 起）：开发包（debugbar / ignition / whoops /
+  phpunit / faker / sail / mockery / collision 等约 40 个）不进镜像 —— 对线上没有用途，留着既占体积
+  也是暴露面（debugbar 那类在调试模式下会漏内部信息）。
+  **连带项（重要）**：升级时 entrypoint 会作废卷里的 `bootstrap/cache/packages.php` 与 `services.php`
+  —— 那是"旧镜像当时装着开发包"生成的清单，里面记着这些包的 ServiceProvider 类名，不作废的话
+  Laravel 引导时加载它就会 Class not found、整站 500。CI 里有专门回归（故意种一份引用 debugbar 的
+  过期清单，断言同步后已作废）。真要临时用 debugbar 排查，自己 `composer install`（不带 --no-dev）
+  构建一个临时镜像，别动线上。
 
 顺带一提：CI 支持**试构建**——在 Actions 里手动 `Run workflow` 时填一个 `php_version`（如 `8.2` / `8.3`），
 就会用那个 PHP 版本构建并跑完整自证（不改仓库里的默认值），用来验证版本兼容性再决定要不要落进 Dockerfile。

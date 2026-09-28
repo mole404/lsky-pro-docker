@@ -50,6 +50,13 @@ elif [ ! -f "$VOLUME_MARKER" ] || [ "$(cat "$IMAGE_MARKER" 2>/dev/null)" != "$(c
     # 否则浏览器拿到的还是旧 HTML。Laravel 会按需重新编译，代价可忽略。
     rm -f /var/www/html/storage/framework/views/*.php
 
+    # 包发现缓存同样必须作废：卷里的 packages.php / services.php 记录的是"旧镜像当时装着
+    # 哪些包"的 ServiceProvider 类名（含 debugbar / ignition 这类开发包）。镜像现在用
+    # composer install --no-dev，这些类已经不存在 —— 不清掉的话 Laravel 引导时加载这份清单
+    # 会 Class not found，整站 500。两个文件都是纯缓存：下次请求会按当前 vendor/ 重新生成，
+    # 删掉没有副作用（权限已在上面的 chown 里归一化，www-data 可写）。
+    rm -f /var/www/html/bootstrap/cache/packages.php /var/www/html/bootstrap/cache/services.php
+
     echo "[lsky] 检测到镜像代码版本变化，已同步进卷：$(head -1 "$VOLUME_MARKER" 2>/dev/null || echo '标记缺失')"
 else
     # ---------------------------------------------------------------- 已有部署：同一版本

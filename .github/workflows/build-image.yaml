@@ -364,6 +364,11 @@ jobs:
             echo "SENTINEL_CONFIG_CACHE" > /var/www/html/bootstrap/cache/config.php
           '
 
+          # 种一份"过期"的包发现缓存：模拟真实升级 —— 卷里的 packages.php 是上一次镜像
+          # （那时还装着 debugbar 等开发包）生成的。--no-dev 之后这些类不存在，
+          # 若 entrypoint 不作废该清单，Laravel 引导时就会 Class not found → 整站 500。
+          docker run --rm -v "$VOL":/var/www/html --entrypoint php "$IMAGE_REF" -r 'file_put_contents("/var/www/html/bootstrap/cache/packages.php", "<?php return [\"barryvdh/laravel-debugbar\" => [\"providers\" => [\"Barryvdh\\\\Debugbar\\\\ServiceProvider\"]]];");'
+
           docker run -d --name lsky-b -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
           # 同样：同步分支的日志行是在 tar 写完之后才 echo 的，拿它当完成信号，
           # 避免在 tar 还在写卷的时候就去断言（会读到中间状态）。
@@ -398,6 +403,27 @@ jobs:
           echo "$B" | grep -q "CONFIG_CACHE=SENTINEL_CONFIG_CACHE" || { echo "::error::bootstrap/cache 被动过"; exit 1; }
           echo "$B" | grep -q "COMPILED_VIEWS=0"                   || { echo "::error::编译视图缓存没清，blade 改动不会生效"; exit 1; }
           echo "B) 通过：代码已同步，.env / 数据库 / 上传 / 配置缓存均未被碰，视图缓存已清"
+
+          # --- 包发现缓存 + --no-dev 的回归断言 ---------------------------------
+          echo "== 开发包是否真的没进镜像（--no-dev）=="
+          DEVDEPS=$(docker exec lsky-b sh -c 'for d in vendor/phpunit vendor/barryvdh vendor/spatie/ignition vendor/fakerphp; do [ -e "/var/www/html/$d" ] && echo "present:$d"; done; echo done')
+          echo "$DEVDEPS"
+          echo "$DEVDEPS" | grep -q "present:" && { echo "::error::镜像里仍有开发包（--no-dev 没生效）"; exit 1; }
+
+          echo "== 过期的包发现缓存有没有被作废 =="
+          # 注意：php -r 不会自动加载 classmap，必须先 require autoload.php，
+          # 否则 class_exists 对"本来存在"的类也会返回 false（假阳性）
+          docker exec lsky-b php -r 'require "/var/www/html/vendor/autoload.php";
+            $m = @include "/var/www/html/bootstrap/cache/packages.php";
+            if (!is_array($m)) { echo "PACKAGE_MANIFEST=absent", PHP_EOL; exit(0); }
+            $bad = 0; $seen = 0;
+            foreach ($m as $pkg => $info) { foreach (($info["providers"] ?? []) as $c) { $seen++; if (!class_exists($c)) { echo "MISSING_CLASS=$c", PHP_EOL; $bad++; } } }
+            echo "PACKAGE_MANIFEST_ENTRIES=$seen", PHP_EOL;
+            echo $bad ? "PACKAGE_MANIFEST=stale" : "PACKAGE_MANIFEST=clean", PHP_EOL;
+            exit($bad ? 1 : 0);'
+          MANIFEST=$(docker exec lsky-b php -r '$m = @include "/var/www/html/bootstrap/cache/packages.php"; echo is_array($m) ? "present" : "absent";')
+          echo "清单文件状态：$MANIFEST"
+          [ "$MANIFEST" = "absent" ] || { echo "::error::过期包发现缓存没被作废（--no-dev 后 Class not found 会导致整站 500）"; exit 1; }
 
           echo "== C) 已有卷 + 同版本标记：必须跳过同步（手动修补保留）=="
           docker rm -f lsky-b >/dev/null
