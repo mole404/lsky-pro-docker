@@ -202,7 +202,7 @@
         <script src="{{ asset('js/viewer-js/viewer.min.js') }}"></script>
         <script src="{{ asset('js/dragselect/ds.min.js') }}"></script>
         {{-- fork 补丁：加版本串，避免 iOS/Safari 的启发式缓存把旧版 context-js.js 一直喂给老用户 --}}
-        <script src="{{ asset('js/context-js/context-js.js') . '?v=ios-longpress2' }}"></script>
+        <script src="{{ asset('js/context-js/context-js.js') . '?v=ios-longpress3' }}"></script>
         <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
         <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
         <script>

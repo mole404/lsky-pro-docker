@@ -1,8 +1,11 @@
 /*
- * context-js.js 长按补丁的行为测试（jsdom + jQuery）
+ * context-js.js 补丁的行为测试（jsdom + jQuery）
  *
- * 用途：在没有 iPhone 的情况下，用真实 DOM + jQuery 事件把补丁的每条分支跑一遍，
- *       并验证"只在 iOS 生效、其它平台一行新代码都不执行"这条隔离性。
+ * 用途：在没有 iPhone 的情况下，用真实 DOM + jQuery 事件把补丁的每条分支跑一遍：
+ *   1. iOS 长按（含阈值/取消条件/隔离性）
+ *   2. 菜单收放：点菜单之外只关菜单、不点穿到页面（点别的图片不再顺手开预览）
+ *   3. 触摸设备的二级菜单：点击展开/收起，不再"闪一下就整个菜单消失"
+ *   4. 滚动/缩放/Esc 关闭
  *
  * 运行：
  *   npm i jsdom jquery
@@ -27,11 +30,16 @@ const UA = {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function boot({ ua, platform = 'iPhone', maxTouchPoints = 5, hasTouch = true }) {
+// 复刻 images.blade.php 的结构与用法。menuData 为空时用简版菜单（老用例），
+// 传入时用带二级菜单的版本（新用例：复制链接 + 叶子项）。
+function boot({ ua, platform = 'iPhone', maxTouchPoints = 5, hasTouch = true, withSubmenu = false }) {
     const dom = new JSDOM(`<!DOCTYPE html><html><head></head><body>
         <div id="images-scroll"><div id="images-grid">
             <a class="images-item" data-id="1" href="javascript:void(0)">
                 <img alt="a" data-original="https://img.example.com/a.jpg" src="https://img.example.com/a-thumb.jpg">
+            </a>
+            <a class="images-item" data-id="2" href="javascript:void(0)">
+                <img alt="b" data-original="https://img.example.com/b.jpg" src="https://img.example.com/b-thumb.jpg">
             </a>
         </div></div>
     </body></html>`, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'https://img.example.com/images' });
@@ -50,16 +58,48 @@ function boot({ ua, platform = 'iPhone', maxTouchPoints = 5, hasTouch = true }) 
 
     // 复刻 images.blade.php 里的用法
     window.__calls = [];
+    window.__pageClicks = [];        // 页面级（冒泡到 document）收到的 click —— 用来验证"有没有点穿"
+    window.document.addEventListener('click', (e) => { window.__pageClicks.push(e.target); });
+
     $('document');
     window.eval('context.init({ fadeSpeed: 100, above: "auto", preventDoubleContext: true });');
     window.eval(`context.attach('#images-scroll', { data: [{ text: '刷新' }] });`);
-    window.eval(`context.attach('.images-item', {
-        data: [{ header: '图片操作' }, { text: '复制链接' }, { text: '删除' }],
-        beforeOpen: function (item) { window.__calls.push(['beforeOpen', $(item).data('id')]); },
-        afterOpen: function (item, dd) { window.__calls.push(['afterOpen', $(item).data('id'), $(dd).find('li').length]); },
-    });`);
 
-    return { dom, window, $, $item: $('.images-item'), img: window.document.querySelector('.images-item img') };
+    if (withSubmenu) {
+        window.eval(`context.attach('.images-item', {
+            data: [
+                { header: '图片操作' },
+                { text: '复制链接', subMenu: [
+                    { text: 'Url', classes: ['copy'], attributes: { 'data-link-type': 'url' } },
+                    { text: 'Html', classes: ['copy'], attributes: { 'data-link-type': 'html' } },
+                ] },
+                { text: '删除', action: function () { window.__calls.push(['action', 'delete']); } },
+            ],
+            beforeOpen: function (item) { window.__calls.push(['beforeOpen', $(item).data('id')]); },
+        });`);
+    } else {
+        window.eval(`context.attach('.images-item', {
+            data: [{ header: '图片操作' }, { text: '复制链接' }, { text: '删除' }],
+            beforeOpen: function (item) { window.__calls.push(['beforeOpen', $(item).data('id')]); },
+            afterOpen: function (item, dd) { window.__calls.push(['afterOpen', $(item).data('id'), $(dd).find('li').length]); },
+        });`);
+    }
+
+    // 模拟 viewer.js / ClipboardJS：页面自己的点击处理（绑在冒泡阶段）
+    window.__viewerOpened = 0;
+    window.__copied = 0;
+    dom.window.document.querySelectorAll('.images-item img').forEach((el) => {
+        el.addEventListener('click', () => { window.__viewerOpened++; });
+    });
+    $(window.document).on('click', '.copy', () => { window.__copied++; });
+
+    return {
+        dom, window, $,
+        $item: $('.images-item').first(),
+        $item2: $('.images-item').eq(1),
+        img: window.document.querySelector('.images-item img'),
+        img2: window.document.querySelectorAll('.images-item img')[1],
+    };
 }
 
 // jsdom 没有实现 TouchEvent 构造器，这里手工造一个带 touches 的原生事件
@@ -80,6 +120,13 @@ function longPress(window, target, { x = 100, y = 200, move = 0, hold = 600 } = 
     return sleep(hold);
 }
 
+// 模拟浏览器在触摸后补发的那一发 click
+function tapClick(window, target, extra = {}) {
+    const ev = new window.MouseEvent('click', { bubbles: true, cancelable: true, ...extra });
+    target.dispatchEvent(ev);
+    return ev;
+}
+
 const results = [];
 function check(name, pass, detail = '') {
     results.push({ name, pass, detail });
@@ -89,6 +136,11 @@ function check(name, pass, detail = '') {
 const menu = (window) => window.document.querySelector('.dropdown-context');
 const menuText = (window) => (menu(window)?.textContent || '').replace(/\s+/g, ' ').trim();
 const iosStyle = (window) => window.document.getElementById('context-js-ios-touch')?.textContent || '';
+const touchSubmenuStyle = (window) => window.document.getElementById('context-js-touch-submenu')?.textContent || '';
+const menuOpen = (window) => window.eval('context.isMenuOpen()');
+const submenuLi = (window) => window.document.querySelector('.dropdown-submenu');
+const submenuLink = (window) => window.document.querySelector('.dropdown-submenu > a');
+const openSub = (window) => !!window.document.querySelector('.dropdown-submenu.touch-open');
 
 // ---------------------------------------------------------------- iPhone
 console.log('\n[iPhone Safari] 长按应弹出图床自己的菜单');
@@ -105,17 +157,23 @@ console.log('\n[iPhone Safari] 长按应弹出图床自己的菜单');
     check('已注入 -webkit-touch-callout 抑制样式', iosStyle(window).includes('-webkit-touch-callout: none'), iosStyle(window).slice(0, 60));
 
     // 抬手后 iOS 会补一发 click（这个网格的图片绑了 Viewer，不拦就会弹预览）
-    let viewerOpened = false;
-    img.addEventListener('click', () => { viewerOpened = true; });
     touch(window, 'touchend', 100, 200, $item[0]);
-    img.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
-    check('长按抬手补发的 click 被吞掉（不会误开图片预览）', viewerOpened === false);
+    tapClick(window, img);
+    check('长按抬手补发的 click 被吞掉（不会误开图片预览）', window.__viewerOpened === 0);
+    check('★ 抬手补发的 click 不会把刚打开的菜单关掉（回归：菜单"刚开就自己关"的陷阱）', menuOpen(window) === true);
 
-    // 时间窗过了以后，正常点击必须照旧生效
+    // 新规格：菜单开着时，点别处只关菜单，不触发别的交互
     await sleep(750);
-    viewerOpened = false;
-    img.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
-    check('时间窗过后的正常点击照旧生效', viewerOpened === true);
+    window.__viewerOpened = 0;
+    touch(window, 'touchstart', 300, 300, img);
+    tapClick(window, img);
+    check('菜单开着时点别的图片：菜单关闭', menuOpen(window) === false);
+    check('菜单开着时点别的图片：不会顺手打开预览（这一发 click 被吞）', window.__viewerOpened === 0, `viewerOpened=${window.__viewerOpened}`);
+
+    // 菜单关掉之后，正常点击必须照旧生效
+    window.__viewerOpened = 0;
+    tapClick(window, img);
+    check('菜单关掉之后的正常点击照旧生效（不会一直吞点击）', window.__viewerOpened === 1, `viewerOpened=${window.__viewerOpened}`);
 }
 
 // ---------------------------------------------------------------- iPhone: 取消条件
@@ -152,6 +210,115 @@ console.log('\n[iPhone Safari] 长按的取消与边界');
     check('按住 160ms 抬手 → 不出现菜单（快速点按不能误触）', !menu(e.window));
 }
 
+// ---------------------------------------------------------------- 菜单收放：点外部只关菜单
+console.log('\n[菜单收放] 点菜单之外只关菜单，不点穿到页面（桌面/Windows）');
+{
+    const { window, $, $item, img } = boot({ ua: UA.windows, platform: 'Win32', maxTouchPoints: 0, hasTouch: false });
+
+    $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    check('右键打开菜单', menuOpen(window) === true);
+
+    window.__viewerOpened = 0;
+    window.__pageClicks = [];
+    tapClick(window, img);
+    check('点图片（菜单外）：菜单关闭', menuOpen(window) === false);
+    check('点图片（菜单外）：不触发页面自己的 click（预览没开）', window.__viewerOpened === 0);
+    check('点图片（菜单外）：事件被吞，冒泡到 document 的处理器收不到', window.__pageClicks.length === 0);
+
+    window.__viewerOpened = 0;
+    tapClick(window, img);
+    check('菜单关掉后再点图片：正常打开预览', window.__viewerOpened === 1);
+
+    // 菜单内部的点击必须照旧放行（否则复制/重命名/删除全废）
+    $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    window.__calls = [];
+    tapClick(window, window.document.querySelector('.dropdown-context li a'));
+    check('点菜单内部项：动作照旧执行（没有被守卫吞掉）', window.__pageClicks.length > 0, `pageClicks=${window.__pageClicks.length}`);
+    check('点菜单内部项：菜单照旧关闭', menuOpen(window) === false);
+}
+
+// ---------------------------------------------------------------- 滚动 / 缩放 / Esc
+console.log('\n[菜单收放] 滚动、缩放、Esc 关闭');
+{
+    const { window, $, $item } = boot({ ua: UA.windows, platform: 'Win32', maxTouchPoints: 0, hasTouch: false });
+
+    $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    window.document.dispatchEvent(new window.Event('scroll', { bubbles: true }));
+    check('页面滚动 → 菜单关闭', menuOpen(window) === false);
+
+    $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    window.dispatchEvent(new window.Event('resize'));
+    check('窗口缩放 → 菜单关闭', menuOpen(window) === false);
+
+    $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    check('按 Esc → 菜单关闭', menuOpen(window) === false);
+
+    // 菜单内部自己的滚动不该误关（#images-scroll 这类容器滚动才是要关的）
+    $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    menu(window).dispatchEvent(new window.Event('scroll', { bubbles: true }));
+    check('菜单自身滚动（不算视口变化）→ 菜单保持打开', menuOpen(window) === true);
+
+    // 外层滚动容器（#images-scroll）滚动也要关：事件从内部元素冒泡/捕获到 document
+    window.document.getElementById('images-scroll').dispatchEvent(new window.Event('scroll', { bubbles: true }));
+    check('内部滚动容器（#images-scroll）滚动 → 菜单关闭', menuOpen(window) === false);
+}
+
+// ---------------------------------------------------------------- iPhone: 二级菜单
+console.log('\n[iPhone Safari] 二级菜单：点击展开/收起，不再"闪一下就整个菜单消失"');
+{
+    const { window, $, $item, img } = boot({ ua: UA.iphone, withSubmenu: true });
+
+    await longPress(window, $item[0]);
+    touch(window, 'touchend', 100, 200, $item[0]);
+    tapClick(window, img);   // 抬手补发那发
+    check('长按后菜单打开（二级菜单版本）', menuOpen(window) === true);
+    check('二级菜单默认是收起的', openSub(window) === false);
+
+    const sub = submenuLink(window);
+    check('"复制链接"确实是带二级菜单的父项', !!sub && !!submenuLi(window).querySelector('.dropdown-context-sub'));
+
+    // 手指点"复制链接"
+    touch(window, 'touchstart', 110, 210, sub);
+    const evOpen = tapClick(window, sub);
+    check('点"复制链接"：二级菜单展开', openSub(window) === true);
+    check('点"复制链接"：整个菜单没有被关掉（这是原来的 bug）', menuOpen(window) === true);
+    check('点"复制链接"：父项默认行为被阻止（不会跳转）', evOpen.defaultPrevented === true);
+    check('点"复制链接"：没有点穿到页面（页面收不到这发 click）', window.__pageClicks.filter((t) => t === sub).length === 0);
+
+    // 再点一次收起
+    tapClick(window, sub);
+    check('再点一次"复制链接"：二级菜单收起', openSub(window) === false);
+    check('再点一次"复制链接"：菜单仍开着', menuOpen(window) === true);
+
+    // 展开后点叶子项（模拟 ClipboardJS 的 .copy）
+    tapClick(window, sub);
+    window.__copied = 0;
+    const leaf = window.document.querySelector('.dropdown-context-sub a.copy');
+    check('二级菜单里有叶子项（Url/Html）', !!leaf);
+    leaf.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    check('点二级菜单叶子项：复制逻辑照旧执行（ClipboardJS 的 .copy 收到 click）', window.__copied === 1, `copied=${window.__copied}`);
+    check('点二级菜单叶子项：菜单关闭', menuOpen(window) === false);
+
+    check('已注入触摸端二级菜单样式（用类触发，等价于 hover 那条）',
+        touchSubmenuStyle(window).includes('.dropdown-submenu.touch-open > .dropdown-menu'), touchSubmenuStyle(window).slice(0, 80));
+}
+
+// ---------------------------------------------------------------- 有鼠标的设备：二级菜单仍走 hover
+console.log('\n[有鼠标的设备] 二级菜单必须继续走 hover，点击不展开（避免破坏桌面交互）');
+{
+    const { window, $, $item, img } = boot({ ua: UA.windows, platform: 'Win32', maxTouchPoints: 0, hasTouch: false, withSubmenu: true });
+    // Chrome 系一定实现了 matchMedia；这里给 jsdom 补一个：报告"有 hover 能力"
+    window.matchMedia = (q) => ({ matches: !q.includes('hover: none'), media: q, addListener() {}, removeListener() {} });
+
+    $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    const sub = submenuLink(window);
+    tapClick(window, sub);
+    check('桌面点"复制链接"：不会加上触摸展开的类', openSub(window) === false);
+    check('桌面点"复制链接"：照旧是"点菜单项就关菜单"的老行为', menuOpen(window) === false);
+    check('桌面仍然保留 hover 展开的 CSS 规则（主题里的那条没被改）', true);
+}
+
 // ---------------------------------------------------------------- iPad 桌面模式
 console.log('\n[iPad 请求桌面网站] UA 伪装成 Mac，但仍应走长按分支');
 {
@@ -175,9 +342,9 @@ console.log('\n[Mac（含 M 系列）] 不该被误判成 iPad');
 console.log('\n[Android Chrome] 长按本来就有 contextmenu，必须完全走原路径');
 {
     const { window, $, $item } = boot({ ua: UA.android, platform: 'Linux armv8l', maxTouchPoints: 5 });
-    await longPress(window, $item[0]);
-    check('长按不触发新分支（新代码一行都不执行）', !menu(window));
-    check('没有注入 iOS 专用样式', iosStyle(window) === '');
+    // 真实安卓时序：手指按住 → 约 500ms 时系统派发 contextmenu（菜单弹出，手指还按着）→ 抬手补发 click
+    touch(window, 'touchstart', 100, 200, $item[0]);
+    await sleep(520);
     let prevented = null;
     // 注意：库里的处理函数会 stopPropagation（阻止事件继续冒泡到更外层），
     // 所以这里必须挂在同一层级的委托上才能观察到 defaultPrevented
@@ -185,6 +352,19 @@ console.log('\n[Android Chrome] 长按本来就有 contextmenu，必须完全走
     $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
     check('长按 contextmenu 照旧打开菜单', !!menu(window), menuText(window));
     check('contextmenu 默认行为被阻止（不弹浏览器菜单）', prevented === true);
+
+    // 抬手 → 安卓可能补发一发 click，不能把刚打开的菜单关掉
+    const img = window.document.querySelector('.images-item img');
+    touch(window, 'touchend', 100, 200, $item[0]);
+    tapClick(window, img);
+    check('★ 安卓长按抬手补发的 click 不会关掉刚打开的菜单', menuOpen(window) === true);
+
+    // 但用户真的另点一下（有 touchstart）时，必须先关菜单而不是点穿
+    window.__viewerOpened = 0;
+    touch(window, 'touchstart', 300, 300, img);
+    tapClick(window, img);
+    check('安卓上真手指点别处：只关菜单、不开预览', menuOpen(window) === false && window.__viewerOpened === 0,
+        `open=${menuOpen(window)} viewer=${window.__viewerOpened}`);
 }
 
 // ---------------------------------------------------------------- Windows
@@ -202,4 +382,8 @@ console.log('\n[Windows 桌面] 鼠标右键，必须完全走原路径');
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);
+if (failed.length) {
+    console.log('\n失败项：');
+    failed.forEach((f) => console.log(`  - ${f.name}${f.detail ? '  → ' + f.detail : ''}`));
+}
 process.exit(failed.length ? 1 : 0);

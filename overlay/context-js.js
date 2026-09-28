@@ -4,17 +4,25 @@
  * MIT License
  *
  * ===== fork 补丁（mole404/lsky-pro-docker）=====
- * 背景：iOS 上的 WebKit 永远不会派发 contextmenu 事件（WebKit bug 213953），
+ * 背景一：iOS 上的 WebKit 永远不会派发 contextmenu 事件（WebKit bug 213953），
  * 长按图片只会弹出系统 callout，于是"我的图片"里的自定义菜单在 iPhone/iPad 上完全不可用。
- *
- * 本补丁的处理：在**不改动原有 contextmenu 路径**的前提下，新增一条仅 iOS 生效的长按分支：
+ * 处理：在**不改动原有 contextmenu 路径**的前提下，新增一条仅 iOS 生效的长按分支：
  *   1. 自己用 touchstart + 定时器识别长按，复用同一段开菜单逻辑（beforeOpen/afterOpen 照旧生效）
  *   2. 注入 -webkit-touch-callout: none 压掉 iOS 的原生菜单/放大镜（只作用于本库绑定的元素范围）
  *   3. 吞掉 iOS 抬手补发的那一发 click（否则会顺手触发图片预览等点击行为）
  *
- * 隔离性：判定函数只在 iPad/iPhone/iPod（含 iPadOS 伪装成 Mac）上返回真。
- * Android 的长按本来就会派发 contextmenu、Windows 是鼠标右键，它们继续走原路径，
- * 新增代码一行都不会执行。
+ * 背景二（菜单收放，2026-09-28 追加）：
+ *   原库只在 document 的冒泡阶段 fadeOut，既不阻止事件传播；二级菜单又只靠 CSS :hover 显示。于是
+ *   (a) 点"菜单之外"会点穿到页面（点别的图片顺手开了预览、点链接会跳转）；
+ *   (b) 手机上没有光标，点"复制链接"这种带二级菜单的项时，合成鼠标事件让二级菜单闪一下，
+ *       紧接着那发 click 撞上关闭逻辑，整个菜单直接消失。
+ * 处理：(a) 在 document 的**捕获阶段**装一层菜单守卫 —— 只关菜单、并吞掉这一发事件；
+ *       (b) 触摸设备（(hover: none)）改成点击展开/收起二级菜单，有鼠标的设备继续用 hover；
+ *       另外支持滚动/缩放/Esc 关闭菜单（都是老师要的"收得优雅"）。
+ *
+ * 隔离性：长按分支只在 iPad/iPhone/iPod（含 iPadOS 伪装成 Mac）上返回真，Android/Windows 继续走
+ * contextmenu 原路径，长按相关代码一行都不执行。菜单守卫是通用行为，但其中"点击展开二级菜单"
+ * 只在没有鼠标/触摸板的设备上生效，桌面端交互与上游一致。
  */
 window.context = window.context || (function () {
 
@@ -23,6 +31,11 @@ window.context = window.context || (function () {
     const LONG_PRESS_MOVE = 10;     // 手指移动超过这个像素数就取消长按，让位给滚动/框选
     const DEDUPE_WINDOW = 700;      // 长按已开菜单后，忽略紧随其后的 contextmenu（防将来 iOS 支持该事件后弹两次）
     const NEXT_CLICK_WINDOW = 700;  // 长按之后要吞掉的第一发 click
+    const MENU_CLOSE_CLICK_WINDOW = 700; // 因"点了菜单外"而关菜单时，要吞掉随后那一发 click 的时间窗
+    const MENU_OPEN_GRACE = 800;    // 菜单刚打开的这一小段时间里，抬手补发的 click 不许把菜单关掉
+                                    // （iOS/Android 长按抬手都可能补发一发 click，目标正是刚被长按的那张图；
+                                    //  菜单是手指还按着时就弹出来的，抬手到补发 click 的延迟通常 <500ms，
+                                    //  所以留 800ms 余量。真手指再点一次必定先有 touchstart，那条路径另有处理）
 
     let options = {
         fadeSpeed: 100,
@@ -73,7 +86,7 @@ window.context = window.context || (function () {
 
     // 捕获阶段吞掉长按之后 iOS 补发的那一发 click。
     // 用 preventDefault + stopPropagation：既不触发元素自身的点击行为（例如打开图片预览），
-    // 也确认长按手势已经结束。
+    // 也确认长按手势已经结束。同时在事件上打标，菜单守卫据此知道"这一发已经处理过了"。
     function installClickGuard() {
         if (guardInstalled) {
             return;
@@ -88,6 +101,7 @@ window.context = window.context || (function () {
 
             for (let i = 0; i < touchSelectors.length; i++) {
                 if (e.target.closest && e.target.closest(touchSelectors[i])) {
+                    e.__contextjsClickSwallowed = true;
                     e.preventDefault();
                     e.stopPropagation();
                     return;
@@ -170,14 +184,219 @@ window.context = window.context || (function () {
 
     // ===== fork 补丁：iOS 长按支持（结束）=====
 
+    // ===== fork 补丁：菜单收放 + 触摸端二级菜单（开始）=====
+
+    let menuVisible = false;        // 菜单是否打开。以状态为准，不去查 DOM/CSS（jsdom、fade 期间都不可靠）
+    let menuOpenedAt = 0;           // 菜单打开时刻，用于 MENU_OPEN_GRACE
+    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
+    let suppressClickUntil = 0;     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
+    let menuStylesInjected = false;
+    let menuGuardInstalled = false;
+
+    // 有鼠标/触摸板的设备（(hover: none) 为假）继续用 hover 展开二级菜单；手机/平板改成点击展开。
+    // jsdom 之类没有 matchMedia 的环境，退回"有没有触摸能力"判定。
+    function isTouchInput() {
+        if (window.matchMedia) {
+            return !! window.matchMedia('(hover: none)').matches;
+        }
+        return ('ontouchstart' in window);
+    }
+
+    function injectMenuStyles() {
+        if (menuStylesInjected) {
+            return;
+        }
+        menuStylesInjected = true;
+
+        // 与主题里这条等价，只是改成用类触发（手机上没有 hover）：
+        //   .dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}
+        // 桌面端永远不会加上这个类，所以那条路径零影响。
+        $('<style id="context-js-touch-submenu">').appendTo('head').text(
+            '.dropdown-context .dropdown-submenu.touch-open > .dropdown-menu { display: block; }'
+        );
+    }
+
+    function closeMenus() {
+        menuVisible = false;
+
+        $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
+            $('.dropdown-context').css({ display: '' });
+            $('.dropdown-context .drop-left').removeClass('drop-left');
+            $('.dropdown-context .touch-open').removeClass('touch-open');
+        });
+    }
+
+    function isInsideMenu(node) {
+        return !! (node && node.closest && node.closest('.dropdown-context'));
+    }
+
+    // 触摸设备：点"带二级菜单的父项" → 展开/收起它的二级菜单，且**不关闭**整个菜单。
+    // 返回 true 表示这次点击已被消费（守卫不要再往下走）。
+    // 注意父项本身没有 action（只是个容器），所以拦下它不会影响复制等功能：
+    // 真正干活的叶子项（.copy，ClipboardJS 绑的就是它们）在二级菜单里，点击照旧放行。
+    function handleSubmenuTap(e) {
+        if (! isTouchInput()) {
+            return false;
+        }
+
+        let $a = $(e.target).closest('a');
+        if (! $a.length) {
+            return false;
+        }
+
+        let $li = $a.parent();
+        if (! $li.length || ! $li.hasClass('dropdown-submenu')) {
+            return false;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        let wasOpen = $li.hasClass('touch-open');
+
+        // 同一层级只留一个展开的
+        $li.siblings('.dropdown-submenu').removeClass('touch-open');
+
+        if (wasOpen) {
+            $li.removeClass('touch-open');
+            return true;
+        }
+
+        $li.addClass('touch-open');
+
+        // 复用 hover 路径的溢出检测：先展开（有了尺寸）再判断要不要往左翻
+        let $sub = $li.find('.dropdown-context-sub:first');
+        if ($sub.length) {
+            let subWidth = $sub.width(),
+                subLeft = $sub.offset().left;
+
+            if ((subWidth + subLeft) > window.innerWidth) {
+                $sub.addClass('drop-left');
+            } else {
+                $sub.removeClass('drop-left');
+            }
+        }
+
+        return true;
+    }
+
+    // 菜单守卫。全部装在 document 的**捕获阶段**：jQuery 的委托与 viewer.js 都挂在冒泡阶段，
+    // 捕获阶段拦下 = 这一发事件永远不会到达页面自己的处理器。
+    // 它在 context.init() 时就装好（不是等第一次开菜单），因为守卫要记录"最近一次触摸开始时刻"——
+    // 第一次长按的 touchstart 必须被记到，否则那次抬手补发的 click 会被误判成真点击、把菜单关掉。
+    function installMenuGuard() {
+        if (menuGuardInstalled) {
+            return;
+        }
+        menuGuardInstalled = true;
+
+        injectMenuStyles();
+
+        document.addEventListener('click', function (e) {
+            if (e.__contextjsClickSwallowed) {
+                return;                     // 同一发事件已被长按分支吞过
+            }
+            if (Date.now() <= swipeClickUntil) {
+                return;                     // 长按刚开过菜单，抬手那发 click 归长按分支处理
+            }
+            // 因"点了菜单外"而关菜单时，菜单在**手指按下**的瞬间就已经关掉了（见下面的
+            // touchstart），所以这一发必须排在 menuVisible 判断之前，否则漏吞、点击会点穿到页面。
+            if (Date.now() <= suppressClickUntil) {
+                suppressClickUntil = 0;
+                e.__contextjsClickSwallowed = true;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            if (! menuVisible) {
+                return;
+            }
+
+            if (isInsideMenu(e.target)) {
+                handleSubmenuTap(e);        // 菜单内部：只处理二级菜单的点击展开
+                return;                     // 其它内部点击照旧（执行动作 + 原有逻辑关菜单）
+            }
+
+            // 菜单刚打开 + 这一发 click 紧随一次触摸 → 认定是长按抬手补发的那一发 click
+            // （目标正是刚被长按的图片）。吞掉它，但**不**关菜单，否则菜单会"刚开就自己关掉"。
+            // 桌面鼠标点击不满足"紧随触摸"这个条件（lastTouchAt 是 0 或很久以前），照常关菜单。
+            if ((Date.now() - lastTouchAt) < MENU_OPEN_GRACE
+                && (Date.now() - menuOpenedAt) < MENU_OPEN_GRACE) {
+                e.__contextjsClickSwallowed = true;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            // 点击菜单之外的任何位置：只关闭菜单，绝不把这发事件放给页面
+            // （否则会顺手打开图片预览、跳转链接）
+            closeMenus();
+            e.preventDefault();
+            e.stopPropagation();
+        }, true);
+
+        // 触摸：手指一按下就把菜单收起来，比等抬手更跟手。
+        // **不拦截 touchstart 本身**（没有 preventDefault），所以页面滚动/缩放完全不受影响；
+        // 随后补发的那发 click 用时间窗吞掉。
+        document.addEventListener('touchstart', function (e) {
+            lastTouchAt = Date.now();
+
+            if (! menuVisible || isInsideMenu(e.target)) {
+                return;
+            }
+
+            closeMenus();
+            suppressClickUntil = Date.now() + MENU_CLOSE_CLICK_WINDOW;
+        }, true);
+
+        // 手指动了说明是滚动/拖拽手势，别把随后那一发 click 也吞掉
+        document.addEventListener('touchmove', function () {
+            suppressClickUntil = 0;
+        }, true);
+
+        // 滚动 / 旋转缩放：菜单用的是页面坐标，视口一动它就会粘在错的地方，直接收起来。
+        // 监听装在 document 且用捕获，是为了连 #images-scroll 这类内部滚动容器也能收到。
+        document.addEventListener('scroll', function (e) {
+            if (menuVisible && ! isInsideMenu(e.target)) {
+                closeMenus();
+            }
+        }, true);
+
+        window.addEventListener('resize', function () {
+            if (menuVisible) {
+                closeMenus();
+            }
+        }, true);
+
+        window.addEventListener('orientationchange', function () {
+            if (menuVisible) {
+                closeMenus();
+            }
+        }, true);
+
+        // 桌面端顺手：Esc 关闭（不 preventDefault，免得抢走其它 UI 的 Esc）
+        document.addEventListener('keydown', function (e) {
+            let key = e.key || '';
+            if (menuVisible && (key === 'Escape' || key === 'Esc' || e.keyCode === 27)) {
+                closeMenus();
+            }
+        }, true);
+    }
+
+    // ===== fork 补丁：菜单收放 + 触摸端二级菜单（结束）=====
+
     function initialize(opts) {
 
         options = $.extend({}, options, opts);
 
+        installMenuGuard();
+
         $(document).on('click', 'html', function () {
-            $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
-                $('.dropdown-context').css({display: ''}).find('.drop-left').removeClass('drop-left');
-            });
+            // 菜单内部的点击照旧关闭菜单（菜单外的点击在守卫里处理，事件已经被吞掉、到不了这里）
+            if (menuVisible) {
+                closeMenus();
+            }
         });
         if (options.preventDoubleContext) {
             $(document).on('contextmenu', '.dropdown-context', function (e) {
@@ -326,6 +545,9 @@ window.context = window.context || (function () {
                 }
             }
 
+            menuVisible = true;
+            menuOpenedAt = Date.now();
+
             typeof opts.afterOpen === 'function' && opts.afterOpen.call(evt || item, item, $dd.get(0));
         }
 
@@ -358,6 +580,10 @@ window.context = window.context || (function () {
         init: initialize,
         settings: updateOptions,
         attach: addContext,
-        destroy: destroyContext
+        destroy: destroyContext,
+        // fork 补丁：暴露菜单开合状态，供测试与诊断用（上游没有这个）
+        isMenuOpen: function () {
+            return menuVisible;
+        }
     };
 })();

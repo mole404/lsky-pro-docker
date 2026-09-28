@@ -66,22 +66,25 @@ COPY overlay/images.blade.php ./resources/views/user/images.blade.php
 # 自证 2：补丁确实落盘、内容与预期完全一致；blade 的版本串也在。
 # 以后改 overlay/ 里的文件，记得同步更新这里的 md5（故意做成"改了不更新就构建失败"）。
 RUN printf '%s\n' \
-        '528d32fc5adc0d306b6d8f773ee5caaf  ./public/js/context-js/context-js.js' \
-        '528d32fc5adc0d306b6d8f773ee5caaf  ./resources/js/context-js.js' \
-        '576929df685fdb93f9950c16d924bcdc  ./resources/views/user/images.blade.php' \
+        '64ead77d518007cbf4a22f42e3404017  ./public/js/context-js/context-js.js' \
+        '64ead77d518007cbf4a22f42e3404017  ./resources/js/context-js.js' \
+        '2c9380a6af19953ba6ccdd78f503797e  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
-    && grep -q "context-js.js') . '?v=ios-longpress2'" ./resources/views/user/images.blade.php \
+    && grep -q "context-js.js') . '?v=ios-longpress3'" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
     && grep -q 'LONG_PRESS_DELAY = 250' ./public/js/context-js/context-js.js \
-    && grep -q 'LONG_PRESS_DELAY = 250' ./resources/js/context-js.js
+    && grep -q 'LONG_PRESS_DELAY = 250' ./resources/js/context-js.js \
+    && grep -q 'installMenuGuard' ./public/js/context-js/context-js.js \
+    && grep -q 'MENU_OPEN_GRACE' ./public/js/context-js/context-js.js \
+    && grep -q 'touch-open' ./public/js/context-js/context-js.js
 
 # 代码版本标记：入口脚本用它判断「卷里的代码是不是当前镜像这一版」，不一致才同步（见 entrypoint.sh）。
 # 它由源码 commit + 补丁 md5 组成，正好是上面刚断言过的值 —— 任何代码/补丁变化都会让它变。
 RUN printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
-        "context_js_md5=528d32fc5adc0d306b6d8f773ee5caaf" \
-        "images_blade_md5=576929df685fdb93f9950c16d924bcdc" \
+        "context_js_md5=64ead77d518007cbf4a22f42e3404017" \
+        "images_blade_md5=2c9380a6af19953ba6ccdd78f503797e" \
         > .code-revision \
     && cat .code-revision
 
@@ -92,8 +95,8 @@ ARG PHP_EXT_INSTALLER_VERSION
 ARG FORK_SHA=unknown
 
 LABEL org.opencontainers.image.source="https://github.com/mole404/lsky-pro-docker" \
-      org.opencontainers.image.title="lsky-pro-docker (ios-longpress)" \
-      org.opencontainers.image.description="Lsky Pro 图床的 Docker 镜像；源码钉在 lsky-org/lsky-pro@${LSKY_COMMIT}，并叠加 iOS 长按菜单修复" \
+      org.opencontainers.image.title="lsky-pro-docker (ios-longpress + menu-ux)" \
+      org.opencontainers.image.description="Lsky Pro 图床的 Docker 镜像；源码钉在 lsky-org/lsky-pro@${LSKY_COMMIT}，并叠加 iOS 长按菜单修复与菜单交互修复（点菜单外只关菜单、触摸端二级菜单点击展开、滚动/缩放/Esc 关闭）" \
       org.opencontainers.image.licenses="AGPL-3.0" \
       org.opencontainers.image.revision="${FORK_SHA}" \
       lsky.source.commit="${LSKY_COMMIT}"
