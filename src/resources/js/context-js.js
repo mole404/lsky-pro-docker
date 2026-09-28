@@ -314,6 +314,143 @@ window.context = window.context || (function () {
     // 返回 true 表示这次点击已被消费（守卫不要再往下走）。
     // 注意父项本身没有 action（只是个容器），所以拦下它不会影响复制等功能：
     // 真正干活的叶子项（.copy，ClipboardJS 绑的就是它们）在二级菜单里，点击照旧放行。
+    // ---------- fork 补丁：菜单/子菜单的视口边界钳制 ----------
+    // 上游只做了「纵向翻转」（above:'auto'）和子菜单「右溢出就左翻」，横向从来没有钳制过：
+    // 靠近右边缘的图片，主菜单会被切掉一半；「复制链接」这类二级菜单固定往右展开，直接飞出屏幕。
+    // 纵向也没人管，所以子菜单"有时候跑有时候不跑"——取决于菜单开在页面什么高度。
+    // 这里统一收口：菜单与子菜单在展开后按视口夹回来，装不下就给内部滚动，保证每一项都点得到。
+    // 只改定位，不碰显示/隐藏逻辑 —— 长按与点击防护依赖 CSS :hover 的真实可见性，动不得。
+    const EDGE_MARGIN = 8;
+
+    function viewportSize() {
+        const de = document.documentElement;
+
+        return {
+            w: de.clientWidth || window.innerWidth,
+            h: de.clientHeight || window.innerHeight,
+            sx: window.pageXOffset || de.scrollLeft || 0,
+            sy: window.pageYOffset || de.scrollTop || 0
+        };
+    }
+
+    // 主菜单是 <body> 下的绝对定位元素，top/left 用的是**页面坐标**
+    function clampMenu($el) {
+        if (! $el || ! $el.length || ! $el.get(0) || ! $el.get(0).parentNode) {
+            return;
+        }
+
+        const margin = EDGE_MARGIN;
+        const vp = viewportSize();
+        const node = $el.get(0);
+
+        let w = $el.outerWidth(), h = $el.outerHeight();
+        if (! w || ! h) {
+            // 还藏在 display:none 里量不出尺寸 → 临时显形量一次，量完原样还原（只动 display/visibility）
+            const prevDisplay = node.style.display, prevVisibility = node.style.visibility;
+            node.style.display = 'block';
+            node.style.visibility = 'hidden';
+            w = $el.outerWidth();
+            h = $el.outerHeight();
+            node.style.display = prevDisplay;
+            node.style.visibility = prevVisibility;
+        }
+        if (! w || ! h) {
+            return;                       // 真量不到就别乱动定位
+        }
+
+        // 比视口还高（手机上常见）→ 内部滚动，而不是被裁掉
+        const maxHeight = vp.h - margin * 2;
+        if (h > maxHeight) {
+            $el.css({maxHeight: Math.round(maxHeight) + 'px', overflowY: 'auto'});
+            h = maxHeight;
+        }
+
+        let left = parseFloat($el.css('left'));
+        let top = parseFloat($el.css('top'));
+        left = isNaN(left) ? (vp.sx + margin) : left;
+        top = isNaN(top) ? (vp.sy + margin) : top;
+
+        if (left + w > vp.sx + vp.w - margin) {
+            left = vp.sx + vp.w - margin - w;
+        }
+        if (left < vp.sx + margin) {
+            left = vp.sx + margin;
+        }
+        if (top + h > vp.sy + vp.h - margin) {
+            top = vp.sy + vp.h - margin - h;
+        }
+        if (top < vp.sy + margin) {
+            top = vp.sy + margin;
+        }
+
+        $el.css({left: Math.round(left) + 'px', top: Math.round(top) + 'px'});
+    }
+
+    // 子菜单相对父 li 定位（left:100% / .drop-left 时 -100%）。调用时它必须是可见的
+    // （hover 路径靠 CSS :hover，触摸路径靠 .touch-open），否则量不出尺寸。
+    function fitSubmenu($li) {
+        const $sub = $li.find('.dropdown-context-sub:first');
+        if (! $sub.length || ! $sub.get(0)) {
+            return;
+        }
+
+        // 每次都从「默认右开、无内联约束」重算，避免上一次留下的类/内联样式
+        $sub.removeClass('drop-left').css({left: '', top: '', maxHeight: '', overflowY: ''});
+
+        const node = $sub.get(0);
+        if (! node.getBoundingClientRect().width) {
+            return;                        // 此刻不可见，别乱改
+        }
+
+        const margin = EDGE_MARGIN;
+        const vp = viewportSize();
+
+        // ① 横向：右开溢出就翻到左边；翻过去更糟（窄屏）就退回右开
+        let rect = node.getBoundingClientRect();
+        if (rect.right > vp.w - margin) {
+            $sub.addClass('drop-left');
+            rect = node.getBoundingClientRect();
+            if (rect.left < margin) {
+                $sub.removeClass('drop-left');
+                rect = node.getBoundingClientRect();
+            }
+        }
+
+        // ② 横向兜底：两边都不够时用内联 left 把子菜单夹进视口（坐标相对父 li）
+        const liRect = $li.get(0).getBoundingClientRect();
+        let shiftX = 0;
+        if (rect.right > vp.w - margin) {
+            shiftX = (vp.w - margin) - rect.right;
+        }
+        if (rect.left + shiftX < margin) {
+            shiftX = margin - rect.left;
+        }
+        if (shiftX) {
+            $sub.css({left: Math.round((rect.left - liRect.left) + shiftX) + 'px'});
+            rect = node.getBoundingClientRect();
+        }
+
+        // ③ 纵向：溢出上下边就用内联 top 拉回来
+        const baseTop = parseFloat($sub.css('top'));
+        let shiftY = 0;
+        if (rect.bottom > vp.h - margin) {
+            shiftY = (vp.h - margin) - rect.bottom;
+        }
+        if (rect.top + shiftY < margin) {
+            shiftY = margin - rect.top;
+        }
+        if (shiftY) {
+            $sub.css({top: Math.round((isNaN(baseTop) ? 0 : baseTop) + shiftY) + 'px'});
+        }
+
+        // ④ 比视口还高 → 内部滚动
+        rect = node.getBoundingClientRect();
+        const maxHeight = vp.h - margin * 2;
+        if (rect.height > maxHeight) {
+            $sub.css({maxHeight: Math.round(maxHeight) + 'px', overflowY: 'auto'});
+        }
+    }
+
     function handleSubmenuTap(e) {
         if (! isTouchInput()) {
             return false;
@@ -344,18 +481,8 @@ window.context = window.context || (function () {
 
         $li.addClass('touch-open');
 
-        // 复用 hover 路径的溢出检测：先展开（有了尺寸）再判断要不要往左翻
-        let $sub = $li.find('.dropdown-context-sub:first');
-        if ($sub.length) {
-            let subWidth = $sub.width(),
-                subLeft = $sub.offset().left;
-
-            if ((subWidth + subLeft) > window.innerWidth) {
-                $sub.addClass('drop-left');
-            } else {
-                $sub.removeClass('drop-left');
-            }
-        }
+        // 展开（有尺寸了）之后按视口夹一次：左右翻 + 上下拉回 + 装不下就内部滚动
+        fitSubmenu($li);
 
         return true;
     }
@@ -507,13 +634,8 @@ window.context = window.context || (function () {
             });
         }
         $(document).on('mouseenter', '.dropdown-submenu', function () {
-            let $sub = $(this).find('.dropdown-context-sub:first'),
-                subWidth = $sub.width(),
-                subLeft = $sub.offset().left,
-                collision = (subWidth + subLeft) > window.innerWidth;
-            if (collision) {
-                $sub.addClass('drop-left');
-            }
+            // 此刻 CSS :hover 已经把它展开（有尺寸），再按视口夹一次
+            fitSubmenu($(this));
         });
 
     }
@@ -647,6 +769,10 @@ window.context = window.context || (function () {
                     }).fadeIn(options.fadeSpeed);
                 }
             }
+
+            // fork 补丁：不管上面走了哪个分支，最后统一按视口夹一次
+            // （上游只在 above:'auto' 时做了纵向翻转，横向完全没有处理）
+            clampMenu($dd);
 
             menuVisible = true;
             menuOpenedAt = Date.now();

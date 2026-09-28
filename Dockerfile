@@ -106,17 +106,19 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 # 改 src/ 里这三个文件后必须同步更新这里的 md5（故意做成"改了不更新就构建失败"），
 # 并重新生成 patches/ios-longpress.patch（tools/diff-vs-upstream.sh）。
 RUN printf '%s\n' \
-        'e114c840101d021aa416239196925624  ./public/js/context-js/context-js.js' \
-        'e114c840101d021aa416239196925624  ./resources/js/context-js.js' \
-        '44847fe64f7c78076bdbf8f0368f9204  ./resources/views/user/images.blade.php' \
+        '078a0d9869eeb2569bfc7a189d9ad093  ./public/js/context-js/context-js.js' \
+        '078a0d9869eeb2569bfc7a189d9ad093  ./resources/js/context-js.js' \
+        '5d1926d2d390945af5371a20a5364b79  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
-    && grep -q "context-js.js') . '?v=ios-longpress4'" ./resources/views/user/images.blade.php \
+    && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
     && grep -q 'LONG_PRESS_DELAY = 250' ./public/js/context-js/context-js.js \
     && grep -q 'LONG_PRESS_DELAY = 250' ./resources/js/context-js.js \
     && grep -q 'installMenuGuard' ./public/js/context-js/context-js.js \
     && grep -q 'MENU_OPEN_GRACE' ./public/js/context-js/context-js.js \
-    && grep -q 'touch-open' ./public/js/context-js/context-js.js
+    && grep -q 'touch-open' ./public/js/context-js/context-js.js \
+    && grep -q 'fitSubmenu' ./public/js/context-js/context-js.js \
+    && grep -q 'clampMenu' ./resources/js/context-js.js
 
 # 代码版本标记：入口脚本用它判断「卷里的代码是不是当前镜像这一版」，不一致才同步（见 entrypoint.sh）。
 # 它由源码 commit + 补丁 md5 组成，正好是上面刚断言过的值 —— 任何代码/补丁变化都会让它变。
@@ -124,8 +126,8 @@ RUN printf '%s\n' \
 RUN printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
-        "context_js_md5=e114c840101d021aa416239196925624" \
-        "images_blade_md5=44847fe64f7c78076bdbf8f0368f9204" \
+        "context_js_md5=078a0d9869eeb2569bfc7a189d9ad093" \
+        "images_blade_md5=5d1926d2d390945af5371a20a5364b79" \
         > .code-revision \
     && cat .code-revision
 

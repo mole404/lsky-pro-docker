@@ -154,9 +154,10 @@ const openSub = (window) => !!window.document.querySelector('.dropdown-submenu.t
     const blade = fs.readFileSync(path.join(here, '..', 'src', 'resources', 'views', 'user', 'images.blade.php'), 'utf8');
     // 找"同时含 context-js.js 和 ?v="的那一行（文件里还有一行注释也提到 context-js.js，别被它骗了）
     const vline = blade.split('\n').find((l) => l.includes('context-js.js') && l.includes('?v=')) || '';
-    const m = vline.match(/\?v=([\w.-]+)/);
-    check('images.blade.php 里 context-js.js 那行带了资源版本串 ?v=…（每次改补丁要递增，否则 Safari 会吐缓存）', !!m,
-        m ? 'v=' + m[1] : ('那行没找到版本串：' + vline.trim()));
+    // 曾经是手写的 ?v=ios-longpressN —— 改了补丁忘了递增，浏览器就会一直吃旧文件（踩过两次）。
+    // 现在统一用 Utils::assetVersion()（取文件 mtime）自动失效，别退回手写。
+    check('images.blade.php 里 context-js.js 那行走自动版本号（Utils::assetVersion）', vline.includes('assetVersion'),
+        vline.trim());
 }
 
 // ---------------------------------------------------------------- iPhone
