@@ -36,15 +36,9 @@
                     <x-slot name="name">设置</x-slot>
                 </x-nav-link>
             </div>
-            @if(\App\Utils::config(\App\Enums\ConfigKey::IsEnableGallery) || \App\Utils::config(\App\Enums\ConfigKey::IsEnableApi))
+            @if(\App\Utils::config(\App\Enums\ConfigKey::IsEnableApi))
             <div class="flex flex-col space-y-1 mb-5">
                 <p class="ls-group-title">公共</p>
-                @if(\App\Utils::config(\App\Enums\ConfigKey::IsEnableGallery))
-                <x-nav-link :href="route('gallery')" :active="request()->routeIs('gallery')">
-                    <x-slot name="icon"><i class="fas fa-chalkboard fa-fw"></i></x-slot>
-                    <x-slot name="name">画廊</x-slot>
-                </x-nav-link>
-                @endif
                 @if(\App\Utils::config(\App\Enums\ConfigKey::IsEnableApi))
                 <x-nav-link :href="route('api')" :active="request()->routeIs('api')">
                     <x-slot name="icon"><i class="fas fa-link fa-fw"></i></x-slot>

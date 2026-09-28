@@ -53,7 +53,6 @@ class Utils
             return Config::query()->pluck('value', 'name')->transform(function ($value, $key) {
                 switch ($key) {
                     case ConfigKey::IsAllowGuestUpload:
-                    case ConfigKey::IsEnableGallery:
                     case ConfigKey::IsEnableApi:
                     case ConfigKey::IsEnableRegistration:
                     case ConfigKey::IsUserNeedVerify:
@@ -192,4 +191,27 @@ class Utils
 
         return $merged;
     }
+
+    /**
+     * fork：取镜像内记录的短 commit（7 位）。
+     *
+     * 值来自镜像里的 .code-revision 标记（Dockerfile 构建时写入 fork_sha=…，
+     * entrypoint 首次启动时同步进数据卷）。没有标记文件（例如本地开发环境）返回空串。
+     * 后台「关于」与控制台「软件版本」都用它，避免各自读文件、各写一份逻辑。
+     */
+    public static function shortCommit(): string
+    {
+        $marker = base_path('.code-revision');
+
+        if (! is_readable($marker)) {
+            return '';
+        }
+
+        if (! preg_match('/^fork_sha=([0-9a-f]{7,40})/m', (string) file_get_contents($marker), $matches)) {
+            return '';
+        }
+
+        return substr($matches[1], 0, 7);
+    }
+
 }

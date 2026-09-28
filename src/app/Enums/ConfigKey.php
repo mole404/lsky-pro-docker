@@ -7,17 +7,11 @@ final class ConfigKey
     /** @var string 是否启用注册 */
     const IsEnableRegistration = 'is_enable_registration';
 
-    /** @var string 是否启用画廊 */
-    const IsEnableGallery = 'is_enable_gallery';
-
     /** @var string 是否启用接口 */
     const IsEnableApi = 'is_enable_api';
 
     /** @var string 程序名称 */
     const AppName = 'app_name';
-
-    /** @var string 程序版本 */
-    const AppVersion = 'app_version';
 
     /** @var string 站点关键字 */
     const SiteKeywords = 'site_keywords';

@@ -244,8 +244,17 @@
 
                     // 追加链接
                     let links = response.data.links;
+                    // fork：链接旁边带一张小缩略图 —— 多图上传时一眼看出哪个链接对应哪张图。
+                    // 缩略图地址接口本来就返回了（thumbnail_url）；非图片文件没有该字段就不显示预览。
+                    let thumb = links.thumbnail_url ? links.thumbnail_url.toString() : '';
                     for (let key in links) {
-                        $('#links [data-tab="' + key + '"]').append('<p class="whitespace-nowrap select-all mt-1 bg-surface-2 hover:bg-surface-3 text-ink-2 rounded px-2 py-1 cursor-pointer overflow-scroll scrollbar-none">' + links[key].toString() + '</p>')
+                        let row = '<div class="flex items-start gap-2 mt-1">';
+                        if (thumb) {
+                            row += '<img src="' + thumb + '" alt="缩略图" class="w-10 h-10 rounded object-cover bg-surface-2 shrink-0" onerror="this.style.display=\'none\'">';
+                        }
+                        row += '<p class="whitespace-nowrap select-all bg-surface-2 hover:bg-surface-3 text-ink-2 rounded px-2 py-1 cursor-pointer overflow-scroll scrollbar-none">' + links[key].toString() + '</p>';
+                        row += '</div>';
+                        $('#links [data-tab="' + key + '"]').append(row);
                     }
                     $links.show();
                     utils.setCapacityProgress(response.data.size);

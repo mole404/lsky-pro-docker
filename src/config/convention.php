@@ -18,13 +18,11 @@ use App\Enums\Watermark\Mode;
 return [
     'app' => [
         ConfigKey::AppName => 'Lsky Pro',
-        ConfigKey::AppVersion => 'V 2.1',
         ConfigKey::SiteKeywords => 'Lsky Pro,lsky,兰空图床',
         ConfigKey::SiteDescription => 'Lsky Pro, Your photo album on the cloud.',
         ConfigKey::SiteNotice => '',
         ConfigKey::IcpNo => '',
         ConfigKey::IsEnableRegistration => 1,
-        ConfigKey::IsEnableGallery => 1,
         ConfigKey::IsEnableApi => 1,
         ConfigKey::IsAllowGuestUpload => 1,
         ConfigKey::UserInitialCapacity => 512000,
