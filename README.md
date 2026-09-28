@@ -297,6 +297,19 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 4. 同步 `workflow` 的 `CONTEXT_JS_MD5` / `BLADE_MD5`；动了补丁就把 blade 的 `?v=ios-longpressN` 递增一位
 5. `cd test && npm test`，然后推 master 等 CI 全绿
 
+### 运行时版本与依赖（2026-09-28 复核）
+
+- **PHP：8.3**（`Dockerfile` 的 `ARG PHP_VERSION`）。理由：8.1 已 EOL（2025-12-31），8.2 的 EOL 是
+  2026-12-31，8.3 支持到 2027-12-31。配套把依赖升到同线最新：`laravel/framework` **9.52.21**
+  （9.x 最后一个补丁）+ `symfony/*` **6.4 LTS**（Laravel 9 的 `^6.0` 正好允许，6.4 是 LTS，支持到 2027-11）。
+- **已知且无法在本仓库内修复的**：Laravel 9 框架自身的安全公告（9.x 线没有修复版本）。
+  Composer 2.10 起默认会**拒绝**安装任何带未修公告的版本，而整条 Laravel 9 线都被覆盖 ——
+  这就是为什么**重新解析依赖时必须显式关闭**该策略（CI 的 lock 任务用 `composer config --global
+  policy.advisories.block false`，带显式开关与说明）。注意这**不新增风险**：线上本来就跑在这条线上，
+  只是把既有事实写明。真正的根治是把 Lsky 升到 Laravel 11/12（工程量：breeze / sanctum /
+  fruitcake-cors / intervention-image v3 / 各家云存储 SDK 全要动），属于另立项的事。
+- 其余依赖的已知公告已经跟进（guzzle / psr7 / phpseclib / commonmark / aws-sdk / diactoros）。
+
 顺带一提：CI 支持**试构建**——在 Actions 里手动 `Run workflow` 时填一个 `php_version`（如 `8.2` / `8.3`），
 就会用那个 PHP 版本构建并跑完整自证（不改仓库里的默认值），用来验证版本兼容性再决定要不要落进 Dockerfile。
 另外 CI 会硬断言「上游迁移文件个数」与基线一致 —— 换 pin 时若上游新增了数据库迁移，会直接报红提醒
