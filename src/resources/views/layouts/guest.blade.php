@@ -6,25 +6,45 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <meta name="keywords" content="{{ \App\Utils::config(\App\Enums\ConfigKey::SiteKeywords) }}"/>
         <meta name="description" content="{{ \App\Utils::config(\App\Enums\ConfigKey::SiteDescription) }}"/>
+        <meta name="color-scheme" content="light dark">
 
         <title>{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</title>
 
+        {{-- 首屏主题：必须在样式之前执行，避免暗色下先闪白（与 layouts/app.blade.php 里同一段逻辑）--}}
+        <script>
+            (function () {
+                try {
+                    var mode = localStorage.getItem('lsky-theme') || 'system';
+                    var dark = mode === 'dark' ||
+                        (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                    if (dark) {
+                        document.documentElement.classList.add('dark');
+                    }
+                } catch (e) {
+                    // localStorage 不可用时静默降级为亮色
+                }
+            })();
+        </script>
+
         <!-- Fonts -->
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap">
         <link rel="stylesheet" href="{{ asset('css/fontawesome.css') }}">
         @stack('styles')
 
         <!-- Styles -->
-        <link rel="stylesheet" href="{{ asset('css/common.css') }}?t=20220817">
-        <link rel="stylesheet" href="{{ asset('css/app.css') }}?t=20220817">
+        <link rel="stylesheet" href="{{ asset('css/common.css') }}?t=20260928ui">
+        <link rel="stylesheet" href="{{ asset('css/app.css') }}?t=20260928ui">
     </head>
     <body class="font-sans antialiased">
-        <div class="min-h-screen text-gray-900 bg-gray-100">
+        <div class="min-h-screen text-ink bg-bg">
+            {{-- 登录/注册这类页面也放一个外观切换（右上角浮动）--}}
+            <div class="absolute top-4 right-4 z-10" x-data>
+                <x-theme-switch />
+            </div>
             {{ $slot }}
         </div>
     </body>
     <!-- Scripts -->
-    <script src="{{ asset('js/app.js') }}?t=20220817"></script>
+    <script src="{{ asset('js/app.js') }}?t=20260928ui"></script>
     @if(file_exists(public_path('js/custom.js')))
         <script src="{{ asset('js/custom.js') }}"></script>
     @endif

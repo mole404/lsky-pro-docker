@@ -1,35 +1,35 @@
 <div class="pb-6 h-full">
     <input type="file" id="picker" name="file" class="hidden" accept="{{ implode(',', array_map(fn ($ext) => '.'.$ext, $_group->configs->get(\App\Enums\GroupConfigKey::AcceptedFileSuffixes))) }}" multiple>
 
-    <div class="mb-4 p-4 bg-white rounded-md shadow-custom">
-        <h1 class="tracking-wider text-2xl text-gray-700 mb-2" style="text-shadow: -4px 4px 0 rgb(0 0 0 / 10%);">Image Upload</h1>
-        <p class="text-gray-500 text-sm">
+    <div class="mb-4 p-4 ls-card">
+        <h1 class="tracking-wider text-2xl text-ink-2 mb-2" style="text-shadow: -4px 4px 0 rgb(0 0 0 / 10%);">Image Upload</h1>
+        <p class="text-ink-3 text-sm">
             最大可上传 {{ \App\Utils::formatSize($_group->configs->get(\App\Enums\GroupConfigKey::MaximumFileSize) * 1024) }} 的图片，上传队列最多
             {{ $_group->configs->get(\App\Enums\GroupConfigKey::ConcurrentUploadNum) }}
             张。本站已托管 {{ \App\Models\Image::query()->count() }} 张图片。
         </p>
-        <div class="mt-3 rounded-md border-2 border-dotted border-stone-300 w-full h-full" id="picker-dnd" onclick="$('#picker').click()">
-            <div id="upload-container" class="relative group flex flex-col justify-center items-center p-2 w-full h-full min-h-[150px] sm:min-h-[340px] space-y-4 text-gray-500 cursor-pointer">
-                <i id="clear" class="fas fa-times absolute top-1 right-1 w-8 h-8 flex justify-center items-center cursor-pointer text-xl text-center hidden group-hover:block text-gray-400 hover:text-gray-500"></i>
-                <p id="upload-all" title="点我上传全部"><i class="fas fa-cloud-upload-alt text-6xl hover:text-indigo-400"></i></p>
+        <div class="mt-3 rounded-md border-2 border-dotted border-line-2 w-full h-full" id="picker-dnd" onclick="$('#picker').click()">
+            <div id="upload-container" class="relative group flex flex-col justify-center items-center p-2 w-full h-full min-h-[150px] sm:min-h-[340px] space-y-4 text-ink-3 cursor-pointer">
+                <i id="clear" class="fas fa-times absolute top-1 right-1 w-8 h-8 flex justify-center items-center cursor-pointer text-xl text-center hidden group-hover:block text-ink-3 hover:text-ink-3"></i>
+                <p id="upload-all" title="点我上传全部"><i class="fas fa-cloud-upload-alt text-6xl hover:text-brand"></i></p>
                 <p class="text-md text-center">拖拽文件到这里，支持多文件同时上传<br/>点击上面的图标上传全部已选择文件</p>
             </div>
             <div id="upload-preview" class="flex m-2 hidden"></div>
         </div>
     </div>
 
-    <div id="links-container" class="hidden mb-4 p-4 bg-white rounded-md relative group shadow-custom">
+    <div id="links-container" class="hidden mb-4 p-4 bg-surface rounded-md relative group shadow-card">
         <div class="absolute top-2 right-2 flex">
-            <span id="copy-all" class="px-2 py-1 rounded-md text-xs text-gray-800 bg-gray-100 cursor-pointer hidden group-hover:block">复制全部</span>
-            <span id="clear-all" class="ml-1 px-2 py-1 rounded-md text-xs text-gray-800 bg-gray-100 cursor-pointer hidden group-hover:block">清除</span>
+            <span id="copy-all" class="px-2 py-1 rounded-md text-xs text-ink bg-surface-3 cursor-pointer hidden group-hover:block">复制全部</span>
+            <span id="clear-all" class="ml-1 px-2 py-1 rounded-md text-xs text-ink bg-surface-3 cursor-pointer hidden group-hover:block">清除</span>
         </div>
         <div id="link-tabs" class="flex flex-nowrap overflow-scroll scrollbar-none text-sm">
-            <a href="javascript:void(0)" data-tab-name="url" class="hover:bg-gray-100 flex justify-center items-center px-8 py-2 border-b-2 border-indigo-500 active">URL</a>
-            <a href="javascript:void(0)" data-tab-name="html" class="hover:bg-gray-100 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">HTML</a>
-            <a href="javascript:void(0)" data-tab-name="bbcode" class="hover:bg-gray-100 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">BBCode</a>
-            <a href="javascript:void(0)" data-tab-name="markdown" class="hover:bg-gray-100 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">Markdown</a>
-            <a href="javascript:void(0)" data-tab-name="markdown_with_link" class="hover:bg-gray-100 flex justify-center items-center px-8 py-2 border-b-2 border-transparent whitespace-nowrap">Markdown with link</a>
-            <a href="javascript:void(0)" data-tab-name="thumbnail_url" class="hover:bg-gray-100 flex justify-center items-center px-8 py-2 border-b-2 border-transparent whitespace-nowrap">Thumbnail url</a>
+            <a href="javascript:void(0)" data-tab-name="url" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-brand active">URL</a>
+            <a href="javascript:void(0)" data-tab-name="html" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">HTML</a>
+            <a href="javascript:void(0)" data-tab-name="bbcode" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">BBCode</a>
+            <a href="javascript:void(0)" data-tab-name="markdown" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent">Markdown</a>
+            <a href="javascript:void(0)" data-tab-name="markdown_with_link" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent whitespace-nowrap">Markdown with link</a>
+            <a href="javascript:void(0)" data-tab-name="thumbnail_url" class="hover:bg-surface-2 flex justify-center items-center px-8 py-2 border-b-2 border-transparent whitespace-nowrap">Thumbnail url</a>
         </div>
         <div id="links" class="mt-2">
             <div data-tab="url" class="space-y-2"></div>
@@ -49,12 +49,12 @@
 </x-modal>
 
 <script type="text/html" id="image-preview-tpl">
-    <div data-id="__id__" class="w-full flex items-center p-2 mb-2 rounded-md relative bg-gray-50 overflow-hidden">
+    <div data-id="__id__" class="w-full flex items-center p-2 mb-2 rounded-md relative bg-surface-2 overflow-hidden">
         <div class="absolute inset-0">
-            <div class="w-[0%] h-full bg-gray-200 opacity-70 upload-progress"></div>
+            <div class="w-[0%] h-full bg-surface-3 opacity-70 upload-progress"></div>
         </div>
         <div class="relative flex w-full">
-            <div class="w-10 h-10 bg-gray-200 rounded-lg cursor-pointer overflow-hidden">
+            <div class="w-10 h-10 bg-surface-3 rounded-lg cursor-pointer overflow-hidden">
                 <img class="w-full h-full object-cover" data-operate="preview" src="__src__">
             </div>
             <div class="flex justify-end flex-col ml-2 w-[80%] opacity-70">
@@ -65,8 +65,8 @@
             </div>
         </div>
         <div class="absolute right-2 flex space-x-2">
-            <a href="javascript:void(0)" data-operate="remove" class="flex justify-center items-center block shadow-sm w-10 h-10 rounded-full text-gray-600 bg-gray-100 hover:bg-gray-200 aspect-w-1 aspect-h-1"><i class="fas fa-times"></i></a>
-            <a href="javascript:void(0)" data-operate="upload" class="flex justify-center items-center block shadow-sm w-10 h-10 rounded-full text-gray-600 bg-gray-100 hover:bg-gray-200 aspect-w-1 aspect-h-1"><i class="fas fa-upload"></i></a>
+            <a href="javascript:void(0)" data-operate="remove" class="flex justify-center items-center block shadow-sm w-10 h-10 rounded-full text-ink-2 bg-surface-3 hover:bg-surface-3 aspect-w-1 aspect-h-1"><i class="fas fa-times"></i></a>
+            <a href="javascript:void(0)" data-operate="upload" class="flex justify-center items-center block shadow-sm w-10 h-10 rounded-full text-ink-2 bg-surface-3 hover:bg-surface-3 aspect-w-1 aspect-h-1"><i class="fas fa-upload"></i></a>
         </div>
     </div>
 </script>
@@ -125,7 +125,7 @@
         const setStatus = (data, status, message) => {
             queue[data.guid].status = data.status = status;
             let $info = data.$preview.find('.upload-info');
-            $info.removeClass('text-green-500 text-red-500')
+            $info.removeClass('text-green-500 text-danger')
             let msg = '';
             switch (status) {
                 case UPLOAD_WAITING:
@@ -137,7 +137,7 @@
                     break;
                 case UPLOAD_ERROR:
                     msg = '上传失败';
-                    $info.addClass('text-red-500')
+                    $info.addClass('text-danger')
                     break;
             }
             $info.text(message ? message : msg);
@@ -245,7 +245,7 @@
                     // 追加链接
                     let links = response.data.links;
                     for (let key in links) {
-                        $('#links [data-tab="' + key + '"]').append('<p class="whitespace-nowrap select-all mt-1 bg-gray-50 hover:bg-gray-200 text-gray-600 rounded px-2 py-1 cursor-pointer overflow-scroll scrollbar-none">' + links[key].toString() + '</p>')
+                        $('#links [data-tab="' + key + '"]').append('<p class="whitespace-nowrap select-all mt-1 bg-surface-2 hover:bg-surface-3 text-ink-2 rounded px-2 py-1 cursor-pointer overflow-scroll scrollbar-none">' + links[key].toString() + '</p>')
                     }
                     $links.show();
                     utils.setCapacityProgress(response.data.size);
@@ -320,9 +320,9 @@
 
         $('[data-tab-name]').click(function () {
             $(this).removeClass('active border-transparent')
-                .addClass('active border-indigo-500')
+                .addClass('active border-brand')
                 .siblings()
-                .removeClass('active border-indigo-500')
+                .removeClass('active border-brand')
                 .addClass('border-transparent');
             $('[data-tab]').hide();
             $('[data-tab="' + $(this).data('tab-name') + '"]').show()

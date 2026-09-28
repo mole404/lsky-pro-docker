@@ -3,32 +3,32 @@
 <x-app-layout>
     <div class="my-6 md:my-9">
         <div class="space-y-6 md:space-y-0 md:grid md:grid-cols-2 xl:grid-cols-4 md:gap-x-4 xl:gap-x-8 md:gap-y-4 xl:gap-y-8">
-            <div class="flex bg-white rounded p-4 space-x-4 shadow-custom">
+            <div class="flex bg-surface rounded p-4 space-x-4 shadow-card">
                 <i class="fas fa-images text-amber-500 text-5xl"></i>
                 <div class="flex flex-col">
-                    <p class="text-gray-700 text-sm">图片数量</p>
-                    <p class="text-gray-800 font-semibold text-xl">{{ $user->image_num }}</p>
+                    <p class="text-ink text-sm">图片数量</p>
+                    <p class="text-ink font-semibold text-xl">{{ $user->image_num }}</p>
                 </div>
             </div>
-            <div class="flex bg-white rounded p-4 space-x-4 shadow-custom">
-                <i class="fas fa-hdd text-red-500 text-5xl"></i>
+            <div class="flex bg-surface rounded p-4 space-x-4 shadow-card">
+                <i class="fas fa-hdd text-danger text-5xl"></i>
                 <div class="flex flex-col">
-                    <p class="text-gray-700 text-sm">可用储存</p>
-                    <p class="text-gray-800 font-semibold text-xl">{{ \App\Utils::formatSize(($user->capacity - $user->use_capacity) * 1024) }}</p>
+                    <p class="text-ink text-sm">可用储存</p>
+                    <p class="text-ink font-semibold text-xl">{{ \App\Utils::formatSize(($user->capacity - $user->use_capacity) * 1024) }}</p>
                 </div>
             </div>
-            <div class="flex bg-white rounded p-4 space-x-4 shadow-custom">
+            <div class="flex bg-surface rounded p-4 space-x-4 shadow-card">
                 <i class="fas fa-hdd text-green-500 text-5xl"></i>
                 <div class="flex flex-col">
-                    <p class="text-gray-700 text-sm">使用储存</p>
-                    <p class="text-gray-800 font-semibold text-xl">{{ \App\Utils::formatSize($user->use_capacity * 1024) }}</p>
+                    <p class="text-ink text-sm">使用储存</p>
+                    <p class="text-ink font-semibold text-xl">{{ \App\Utils::formatSize($user->use_capacity * 1024) }}</p>
                 </div>
             </div>
-            <div class="flex bg-white rounded p-4 space-x-4 shadow-custom">
+            <div class="flex bg-surface rounded p-4 space-x-4 shadow-card">
                 <i class="fas fa-hdd text-emerald-500 text-5xl"></i>
                 <div class="flex flex-col">
-                    <p class="text-gray-700 text-sm">总储存</p>
-                    <p class="text-gray-800 font-semibold text-xl">{{ \App\Utils::formatSize($user->capacity * 1024) }}</p>
+                    <p class="text-ink text-sm">总储存</p>
+                    <p class="text-ink font-semibold text-xl">{{ \App\Utils::formatSize($user->capacity * 1024) }}</p>
                 </div>
             </div>
         </div>
@@ -45,7 +45,7 @@
                                 @foreach ($strategies as $strategy)
                                     <div class="w-full px-4 py-3">
                                         <p>{{ $strategy->name }}</p>
-                                        <span class="text-gray-700 text-sm">{{ $strategy->intro }}</span>
+                                        <span class="text-ink text-sm">{{ $strategy->intro }}</span>
                                     </div>
                                 @endforeach
                             </div>
@@ -60,19 +60,19 @@
                         <div class="px-4 py-3 space-y-3">
                             <div class="flex">
                                 <p class="basis-1/3">姓名</p>
-                                <p class="basis-2/3 truncate text-gray-800">{{ $user->name }}</p>
+                                <p class="basis-2/3 truncate text-ink">{{ $user->name }}</p>
                             </div>
                             <div class="flex">
                                 <p class="basis-1/3">邮箱</p>
-                                <p class="basis-2/3 truncate text-gray-800">{{ $user->email }}</p>
+                                <p class="basis-2/3 truncate text-ink">{{ $user->email }}</p>
                             </div>
                             <div class="flex">
                                 <p class="basis-1/3">注册时间</p>
-                                <p class="basis-2/3 truncate text-gray-800">{{ $user->created_at }}</p>
+                                <p class="basis-2/3 truncate text-ink">{{ $user->created_at }}</p>
                             </div>
                             <div class="flex">
                                 <p class="basis-1/3">注册 IP</p>
-                                <p class="basis-2/3 truncate text-gray-800">{{ $user->registered_ip }}</p>
+                                <p class="basis-2/3 truncate text-ink">{{ $user->registered_ip }}</p>
                             </div>
                             @if(\App\Utils::config(\App\Enums\ConfigKey::IsUserNeedVerify) && !$user->email_verified_at)
                                 <p class="p-2 text-sm rounded bg-red-400 text-white">
@@ -90,35 +90,35 @@
                         <div class="px-4 py-3 space-y-3">
                             <div class="flex">
                                 <p class="basis-1/2">组名</p>
-                                <p class="basis-1/2 truncate text-gray-800">{{ $user->group ? $user->group->name : '系统默认组' }}</p>
+                                <p class="basis-1/2 truncate text-ink">{{ $user->group ? $user->group->name : '系统默认组' }}</p>
                             </div>
                             <div class="flex">
                                 <p class="basis-1/2">最大文件大小</p>
-                                <p class="basis-1/2 truncate text-gray-800">{{ \App\Utils::formatSize($configs->get(\App\Enums\GroupConfigKey::MaximumFileSize) * 1024) }}</p>
+                                <p class="basis-1/2 truncate text-ink">{{ \App\Utils::formatSize($configs->get(\App\Enums\GroupConfigKey::MaximumFileSize) * 1024) }}</p>
                             </div>
                             <div class="flex">
                                 <p class="basis-1/2">并发上传数量</p>
-                                <p class="basis-1/2 truncate text-gray-800">{{ $configs->get(\App\Enums\GroupConfigKey::ConcurrentUploadNum) }} 张</p>
+                                <p class="basis-1/2 truncate text-ink">{{ $configs->get(\App\Enums\GroupConfigKey::ConcurrentUploadNum) }} 张</p>
                             </div>
                             <div class="flex">
                                 <p class="basis-1/2">每分钟上传限制</p>
-                                <p class="basis-1/2 truncate text-gray-800">{{ $configs->get(\App\Enums\GroupConfigKey::LimitPerMinute) }} 张</p>
+                                <p class="basis-1/2 truncate text-ink">{{ $configs->get(\App\Enums\GroupConfigKey::LimitPerMinute) }} 张</p>
                             </div>
                             <div class="flex">
                                 <p class="basis-1/2">每小时上传限制</p>
-                                <p class="basis-1/2 truncate text-gray-800">{{ $configs->get(\App\Enums\GroupConfigKey::LimitPerHour) }} 张</p>
+                                <p class="basis-1/2 truncate text-ink">{{ $configs->get(\App\Enums\GroupConfigKey::LimitPerHour) }} 张</p>
                             </div>
                             <div class="flex">
                                 <p class="basis-1/2">每天上传限制</p>
-                                <p class="basis-1/2 truncate text-gray-800">{{ $configs->get(\App\Enums\GroupConfigKey::LimitPerDay) }} 张</p>
+                                <p class="basis-1/2 truncate text-ink">{{ $configs->get(\App\Enums\GroupConfigKey::LimitPerDay) }} 张</p>
                             </div>
                             <div class="flex">
                                 <p class="basis-1/2">每周上传限制</p>
-                                <p class="basis-1/2 truncate text-gray-800">{{ $configs->get(\App\Enums\GroupConfigKey::LimitPerWeek) }} 张</p>
+                                <p class="basis-1/2 truncate text-ink">{{ $configs->get(\App\Enums\GroupConfigKey::LimitPerWeek) }} 张</p>
                             </div>
                             <div class="flex">
                                 <p class="basis-1/2">每月上传限制</p>
-                                <p class="basis-1/2 truncate text-gray-800">{{ $configs->get(\App\Enums\GroupConfigKey::LimitPerMonth) }} 张</p>
+                                <p class="basis-1/2 truncate text-ink">{{ $configs->get(\App\Enums\GroupConfigKey::LimitPerMonth) }} 张</p>
                             </div>
                         </div>
                     </x-slot>

@@ -2,7 +2,7 @@
     <x-auth-card>
         <x-slot name="logo">
             <a href="/">
-                <x-application-logo class="w-20 h-20 fill-current text-gray-500 text-4xl" />
+                <x-application-logo class="w-20 h-20 fill-current text-ink-2 text-4xl" />
             </a>
         </x-slot>
 
@@ -35,8 +35,8 @@
             <!-- Remember Me -->
             <div class="block mt-4">
                 <label for="remember_me" class="inline-flex items-center">
-                    <input id="remember_me" type="checkbox" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" name="remember">
-                    <span class="ml-2 text-sm text-gray-600">{{ __('Remember me') }}</span>
+                    <input id="remember_me" type="checkbox" class="rounded border-line-2 text-brand shadow-sm focus:border-brand focus:ring focus:ring-brand-soft focus:ring-opacity-50" name="remember">
+                    <span class="ml-2 text-sm text-ink-2">{{ __('Remember me') }}</span>
                 </label>
             </div>
 
@@ -44,14 +44,14 @@
                 <div class="flex items-center text-sm">
                     @if(\App\Utils::config(\App\Enums\ConfigKey::IsEnableRegistration))
                         没有账号？
-                        <a class="underline text-gray-600 hover:text-gray-900" href="{{ route('register') }}">
+                        <a class="underline text-ink-2 hover:text-ink" href="{{ route('register') }}">
                             注册
                         </a>
                     @endif
                 </div>
                 <div class="flex items-center">
                     @if (Route::has('password.request'))
-                        <a class="underline text-sm text-gray-600 hover:text-gray-900" href="{{ route('password.request') }}">
+                        <a class="underline text-sm text-ink-2 hover:text-ink" href="{{ route('password.request') }}">
                             {{ __('Forgot your password?') }}
                         </a>
                     @endif

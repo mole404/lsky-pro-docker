@@ -6,20 +6,37 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="keywords" content="{{ \App\Utils::config(\App\Enums\ConfigKey::SiteKeywords) }}"/>
     <meta name="description" content="{{ \App\Utils::config(\App\Enums\ConfigKey::SiteDescription) }}"/>
+    <meta name="color-scheme" content="light dark">
 
     <title>{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</title>
 
+    {{-- 首屏主题：必须在样式之前执行，否则暗色下会先闪一下白屏。
+         这里只做"读 + 加类"这一件事，真正的状态管理在 resources/js/stores/theme.js --}}
+    <script>
+        (function () {
+            try {
+                var mode = localStorage.getItem('lsky-theme') || 'system';
+                var dark = mode === 'dark' ||
+                    (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                if (dark) {
+                    document.documentElement.classList.add('dark');
+                }
+            } catch (e) {
+                // localStorage 不可用（隐私模式等）时静默降级为亮色
+            }
+        })();
+    </script>
+
     <!-- Fonts -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap">
     <link rel="stylesheet" href="{{ asset('css/fontawesome.css') }}">
     @stack('styles')
 
     <!-- Styles -->
-    <link rel="stylesheet" href="{{ asset('css/common.css') }}?t=20220817">
-    <link rel="stylesheet" href="{{ asset('css/app.css') }}?t=20220817">
+    <link rel="stylesheet" href="{{ asset('css/common.css') }}?t=20260928ui">
+    <link rel="stylesheet" href="{{ asset('css/app.css') }}?t=20260928ui">
 </head>
 <body class="font-sans antialiased overflow-hidden">
-<div class="min-h-screen bg-gray-100" x-data x-cloak>
+<div class="min-h-screen bg-bg text-ink" x-data x-cloak>
     @include('layouts.sidebar')
     @include('layouts.header')
     <div
@@ -29,7 +46,7 @@
         x-transition:leave="ease-in-out duration-500"
         x-transition:leave-start="opacity-100"
         x-transition:leave-end="opacity-0"
-        class="z-[9] bg-black bg-opacity-75 transition-opacity h-full w-full fixed inset-0 sm:hidden"
+        class="z-[9] bg-black/60 backdrop-blur-[2px] transition-opacity h-full w-full fixed inset-0 sm:hidden"
         x-show="$store.sidebar.open"
         @click.outside="$store.sidebar.open = false"
         @close.stop="$store.sidebar.open = false"
@@ -44,7 +61,7 @@
 </div>
 </body>
 <!-- Scripts -->
-<script src="{{ asset('js/app.js') }}?t=20220817"></script>
+<script src="{{ asset('js/app.js') }}?t=20260928ui"></script>
 @include('common.notice')
 <script>
     // 开关组件默认值
