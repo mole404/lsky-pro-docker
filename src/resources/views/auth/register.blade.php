@@ -2,7 +2,7 @@
     <x-auth-card>
         <x-slot name="logo">
             <a href="/">
-                <x-application-logo class="w-20 h-20 fill-current text-gray-500 text-4xl" />
+                <x-application-logo class="w-20 h-20 fill-current text-ink-2 text-4xl" />
             </a>
         </x-slot>
 
@@ -46,7 +46,7 @@
             </div>
 
             <div class="flex items-center justify-end mt-4">
-                <a class="underline text-sm text-gray-600 hover:text-gray-900" href="{{ route('login') }}">
+                <a class="underline text-sm text-ink-2 hover:text-ink" href="{{ route('login') }}">
                     {{ __('Already registered?') }}
                 </a>
 

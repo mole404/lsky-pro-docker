@@ -7,21 +7,21 @@
 @endpush
 
 <x-app-layout>
-    <div class="relative flex justify-between items-center px-2 py-2 z-[3] top-0 left-0 right-0 bg-white border-solid border-b">
+    <div class="relative flex justify-between items-center px-2 py-2 z-[3] top-0 left-0 right-0 bg-surface border-solid border-b">
         <div class="space-x-2 flex justify-between items-center">
-            <a class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:getAlbums()"><i class="fas fa-bars text-blue-500"></i> 相册</a>
+            <a class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:getAlbums()"><i class="fas fa-bars text-brand"></i> 相册</a>
             <div class="flex-row hidden lg:flex">
-                <a data-operate="movements" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">移动到相册</a>
-                <a data-operate="remove" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">移出当前相册</a>
-                <a data-operate="permission" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">设置权限</a>
-                <a data-operate="detail" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">详细信息</a>
-                <a data-operate="rename" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">重命名</a>
-                <a data-operate="delete" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">删除</a>
+                <a data-operate="movements" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移动到相册</a>
+                <a data-operate="remove" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移出当前相册</a>
+                <a data-operate="permission" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">设置权限</a>
+                <a data-operate="detail" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
+                <a data-operate="rename" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
+                <a data-operate="delete" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
             </div>
             <div class="block lg:hidden">
                 <x-dropdown direction="right">
                     <x-slot name="trigger">
-                        <a class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)"><i class="fas fa-ellipsis-h text-blue-500"></i></a>
+                        <a class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)"><i class="fas fa-ellipsis-h text-brand"></i></a>
                     </x-slot>
 
                     <x-slot name="content">
@@ -37,12 +37,12 @@
             </div>
         </div>
         <div class="flex space-x-2 items-center">
-            <input type="text" id="search" class="px-2.5 py-1.5 border-0 outline-none rounded bg-gray-100 text-sm transition-all duration-300 hidden md:block md:w-36 md:hover:w-52 md:focus:w-52" placeholder="输入关键字搜索...">
+            <input type="text" id="search" class="px-2.5 py-1.5 border-0 outline-none rounded bg-surface-3 text-sm transition-all duration-300 hidden md:block md:w-36 md:hover:w-52 md:focus:w-52" placeholder="输入关键字搜索...">
             <x-dropdown direction="left">
                 <x-slot name="trigger">
-                    <a id="order" class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">
+                    <a id="order" class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
                         <span>最新</span>
-                        <i class="fas fa-sort-alpha-up text-blue-500"></i>
+                        <i class="fas fa-sort-alpha-up text-brand"></i>
                     </a>
                 </x-slot>
 
@@ -59,9 +59,9 @@
             </x-dropdown>
             <x-dropdown direction="left">
                 <x-slot name="trigger">
-                    <a id="permission" class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">
+                    <a id="permission" class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
                         <span>全部</span>
-                        <i class="fas fa-eye text-blue-500"></i>
+                        <i class="fas fa-eye text-brand"></i>
                     </a>
                 </x-slot>
 
@@ -82,11 +82,11 @@
             <div id="images-grid" class="dragselect"></div>
         </div>
         <!-- right drawer -->
-        <div id="drawer-mask" class="absolute hidden inset-0 bg-gray-500 bg-opacity-50 z-[2]" onclick="drawer.close()"></div>
-        <div id="drawer" class="absolute bg-white w-64 md:w-72 top-0 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
+        <div id="drawer-mask" class="absolute hidden inset-0 bg-surface-2 bg-opacity-50 z-[2]" onclick="drawer.close()"></div>
+        <div id="drawer" class="absolute bg-surface w-64 md:w-72 top-0 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
             <div class="flex justify-between items-center text-md px-3 py-1 border-b">
-                <span class="text-gray-600 truncate" id="drawer-title"></span>
-                <a href="javascript:drawer.close()" class="p-2"><i class="fas fa-times text-blue-500"></i></a>
+                <span class="text-ink-2 truncate" id="drawer-title"></span>
+                <a href="javascript:drawer.close()" class="p-2"><i class="fas fa-times text-brand"></i></a>
             </div>
             <div id="drawer-content" class="overflow-y-auto"></div>
         </div>
@@ -96,7 +96,7 @@
         <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
             <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                 <div class="p-1 text-xl sm:text-2xl">
-                    <i class="fas fa-check-circle block rounded-full bg-white text-white border border-gray-500"></i>
+                    <i class="fas fa-check-circle block rounded-full bg-white text-white border border-line-2"></i>
                 </div>
             </div>
             <div class="image-mask absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
@@ -114,20 +114,20 @@
             <div id="album-add" class="flex flex-col w-full hidden border rounded p-2">
                 <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
                 <form class="w-full space-y-2" action="/user/albums">
-                    <input type="text" class="w-full rounded px-2.5 py-1.5 text-sm border-0 bg-gray-200" name="name" placeholder="请输入名称">
-                    <textarea class="w-full resize-y rounded-md text-sm border-0 bg-gray-200" name="intro" placeholder="请输入简介"></textarea>
-                    <button class="w-full py-1 px-2 bg-indigo-500 text-white text-sm text-center tracking-wider font-semibold rounded-md">创建相册</button>
+                    <input type="text" class="w-full rounded px-2.5 py-1.5 text-sm border-0 bg-surface-3" name="name" placeholder="请输入名称">
+                    <textarea class="w-full resize-y rounded-md text-sm border-0 bg-surface-3" name="intro" placeholder="请输入简介"></textarea>
+                    <button class="w-full py-1 px-2 bg-brand text-white text-sm text-center tracking-wider font-semibold rounded-md">创建相册</button>
                 </form>
             </div>
         </div>
     </script>
 
     <script type="text/html" id="albums-item-tpl">
-        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item flex justify-between items-center group px-2 h-7 rounded w-full bg-gray-100 text-gray-800 hover:bg-blue-300 hover:text-white">
+        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item flex justify-between items-center group px-2 h-7 rounded-lg w-full bg-surface-2 text-ink hover:bg-surface-3 hover:text-ink">
             <span class="text-sm truncate w-[80%] name">__name__</span>
             <div class="flex items-center justify-center space-x-1 hidden group-hover:block">
                 <span class="update"><i class="fas fa-edit text-xs"></i></span>
-                <span class="delete"><i class="fas fa-trash-alt text-xs text-red-400"></i></span>
+                <span class="delete"><i class="fas fa-trash-alt text-xs text-danger"></i></span>
             </div>
             <span class="group-hover:hidden text-xs">__image_num__</span>
         </a>
@@ -137,9 +137,9 @@
         <div id="album-edit" data-id="__id__" class="flex flex-col w-full border rounded p-2">
             <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
             <form class="w-full space-y-2" action="/user/albums/__id__">
-                <input type="text" class="w-full rounded px-2.5 py-1.5 text-sm border-0 bg-gray-200" placeholder="请输入名称" name="name" value="__name__">
-                <textarea class="w-full resize-y rounded-md text-sm border-0 bg-gray-200" name="intro" placeholder="请输入简介">__intro__</textarea>
-                <button class="w-full py-1 px-2 bg-indigo-500 text-white text-sm text-center tracking-wider font-semibold rounded-md">确认修改</button>
+                <input type="text" class="w-full rounded px-2.5 py-1.5 text-sm border-0 bg-surface-3" placeholder="请输入名称" name="name" value="__name__">
+                <textarea class="w-full resize-y rounded-md text-sm border-0 bg-surface-3" name="intro" placeholder="请输入简介">__intro__</textarea>
+                <button class="w-full py-1 px-2 bg-brand text-white text-sm text-center tracking-wider font-semibold rounded-md">确认修改</button>
             </form>
         </div>
     </script>
@@ -148,51 +148,51 @@
         <div class="my-4 px-4 space-y-3">
             <div>
                 <span class="text-sm font-semibold">相册名称</span>
-                <p class="my-2 break-words text-gray-700">__album_name__</p>
+                <p class="my-2 break-words text-ink">__album_name__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">使用策略</div>
-                <p class="my-2 break-words text-gray-600">__strategy_name__</p>
+                <p class="my-2 break-words text-ink-2">__strategy_name__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">图片名称</div>
-                <p class="my-2 break-words text-gray-600">__filename__</p>
+                <p class="my-2 break-words text-ink-2">__filename__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">图片原始名称</div>
-                <p class="my-2 break-words text-gray-600">__origin_name__</p>
+                <p class="my-2 break-words text-ink-2">__origin_name__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">图片大小</div>
-                <p class="my-2 break-words text-gray-600">__size__</p>
+                <p class="my-2 break-words text-ink-2">__size__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">图片类型</div>
-                <p class="my-2 break-words text-gray-600">__mimetype__</p>
+                <p class="my-2 break-words text-ink-2">__mimetype__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">尺寸</div>
-                <p class="my-2 break-words text-gray-600">__width__ * __height__</p>
+                <p class="my-2 break-words text-ink-2">__width__ * __height__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">MD5</div>
-                <p class="my-2 break-words text-gray-600">__md5__</p>
+                <p class="my-2 break-words text-ink-2">__md5__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">SHA-128</div>
-                <p class="my-2 break-words text-gray-600">__sha1__</p>
+                <p class="my-2 break-words text-ink-2">__sha1__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">权限</div>
-                <p class="my-2 break-words text-gray-600">__permission__</p>
+                <p class="my-2 break-words text-ink-2">__permission__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">上传 IP</div>
-                <p class="my-2 break-words text-gray-600">__uploaded_ip__</p>
+                <p class="my-2 break-words text-ink-2">__uploaded_ip__</p>
             </div>
             <div>
                 <div class="text-sm font-semibold">上传时间</div>
-                <p class="my-2 break-words text-gray-600">__created_at__</p>
+                <p class="my-2 break-words text-ink-2">__created_at__</p>
             </div>
         </div>
     </script>
@@ -309,7 +309,7 @@
             }
 
             const getAlbums = (options, callback) => {
-                let title = '__title__ <i class="cursor-pointer fas fa-plus text-blue-500" onclick="$(\'#album-add\').toggleClass(\'hidden\')"></i>'.replace(/__title__/g, (options || {}).title || '我的相册');
+                let title = '__title__ <i class="cursor-pointer fas fa-plus text-brand" onclick="$(\'#album-add\').toggleClass(\'hidden\')"></i>'.replace(/__title__/g, (options || {}).title || '我的相册');
                 let content = $('#albums-container-tpl').html();
                 drawer.toggle(title, content, function () {
                     let $albums = $('#albums-container');
@@ -338,8 +338,8 @@
                                 if (albums[i].id === selectedAlbum.id) {
                                     // 选中的相册高亮
                                     item = item
-                                        .replace(/bg-gray-100/g, 'bg-blue-400')
-                                        .replace(/text-gray-800/g, 'text-white')
+                                        .replace(/bg-surface-2/g, 'bg-brand')
+                                        .replace(/text-ink/g, 'text-white')
                                 }
 
                                 html += item;

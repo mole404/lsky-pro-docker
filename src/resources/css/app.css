@@ -1,3 +1,200 @@
 @import 'tailwindcss/base';
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
+
+/*
+ |--------------------------------------------------------------------------
+ | 设计令牌（亮 / 暗两套）—— 全站唯一的颜色来源
+ |--------------------------------------------------------------------------
+ | 只在这里定义颜色，页面里一律用语义化 class（bg-surface / text-ink / border-line …）。
+ | 这样同一份标记在亮色和暗色下自动正确，不必到处写 dark: 变体，
+ | 也不会出现"某个角落忘了改，暗色下突然一片白"。
+ |
+ | 切暗色 = 给 <html> 加 .dark 类（见 layouts/app.blade.php 的首屏脚本 + resources/js/stores/theme.js）
+ */
+@layer base {
+    :root {
+        --lsky-bg: #f6f7f9;
+        --lsky-surface: #ffffff;
+        --lsky-surface-2: #fafbfc;
+        --lsky-surface-3: #f1f3f6;
+        --lsky-border: #e9ecf0;
+        --lsky-border-2: #dde2e8;
+        --lsky-text: #16191d;
+        --lsky-text-2: #5a6472;
+        --lsky-text-3: #8b95a3;
+        --lsky-accent: #2563eb;
+        --lsky-accent-hover: #1d4ed8;
+        --lsky-accent-soft: #eef4ff;
+        --lsky-danger: #dc2626;
+        --lsky-danger-soft: #fef2f2;
+        --lsky-shadow-card: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .05);
+        --lsky-shadow-pop: 0 6px 18px rgba(16, 24, 40, .08), 0 2px 6px rgba(16, 24, 40, .04);
+        --lsky-shadow-modal: 0 20px 50px rgba(16, 24, 40, .18);
+    }
+
+    html.dark {
+        --lsky-bg: #0f1216;
+        --lsky-surface: #161a20;
+        --lsky-surface-2: #1b2027;
+        --lsky-surface-3: #1f252e;
+        --lsky-border: #252b34;
+        --lsky-border-2: #313945;
+        --lsky-text: #e7ebf0;
+        --lsky-text-2: #9aa4b2;
+        --lsky-text-3: #6d7784;
+        --lsky-accent: #3b82f6;
+        --lsky-accent-hover: #60a5fa;
+        --lsky-accent-soft: #16233b;
+        --lsky-danger: #f87171;
+        --lsky-danger-soft: #2a1618;
+        --lsky-shadow-card: 0 1px 2px rgba(0, 0, 0, .35), 0 1px 3px rgba(0, 0, 0, .3);
+        --lsky-shadow-pop: 0 8px 22px rgba(0, 0, 0, .45);
+        --lsky-shadow-modal: 0 24px 60px rgba(0, 0, 0, .6);
+    }
+
+    /* 让浏览器原生控件（滚动条、日期选择器、表单默认配色）跟着主题走 */
+    html { color-scheme: light; }
+    html.dark { color-scheme: dark; }
+
+    body {
+        @apply bg-bg text-ink font-sans antialiased;
+        transition: background-color .2s ease, color .2s ease;
+    }
+
+    ::selection {
+        background: var(--lsky-accent);
+        color: #fff;
+    }
+
+    /* 键盘导航时给一致的蓝色描边（鼠标点击不打扰） */
+    :focus-visible {
+        outline: 2px solid var(--lsky-accent);
+        outline-offset: 1px;
+    }
+}
+
+/*
+ |--------------------------------------------------------------------------
+ | 组件层 —— 页面里优先用这些 class，视觉改动集中在这里
+ |--------------------------------------------------------------------------
+ */
+@layer components {
+    /* ---------- 卡片 ---------- */
+    .ls-card {
+        @apply bg-surface border border-line rounded-[10px];
+        box-shadow: var(--lsky-shadow-card);
+    }
+
+    .ls-card-hd {
+        @apply flex items-center justify-between px-4 py-3 border-b border-line text-[14px] font-semibold text-ink;
+    }
+
+    .ls-card-bd {
+        @apply p-4;
+    }
+
+    .ls-panel {
+        @apply bg-surface border border-line rounded-[10px] p-4;
+        box-shadow: var(--lsky-shadow-card);
+    }
+
+    /* ---------- 按钮 ---------- */
+    .ls-btn {
+        @apply inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-lg border border-line-2
+               bg-surface text-[13px] font-medium text-ink cursor-pointer whitespace-nowrap;
+        transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+    }
+
+    .ls-btn:hover { @apply bg-surface-2; }
+
+    .ls-btn:disabled,
+    .ls-btn.disabled {
+        @apply opacity-50 cursor-not-allowed;
+    }
+
+    .ls-btn-primary {
+        @apply bg-brand border-brand text-white;
+    }
+
+    .ls-btn-primary:hover {
+        background: var(--lsky-accent-hover);
+        border-color: var(--lsky-accent-hover);
+    }
+
+    .ls-btn-soft {
+        @apply text-brand;
+        background: var(--lsky-accent-soft);
+        border-color: transparent;
+    }
+
+    .ls-btn-danger {
+        @apply text-danger border-transparent;
+        background: var(--lsky-danger-soft);
+    }
+
+    .ls-btn-sm { @apply h-8 px-3 text-[12.5px]; }
+
+    /* ---------- 表单 ---------- */
+    .ls-input {
+        @apply block w-full h-9 px-3 rounded-lg border border-line-2 bg-surface text-[13.5px] text-ink;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    .ls-input:focus {
+        border-color: var(--lsky-accent);
+        box-shadow: 0 0 0 3px var(--lsky-accent-soft);
+    }
+
+    .ls-input::placeholder { @apply text-ink-3; }
+
+    .ls-label {
+        @apply block mb-1.5 text-[12.5px] font-medium text-ink-2;
+    }
+
+    /* ---------- 表格 ---------- */
+    .ls-table { @apply w-full border-collapse; }
+
+    .ls-th {
+        @apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-3 whitespace-nowrap;
+    }
+
+    .ls-td {
+        @apply px-4 py-3 text-[13.5px] text-ink border-t border-line align-middle;
+    }
+
+    .ls-tr:hover .ls-td { @apply bg-surface-2; }
+
+    /* ---------- 徽标 / 分组标题 ---------- */
+    .ls-badge {
+        @apply inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-surface-3 text-ink-2;
+    }
+
+    .ls-group-title {
+        @apply px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3;
+    }
+
+    /* ---------- 侧栏导航项 ---------- */
+    .ls-nav-item {
+        @apply flex items-center gap-2.5 h-9 px-3 rounded-lg text-[13.5px] text-ink-2;
+        transition: background-color .15s ease, color .15s ease;
+    }
+
+    .ls-nav-item:hover { @apply bg-surface-2 text-ink; }
+
+    .ls-nav-item.is-active {
+        @apply bg-brand-soft text-brand font-semibold;
+    }
+
+    /* ---------- 悬浮菜单（长按菜单的结构也吃这一套）---------- */
+    .ls-menu {
+        @apply bg-surface border border-line rounded-[10px] py-1 overflow-hidden;
+        box-shadow: var(--lsky-shadow-pop);
+    }
+
+    .ls-menu-item {
+        @apply block px-3.5 py-2 text-[13px] text-ink-2 truncate cursor-pointer;
+    }
+
+    .ls-menu-item:hover { @apply bg-surface-2 text-ink; }
+}

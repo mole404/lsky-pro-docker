@@ -4,12 +4,12 @@
     <div class="my-6 md:my-9">
         <form id="search-form" action="{{ route('admin.users') }}" method="get">
             <div class="mb-3 flex justify-between">
-                <select name="status" class="text-sm rounded-md bg-white border-transparent focus:border-gray-500 focus:bg-white focus:ring-0" onchange="$('#search-form').submit()">
+                <select name="status" class="text-sm rounded-md ls-input h-9 text-[13px]" onchange="$('#search-form').submit()">
                     @foreach($statuses as $key => $status)
                         <option value="{{ $key }}" {{ request('status', -1) == $key ? 'selected' : '' }}>{{ $status }}</option>
                     @endforeach
                 </select>
-                <input class="px-2 text-sm rounded-md bg-white border-transparent focus:border-gray-500 focus:bg-white focus:ring-0" name="keywords" placeholder="输入关键字回车搜索..." value="{{ request('keywords') }}" />
+                <input class="px-2 text-sm rounded-md ls-input h-9 text-[13px]" name="keywords" placeholder="输入关键字回车搜索..." value="{{ request('keywords') }}" />
             </div>
         </form>
 
@@ -31,9 +31,9 @@
                 <td class="px-6 py-4 whitespace-nowrap">{{ $user->status ? '正常' : '冻结' }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                     <a href="javascript:void(0)" data-operate="detail" class="text-teal-600 hover:text-teal-900">详细</a>
-                    <a href="{{ route('admin.user.edit', ['id' => $user->id]) }}" class="text-indigo-600 hover:text-indigo-900">编辑</a>
+                    <a href="{{ route('admin.user.edit', ['id' => $user->id]) }}" class="text-brand hover:opacity-80">编辑</a>
                     @if(Auth::user()->id != $user->id)
-                        <a href="javascript:void(0)" data-operate="delete" class="text-red-600 hover:text-red-900">删除</a>
+                        <a href="javascript:void(0)" data-operate="delete" class="text-danger hover:opacity-80">删除</a>
                     @endif
                 </td>
             </tr>
@@ -56,59 +56,59 @@
         <div class="flex w-full items-center justify-center py-4">
             <img class="rounded-full h-24 w-24" src="__avatar__">
         </div>
-        <div class="relative rounded-md bg-white mb-8 overflow-hidden">
+        <div class="relative rounded-md bg-surface mb-8 overflow-hidden">
             <dl>
-                <div class="bg-white px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">用户名</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 truncate">__name__</dd>
+                <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-ink-2">用户名</dt>
+                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__name__</dd>
                 </div>
             </dl>
             <dl>
-                <div class="bg-gray-50 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">邮箱</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 truncate">__email__</dd>
+                <div class="bg-surface-2 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-ink-2">邮箱</dt>
+                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__email__</dd>
                 </div>
             </dl>
             <dl>
-                <div class="bg-white px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">总容量</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 truncate">__capacity__</dd>
+                <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-ink-2">总容量</dt>
+                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__capacity__</dd>
                 </div>
             </dl>
             <dl>
-                <div class="bg-gray-50 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">剩余容量</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 truncate">__surplus_capacity__</dd>
+                <div class="bg-surface-2 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-ink-2">剩余容量</dt>
+                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__surplus_capacity__</dd>
                 </div>
             </dl>
             <dl>
-                <div class="bg-white px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">图片数量</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 truncate">__image_num__</dd>
+                <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-ink-2">图片数量</dt>
+                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__image_num__</dd>
                 </div>
             </dl>
             <dl>
-                <div class="bg-gray-50 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">相册数量</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 truncate">__album_num__</dd>
+                <div class="bg-surface-2 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-ink-2">相册数量</dt>
+                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__album_num__</dd>
                 </div>
             </dl>
             <dl>
-                <div class="bg-white px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">注册 IP</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 truncate">__registered_ip__</dd>
+                <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-ink-2">注册 IP</dt>
+                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__registered_ip__</dd>
                 </div>
             </dl>
             <dl>
-                <div class="bg-gray-50 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">邮箱验证时间</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 truncate">__email_verified_at__</dd>
+                <div class="bg-surface-2 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-ink-2">邮箱验证时间</dt>
+                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__email_verified_at__</dd>
                 </div>
             </dl>
             <dl>
-                <div class="bg-white px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">注册时间</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 truncate">__created_at__</dd>
+                <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-ink-2">注册时间</dt>
+                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__created_at__</dd>
                 </div>
             </dl>
         </div>
@@ -129,7 +129,7 @@
                     .replace(/__image_num__/g, user.image_num)
                     .replace(/__album_num__/g, user.album_num)
                     .replace(/__registered_ip__/g, user.registered_ip || '-')
-                    .replace(/__status__/g, user.status === 1 ? '<span class="text-green-500">正常</span>' : '<span class="text-red-500">冻结</span>')
+                    .replace(/__status__/g, user.status === 1 ? '<span class="text-green-500">正常</span>' : '<span class="text-danger">冻结</span>')
                     .replace(/__email_verified_at__/g, user.email_verified_at || '-')
                     .replace(/__created_at__/g, user.created_at);
 

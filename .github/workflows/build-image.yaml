@@ -34,10 +34,10 @@ env:
   # 从 Dockerfile 解析（单一事实来源）。
   # 原因（真事故）：这里曾硬编码 911275c，Dockerfile 升到 38d52c46 后它没跟着改，
   # 于是新镜像被贴上了「911275c」这个 represent-旧快照的 tag → 用那个 tag 回滚会拿到新代码。
-  # 补丁后 context-js.js 的 md5（Dockerfile 里也断言了同一份）
-  CONTEXT_JS_MD5: e114c840101d021aa416239196925624
-  # 补丁后 images.blade.php 的 md5（blade 里改了资源版本串就会变）
-  BLADE_MD5: f4e100c87d4becdcce163800db535775
+  # 补丁文件（context-js.js / images.blade.php）的期望 md5 **不在这里写死**，
+  # 由下方校验步骤从 Dockerfile 的 .code-revision 生成段解析（单一事实来源）。
+  # 原因（同类事故第二次）：这里曾硬编码 f4e100c8，界面改造改了 blade 之后没跟着改，
+  # 于是镜像明明是对的（构建期 md5sum -c 已断言过），却被这一步判成失败。
   # 上游快照里的数据库迁移文件个数。换 pin 时若这个数变了，说明有 schema 变更，
   # 而 entrypoint 不会自动跑 migrate —— 那种情况必须人工处理，所以在 CI 里钉住提醒。
   UPSTREAM_MIGRATION_COUNT: "10"
@@ -192,17 +192,30 @@ jobs:
           ')
           echo "$REPORT"
 
+          # 期望值从 Dockerfile 解析（单一事实来源；构建期已用 md5sum -c 断言过这些常量）
+          EXP_CTX=$(grep -oE 'context_js_md5=[0-9a-f]{32}' Dockerfile | head -1 | cut -d= -f2)
+          EXP_BLADE=$(grep -oE 'images_blade_md5=[0-9a-f]{32}' Dockerfile | head -1 | cut -d= -f2)
+          if [ -z "$EXP_CTX" ] || [ -z "$EXP_BLADE" ]; then
+            echo "::error::无法从 Dockerfile 解析补丁 md5（.code-revision 生成段里的 *_md5= 常量）"
+            exit 1
+          fi
+          echo "期望值（取自 Dockerfile）：context-js=$EXP_CTX  blade=$EXP_BLADE"
+          # 后面还有其它步骤（同步/数据安全校验）也要用这两个值 —— 导出到 GITHUB_ENV，
+          # 避免"删了 env 常量但某个步骤还在引用"这种漏改（本次就是这么红的）
+          echo "EXP_CTX=$EXP_CTX" >> "$GITHUB_ENV"
+          echo "EXP_BLADE=$EXP_BLADE" >> "$GITHUB_ENV"
+
           ACTUAL=$(echo "$REPORT" | awk '/context-js\/context-js.js$/ {print $1}')
-          if [ "$ACTUAL" != "${CONTEXT_JS_MD5}" ]; then
-            echo "::error::镜像里的 context-js.js（$ACTUAL）与预期补丁（${CONTEXT_JS_MD5}）不一致"
+          if [ "$ACTUAL" != "$EXP_CTX" ]; then
+            echo "::error::镜像里的 context-js.js（$ACTUAL）与预期补丁（$EXP_CTX）不一致"
             exit 1
           fi
           echo "补丁文件 md5 校验通过：$ACTUAL"
 
           # blade 也要核：它决定浏览器拿到的资源版本串，漏了就白改
           BLADE_ACTUAL=$(echo "$REPORT" | awk '/user\/images.blade.php$/ {print $1}')
-          if [ "$BLADE_ACTUAL" != "${BLADE_MD5}" ]; then
-            echo "::error::镜像里的 images.blade.php（$BLADE_ACTUAL）与预期（${BLADE_MD5}）不一致"
+          if [ "$BLADE_ACTUAL" != "$EXP_BLADE" ]; then
+            echo "::error::镜像里的 images.blade.php（$BLADE_ACTUAL）与预期（$EXP_BLADE）不一致"
             exit 1
           fi
           echo "blade md5 校验通过：$BLADE_ACTUAL"
@@ -267,8 +280,8 @@ jobs:
           # 端到端：验 Apache 真正吐给浏览器的 JS（不是磁盘上的文件）
           SERVED_JS=$(curl -s http://127.0.0.1:18089/js/context-js/context-js.js | md5sum | awk '{print $1}')
           echo "Apache 对外吐出的 context-js.js md5：$SERVED_JS"
-          if [ "$SERVED_JS" != "${CONTEXT_JS_MD5}" ]; then
-            echo "::error::Apache 吐出的 JS（$SERVED_JS）不是补丁版（${CONTEXT_JS_MD5}）"
+          if [ "$SERVED_JS" != "$EXP_CTX" ]; then
+            echo "::error::Apache 吐出的 JS（$SERVED_JS）不是补丁版（$EXP_CTX）"
             exit 1
           fi
           docker exec lsky-smoke php -r 'echo "artisan 可用："; echo file_exists("/var/www/html/artisan") ? "yes" : "no"; echo PHP_EOL;'
@@ -378,7 +391,7 @@ jobs:
           done
           docker logs lsky-b 2>&1 | grep '\[lsky\]' || true
           docker logs lsky-b 2>&1 | grep -q '已同步进卷' || { echo "::error::旧标记时没有走同步分支"; exit 1; }
-          docker exec lsky-b md5sum /var/www/html/public/js/context-js/context-js.js | grep -q "$CONTEXT_JS_MD5" || { echo "::error::同步后卷里的 JS 不是镜像版本"; exit 1; }
+          docker exec lsky-b md5sum /var/www/html/public/js/context-js/context-js.js | grep -q "$EXP_CTX" || { echo "::error::同步后卷里的 JS 不是镜像版本"; exit 1; }
 
           B=$(docker exec lsky-b sh -c '
             echo "JS_MD5=$(md5sum /var/www/html/public/js/context-js/context-js.js | cut -d" " -f1)"
@@ -392,8 +405,8 @@ jobs:
             echo "COMPILED_VIEWS=$(ls /var/www/html/storage/framework/views/ | wc -l)"
           ')
           echo "$B"
-          echo "$B" | grep -q "JS_MD5=${CONTEXT_JS_MD5}"           || { echo "::error::已有卷里的补丁 JS 没被同步成镜像版本"; exit 1; }
-          echo "$B" | grep -q "BLADE_MD5=${BLADE_MD5}"             || { echo "::error::已有卷里的 blade 没被同步"; exit 1; }
+          echo "$B" | grep -q "JS_MD5=$EXP_CTX"           || { echo "::error::已有卷里的补丁 JS 没被同步成镜像版本"; exit 1; }
+          echo "$B" | grep -q "BLADE_MD5=$EXP_BLADE"             || { echo "::error::已有卷里的 blade 没被同步"; exit 1; }
           echo "$B" | grep -q "HANDBOOK_GONE=0"                    || { echo "::error::旧版本的手工改动没被同步覆盖（换镜像应等于换代码）"; exit 1; }
           echo "$B" | grep -q "ENV_SENTINEL=1"                     || { echo "::error::.env 被覆盖了（会丢 APP_KEY / S3 配置）"; exit 1; }
           # 注：.env 的权限位不在这里断言 —— 上游 entrypoint 自带 `chmod -R 755 /var/www/html/`，
@@ -446,11 +459,11 @@ jobs:
           SERVED=d41d8cd98f00b204e9800998ecf8427e
           for i in $(seq 1 30); do
             SERVED=$(docker exec lsky-c sh -c 'curl -s http://127.0.0.1:8089/js/context-js/context-js.js | md5sum | cut -d" " -f1' 2>/dev/null || true)
-            if [ "$SERVED" = "$CONTEXT_JS_MD5" ]; then break; fi
+            if [ "$SERVED" = "$EXP_CTX" ]; then break; fi
             sleep 2
           done
           echo "对外服务的 JS md5（Apache 实际吐出）=$SERVED"
-          [ "$SERVED" = "$CONTEXT_JS_MD5" ] || { echo "::error::跳过后对外服务的 JS 不是补丁版（期望 $CONTEXT_JS_MD5）"; exit 1; }
+          [ "$SERVED" = "$EXP_CTX" ] || { echo "::error::跳过后对外服务的 JS 不是补丁版（期望 $EXP_CTX）"; exit 1; }
           echo "C) 通过：同版本跳过同步、手动修补保留、对外服务的 JS 仍是补丁版"
 
           echo "== 同步开销（只在标记不一致时发生，纯信息不影响结论）=="
@@ -464,7 +477,8 @@ jobs:
       - name: Promote verified image to latest
         # 试构建（手动指定 php_version 且与 Dockerfile 默认不同）只保留不可变 tag，不动 latest：
         # 免得"还没定案的版本"变成线上 `docker compose pull` 的目标。
-        if: steps.pin.outputs.is_test_build != 'true'
+        # 只有 master 上的构建才许动 latest：分支上的试构建（含 UI 改造）绝不能把线上拉取目标改掉
+        if: steps.pin.outputs.is_test_build != 'true' && github.ref == 'refs/heads/master'
         run: |
           set -euo pipefail
           # pin 从 Dockerfile 解析（不要再写死：曾经漂移过一次，把新镜像贴上了旧 pin 的 tag）

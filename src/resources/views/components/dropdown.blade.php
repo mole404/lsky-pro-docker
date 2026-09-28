@@ -12,7 +12,7 @@
          x-transition:leave="transition ease-in duration-75"
          x-transition:leave-start="transform opacity-100 translate-y-0"
          x-transition:leave-end="transform opacity-0 translate-y-9"
-         class="absolute z-[9] {{ $classes[$direction] }} mt-2 w-48 rounded-md shadow-[10px_0px_50px_-15px_rgba(0,0,0,0.25)] py-1 bg-white "
+         class="ls-menu absolute z-[9] {{ $classes[$direction] }} mt-2 w-48"
          role="menu"
          aria-orientation="vertical"
          aria-labelledby="user-menu-button"

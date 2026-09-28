@@ -297,7 +297,28 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 4. 同步 `workflow` 的 `CONTEXT_JS_MD5` / `BLADE_MD5`；动了补丁就把 blade 的 `?v=ios-longpressN` 递增一位
 5. `cd test && npm test`，然后推 master 等 CI 全绿
 
-### 运行时版本与依赖（2026-09-28 复核）
+### 界面（2026-09-28 换新）
+
+- 风格：清爽极简（白底卡片 + 细边框 + 蓝色强调色），支持 **亮色 / 暗色 / 跟随系统** 三态，
+  顶栏和登录页右上角可切换，选择记在浏览器本地（`localStorage['lsky-theme']`）。
+- 实现要点：颜色全部来自 `resources/css/app.css` 里的 CSS 变量，页面只写语义化 class
+  （`bg-surface` / `text-ink` / `border-line`），所以同一份标记在亮暗下都正确，不会出现"某个角落忘了改"。
+- **功能逻辑一行未改**：iOS 长按菜单（`context-js.js`，md5 被构建自证钉住）、点击防护、
+  上传队列、图片选择、拖拽排序等交互全部保持原样；只改样式与排版。
+- 上游原来从 Google Fonts 拉 Nunito，已改为系统字体栈（国内加载更快，中文也更自然）。
+
+### 重建前端资源
+
+产物（`public/css/*.css`、`public/js/app.js`）是**提交进仓库**的，Docker 构建不跑 npm。
+改样式/模板后需要本地重建，**Node 请用 18 或 20**（Node 22+ 会因 laravel-mix 6 的依赖链报
+`require is not defined in ES module scope`）：
+
+```bash
+cd src
+npm ci && npm run prod      # 产物直接覆盖 public/ 下的文件
+```
+
+## 运行时版本与依赖（2026-09-28 复核）
 
 - **PHP：8.3**（`Dockerfile` 的 `ARG PHP_VERSION`）。理由：8.1 已 EOL（2025-12-31），8.2 的 EOL 是
   2026-12-31，8.3 支持到 2027-12-31。配套把依赖升到同线最新：`laravel/framework` **9.52.21**
