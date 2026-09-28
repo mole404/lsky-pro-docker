@@ -19,9 +19,9 @@ env:
   # 与 Dockerfile 里的 LSKY_COMMIT 保持一致，用于打第二个可追溯的 tag
   LSKY_COMMIT: 911275c13b038c7a8b710de44664f23887eeb6f6
   # 补丁后 context-js.js 的 md5（Dockerfile 里也断言了同一份）
-  CONTEXT_JS_MD5: 64ead77d518007cbf4a22f42e3404017
+  CONTEXT_JS_MD5: e114c840101d021aa416239196925624
   # 补丁后 images.blade.php 的 md5（blade 里改了资源版本串就会变）
-  BLADE_MD5: 2c9380a6af19953ba6ccdd78f503797e
+  BLADE_MD5: f4e100c87d4becdcce163800db535775
 
 jobs:
   build:
@@ -121,7 +121,9 @@ jobs:
             echo "== 长按阈值 =="
             grep -n "LONG_PRESS_DELAY = " /var/www/lsky/public/js/context-js/context-js.js
             echo "== 菜单交互补丁（标记行）=="
-            grep -n -e "MENU_OPEN_GRACE = " -e "installMenuGuard()" -e "touch-open" -e "isMenuOpen" /var/www/lsky/public/js/context-js/context-js.js | head -20
+            grep -n -e "MENU_OPEN_GRACE = " -e "installMenuGuard()" -e "touch-open" -e "isMenuOpen" \
+                    -e "MENU_OPEN_IGNORE_INPUT" -e "function menuOnScreen" -e "debugDump" \
+                    /var/www/lsky/public/js/context-js/context-js.js | head -20
             echo "== 补丁文件 md5 =="
             md5sum /var/www/lsky/public/js/context-js/context-js.js
             md5sum /var/www/lsky/resources/js/context-js.js
@@ -154,13 +156,14 @@ jobs:
           echo "长按阈值 250ms 校验通过"
 
           # 菜单交互修复必须在镜像里（点菜单外只关菜单、触摸端二级菜单、滚动/缩放/Esc 关闭）
-          for marker in 'installMenuGuard' 'MENU_OPEN_GRACE' 'touch-open' 'isMenuOpen'; do
+          for marker in 'installMenuGuard' 'MENU_OPEN_GRACE' 'touch-open' 'isMenuOpen' \
+                          'MENU_OPEN_IGNORE_INPUT' 'menuOnScreen' 'debugDump'; do
             if ! echo "$REPORT" | grep -q "$marker"; then
               echo "::error::镜像里的补丁缺少菜单交互修复标记：$marker"
               exit 1
             fi
           done
-          echo "菜单交互修复标记校验通过（installMenuGuard / MENU_OPEN_GRACE / touch-open / isMenuOpen）"
+          echo "菜单交互修复标记校验通过（installMenuGuard / MENU_OPEN_GRACE / touch-open / isMenuOpen / MENU_OPEN_IGNORE_INPUT / menuOnScreen / debugDump）"
 
           # 线上是 SQLite 数据库，扩展缺失会让站点直接挂，钉死这条断言
           if ! echo "$REPORT" | grep -q pdo_sqlite=1; then

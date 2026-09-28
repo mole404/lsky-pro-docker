@@ -66,11 +66,11 @@ COPY overlay/images.blade.php ./resources/views/user/images.blade.php
 # 自证 2：补丁确实落盘、内容与预期完全一致；blade 的版本串也在。
 # 以后改 overlay/ 里的文件，记得同步更新这里的 md5（故意做成"改了不更新就构建失败"）。
 RUN printf '%s\n' \
-        '64ead77d518007cbf4a22f42e3404017  ./public/js/context-js/context-js.js' \
-        '64ead77d518007cbf4a22f42e3404017  ./resources/js/context-js.js' \
-        '2c9380a6af19953ba6ccdd78f503797e  ./resources/views/user/images.blade.php' \
+        'e114c840101d021aa416239196925624  ./public/js/context-js/context-js.js' \
+        'e114c840101d021aa416239196925624  ./resources/js/context-js.js' \
+        'f4e100c87d4becdcce163800db535775  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
-    && grep -q "context-js.js') . '?v=ios-longpress3'" ./resources/views/user/images.blade.php \
+    && grep -q "context-js.js') . '?v=ios-longpress4'" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
     && grep -q 'LONG_PRESS_DELAY = 250' ./public/js/context-js/context-js.js \
     && grep -q 'LONG_PRESS_DELAY = 250' ./resources/js/context-js.js \
@@ -83,8 +83,8 @@ RUN printf '%s\n' \
 RUN printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
-        "context_js_md5=64ead77d518007cbf4a22f42e3404017" \
-        "images_blade_md5=2c9380a6af19953ba6ccdd78f503797e" \
+        "context_js_md5=e114c840101d021aa416239196925624" \
+        "images_blade_md5=f4e100c87d4becdcce163800db535775" \
         > .code-revision \
     && cat .code-revision
 
