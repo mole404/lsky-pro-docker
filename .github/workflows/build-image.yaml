@@ -121,7 +121,7 @@ jobs:
             echo "== 长按阈值 =="
             grep -n "LONG_PRESS_DELAY = " /var/www/lsky/public/js/context-js/context-js.js
             echo "== 菜单交互补丁（标记行）=="
-            grep -n -e "MENU_OPEN_GRACE = " -e "installMenuGuard()" -e "touch-open" /var/www/lsky/public/js/context-js/context-js.js | head -20
+            grep -n -e "MENU_OPEN_GRACE = " -e "installMenuGuard()" -e "touch-open" -e "isMenuOpen" /var/www/lsky/public/js/context-js/context-js.js | head -20
             echo "== 补丁文件 md5 =="
             md5sum /var/www/lsky/public/js/context-js/context-js.js
             md5sum /var/www/lsky/resources/js/context-js.js
