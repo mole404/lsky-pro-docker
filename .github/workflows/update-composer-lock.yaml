@@ -42,14 +42,22 @@ jobs:
           echo "解析用 PHP：$PHPVER"
           docker run --rm -v "$PWD/src:/app" -w /app \
             -e PACKAGES="$PACKAGES" \
+            -e PHPVER="$PHPVER" \
             "php:${PHPVER}-cli" bash -lc '
               set -euo pipefail
               apt-get update -qq >/dev/null
               apt-get install -yqq git unzip >/dev/null
               curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer >/dev/null
               composer --version
+              # 诊断：先说清楚"为什么当前依赖集上不了这个 PHP 版本"
+              echo "=== composer why-not php $PHPVER（谁把版本卡住了） ==="
+              composer why-not "php" "$PHPVER" --no-interaction || true
+              echo "=== 当前 lock 的平台要求 ==="
+              composer check-platform-reqs --no-interaction || true
+              # ext-ftp 只是这个裸容器里没有（生产镜像有），不影响求解
               # --with-all-dependencies：允许连带升级这些包的下级依赖（否则常被旧约束卡住）
-              composer update --with-all-dependencies --no-interaction --no-progress $PACKAGES
+              composer update --with-all-dependencies --no-interaction --no-progress \
+                --ignore-platform-req=ext-ftp $PACKAGES
               composer validate --no-check-publish
               echo "=== composer audit（升级后的已知漏洞，仅供参考） ==="
               composer audit --no-interaction || true

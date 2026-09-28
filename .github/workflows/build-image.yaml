@@ -186,6 +186,8 @@ jobs:
             cat /var/www/lsky/.code-revision
             echo "== PHP 版本 =="
             php -v | head -1
+            echo "== 已装扩展（整份 dump，供人工比对 lock 的 ext-* 要求）=="
+            php -m | sort | paste -sd, -
           ')
           echo "$REPORT"
 
