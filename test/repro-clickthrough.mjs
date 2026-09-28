@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 
-const LIB = process.argv[2];
-const here = '/root/.hermes/cache/scratch/lsky/work/test';
+const here = path.dirname(decodeURIComponent(new URL(import.meta.url).pathname));
+const LIB = process.argv[2] || path.join(here, '..', 'src', 'public', 'js', 'context-js', 'context-js.js');
 const JQUERY_SRC = fs.readFileSync(path.join(here, 'node_modules/jquery/dist/jquery.js'), 'utf8');
 const LIB_SRC = fs.readFileSync(LIB, 'utf8');
 const UA_WIN = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';

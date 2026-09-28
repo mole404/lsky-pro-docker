@@ -34,7 +34,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # 补丁的行为测试（jsdom + jQuery）。镜像里那份 context-js.js 就是 overlay/context-js.js，
+      # 补丁的行为测试（jsdom + jQuery）。镜像里那份 context-js.js 就是 src/ 里的补丁版本，
       # 所以这里跑绿 = iOS 长按 / 菜单收放 / 触摸端二级菜单的每条分支都过了一遍。
       # 放在构建之前：补丁写错了就早点红，不用白等十几分钟构建。
       - name: Behavior tests (jsdom)
@@ -76,7 +76,7 @@ jobs:
 
       # ------------------------------------------------------------------
       # 自证：不只看「构建成功」，而是把推上去的镜像拉回来实测
-      #   1. 核对补丁文件 md5（确认 overlay 真的进了镜像）
+      #   1. 核对补丁文件 md5（确认 src/ 里的补丁真的进了镜像）
       #   2. 记录 PHP / 扩展 / Debian / ImageMagick 版本（换基础镜像时的对比基线）
       #   3. 关键扩展硬断言（pdo_sqlite 缺了线上 SQLite 站点直接挂）
       #   4. 真起一个容器 curl 首页，确认 Apache + PHP + 应用真的能跑

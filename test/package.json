@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node longpress.test.mjs ../overlay/context-js.js"
+    "test": "node longpress.test.mjs",
+    "repro": "node repro-clickthrough.mjs"
   },
   "devDependencies": {
     "jquery": "3.7.1",

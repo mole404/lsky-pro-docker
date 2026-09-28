@@ -1,19 +1,28 @@
 # ---------------------------------------------------------------------------
 # Lsky Pro Docker 镜像 —— mole404/lsky-pro-docker
-# （上游：https://github.com/HalcyonAzure/lsky-pro-docker ，AGPL-3.0）
 #
-# 与上游的差异（详见 README）：
-#   1. 源码钉死在 LSKY_COMMIT，不再在构建时拉 master，镜像内容不会随上游漂移
-#   2. 叠加 overlay/ 里的前端补丁：修复 iOS Safari 长按无法弹出图床自定义菜单的问题
+# 上游应用：https://github.com/lsky-org/lsky-pro           （GPL-3.0，官方已停止维护）
+# 上游镜像：https://github.com/HalcyonAzure/lsky-pro-docker （AGPL-3.0，本仓库由它衍生）
+#
+# 本仓库 = 上游应用源码快照（vendored 在 src/）+ Docker 构建脚本 + 少量前端补丁。
+#
+# 与上游镜像的差异（详见 README）：
+#   1. 应用源码**已 vendored 进本仓库**（src/ = 上游 commit 38d52c46… 即 2025-11-24 的 master 完整树）。
+#      构建不再联网拉 GitHub archive：上游已明示停止维护，万一仓库被删/归档/改名也还能重建镜像；
+#      之后要改 PHP 代码，直接改 src/ 下的文件、提交即可，不用再维护 overlay 叠加。
+#   2. 前端补丁已就地落在 src/ 里（iOS Safari 长按弹菜单 + 菜单交互修复）。
+#      "我们相对上游改了什么"见 patches/ios-longpress.patch，可用 tools/diff-vs-upstream.sh 重新生成/核对。
 #   3. 基础镜像显式写成 Debian bookworm 变体（与 2024-04 那版线上镜像同一 Debian 大版本）
 #   4. install-php-extensions 钉到具体版本，不再用 latest
-#   5. 构建期自证：源码快照与补丁产物都用 md5 断言，对不上直接构建失败
+#   5. 构建期自证：① 我们从不修改的上游文件按上游 md5 校验（快照没被动过）
+#      ② 补丁产物按预期 md5 校验（改了不更新期望值就构建失败）
 #
 # 构建：docker build -t lsky-pro-docker .
 # ---------------------------------------------------------------------------
 
-# 上游源码快照：911275c 是 2024-04-29 构建的 halcyonazure/lsky-pro-docker:latest 所使用的 master HEAD
-ARG LSKY_COMMIT=911275c13b038c7a8b710de44664f23887eeb6f6
+# 上游源码快照的版本号（只用于版本标记与镜像元数据；代码本体是仓库里的 src/）。
+# 改这里 = 必须同时用 tools/vendor-upstream.sh 重新 vendor src/，否则标记与实际代码不符（自证 1 会失败）。
+ARG LSKY_COMMIT=38d52c4609eb85236b45ac75acac2ced55174953
 ARG PHP_VERSION=8.1
 ARG DEBIAN_RELEASE=bookworm
 ARG PHP_EXT_INSTALLER_VERSION=2.12.0
@@ -27,44 +36,42 @@ WORKDIR /build
 
 # 安装必要的依赖
 RUN apt-get update && \
-    apt-get install -y curl unzip && \
+    apt-get install -y curl && \
     curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# 拉取钉死的源码快照（上游原本是拉 refs/heads/master）
-RUN curl -sSL -o lsky.zip "https://github.com/lsky-org/lsky-pro/archive/${LSKY_COMMIT}.zip" \
-    && unzip lsky.zip \
-    && mv "./lsky-pro-${LSKY_COMMIT}"/* ./ \
-    && mv "./lsky-pro-${LSKY_COMMIT}/.env.example" ./ \
-    && rm -rf lsky.zip "lsky-pro-${LSKY_COMMIT}"
+# 应用源码：本仓库 src/ 里的 vendored 快照（= 上游那个 commit 的完整树，304 个文件）。
+# 前端补丁已经就地在 src/ 里改好，这里不做任何"叠加覆盖"。改代码 = 改 src/ 然后提交。
+COPY src/ /build/
 
-# 自证 1：确认拉到的确实是预期的那份上游快照。
-# 对不上说明上游 archive 变了或 LSKY_COMMIT 被改错，直接让构建失败，不要产出不可信的镜像。
+# 自证 1：vendored 快照确实是上游那一版。
+# 下面这些文件我们从不修改，md5 全部等于上游原值；任何一处对不上都说明 src/ 被误改
+# （或与 LSKY_COMMIT 不符）→ 直接构建失败，不产出不可信的镜像。
 RUN printf '%s\n' \
-        'bab81ff5e43b50a760935c7b3ae6475c  ./public/js/context-js/context-js.js' \
-        'a7bcd8549c656501a057214637f10b45  ./app/Services/ImageService.php' \
-        '674975e4e5561cc15c27626cb1ce5233  ./config/convention.php' \
-        '22c896eb7322ec2ff37d5eddd7ca0dec  ./resources/views/user/images.blade.php' \
+        '9fb843806abd6b778d8acd3366e2f0f1  ./app/Services/ImageService.php' \
+        'c1adde95924944e07bd72e87bd5db2f7  ./config/convention.php' \
+        '3b58bff18126a61c142cc576457c82a6  ./public/index.php' \
+        '12b10ff822d7deb281664d6ff0c2c1e2  ./routes/web.php' \
+        'c9f7a17cc136bf1dbd5c83fcbd14b7d1  ./composer.lock' \
     | md5sum -c -
 
 RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
     && composer install
 
 # ---------------------------------------------------------------------------
-# fork 补丁：iOS 长按菜单修复
+# fork 补丁：iOS 长按菜单修复 + 菜单交互修复（已就地在 src/ 里，这里只做校验）
 #
-# overlay/context-js.js 同时写到两个位置：
-#   resources/js/context-js.js         —— 补丁的可读源码
-#   public/js/context-js/context-js.js —— 浏览器实际加载的那份
+# 补丁涉及三个文件（两份 JS 内容必须一致，别只改一份）：
+#   src/resources/js/context-js.js             —— 可读源码
+#   src/public/js/context-js/context-js.js     —— 浏览器实际加载的那份
+#   src/resources/views/user/images.blade.php  —— 引入脚本那一行（资源版本串）
 # （上游 webpack.mix.js 里本来也是 mix.copy('resources/js/context-js.js', 'public/js/context-js')，
 #  只是仓库里 public/ 下那份是旧工具链留下的压缩产物，一直没跟着源码更新。）
 # ---------------------------------------------------------------------------
-COPY overlay/context-js.js ./resources/js/context-js.js
-COPY overlay/context-js.js ./public/js/context-js/context-js.js
-COPY overlay/images.blade.php ./resources/views/user/images.blade.php
 
-# 自证 2：补丁确实落盘、内容与预期完全一致；blade 的版本串也在。
-# 以后改 overlay/ 里的文件，记得同步更新这里的 md5（故意做成"改了不更新就构建失败"）。
+# 自证 2：补丁内容与预期完全一致，blade 的资源版本串也在。
+# 改 src/ 里这三个文件后必须同步更新这里的 md5（故意做成"改了不更新就构建失败"），
+# 并重新生成 patches/ios-longpress.patch（tools/diff-vs-upstream.sh）。
 RUN printf '%s\n' \
         'e114c840101d021aa416239196925624  ./public/js/context-js/context-js.js' \
         'e114c840101d021aa416239196925624  ./resources/js/context-js.js' \
@@ -80,6 +87,7 @@ RUN printf '%s\n' \
 
 # 代码版本标记：入口脚本用它判断「卷里的代码是不是当前镜像这一版」，不一致才同步（见 entrypoint.sh）。
 # 它由源码 commit + 补丁 md5 组成，正好是上面刚断言过的值 —— 任何代码/补丁变化都会让它变。
+# 改 src/ 下任何文件（哪怕一行）后，都要把对应的 md5 一并更新，否则容器不会重新同步进卷。
 RUN printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
@@ -96,7 +104,7 @@ ARG FORK_SHA=unknown
 
 LABEL org.opencontainers.image.source="https://github.com/mole404/lsky-pro-docker" \
       org.opencontainers.image.title="lsky-pro-docker (ios-longpress + menu-ux)" \
-      org.opencontainers.image.description="Lsky Pro 图床的 Docker 镜像；源码钉在 lsky-org/lsky-pro@${LSKY_COMMIT}，并叠加 iOS 长按菜单修复与菜单交互修复（点菜单外只关菜单、触摸端二级菜单点击展开、滚动/缩放/Esc 关闭）" \
+      org.opencontainers.image.description="Lsky Pro 图床的 Docker 镜像；应用源码 vendored 取自 lsky-org/lsky-pro@${LSKY_COMMIT}（构建不再依赖上游在线），并在其上做了 iOS 长按菜单修复与菜单交互修复（点菜单外只关菜单、触摸端二级菜单点击展开、滚动/缩放/Esc 关闭）" \
       org.opencontainers.image.licenses="AGPL-3.0" \
       org.opencontainers.image.revision="${FORK_SHA}" \
       lsky.source.commit="${LSKY_COMMIT}"

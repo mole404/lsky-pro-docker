@@ -1,0 +1,10 @@
+# 构建上下文里只需要这些：Dockerfile、src/、ssl/、*.template、entrypoint.sh
+# 其余都是仓库自己的东西，进上下文只会拖慢构建（尤其 test/node_modules）
+.git
+.github
+test
+patches
+tools
+docker-compose.yaml
+README.md
+*.md

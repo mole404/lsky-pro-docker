@@ -17,7 +17,8 @@ import { JSDOM } from 'jsdom';
 
 const here = path.dirname(decodeURIComponent(new URL(import.meta.url).pathname));
 const JQUERY_SRC = fs.readFileSync(path.join(here, 'node_modules/jquery/dist/jquery.js'), 'utf8');
-const LIB_PATH = process.argv[2] || path.join(here, '..', 'overlay', 'context-js.js');
+// 默认测"浏览器实际加载的那份"（src/ 下与可读源码是同内容的两份拷贝，下面会断言它们一致）
+const LIB_PATH = process.argv[2] || path.join(here, '..', 'src', 'public', 'js', 'context-js', 'context-js.js');
 const LIB_SRC = fs.readFileSync(LIB_PATH, 'utf8');
 
 const UA = {
@@ -141,6 +142,22 @@ const menuOpen = (window) => window.eval('context.isMenuOpen()');
 const submenuLi = (window) => window.document.querySelector('.dropdown-submenu');
 const submenuLink = (window) => window.document.querySelector('.dropdown-submenu > a');
 const openSub = (window) => !!window.document.querySelector('.dropdown-submenu.touch-open');
+
+// ---------------------------------------------------------------- 结构自检
+// 上游里这个脚本有两份拷贝：resources/js（可读源码）与 public/js（浏览器实际加载）。
+// 别只改一份 —— 这里直接比对两份文件，不一致就报错（Dockerfile 的自证也会各自断言 md5）。
+{
+    const srcCopy = fs.readFileSync(path.join(here, '..', 'src', 'resources', 'js', 'context-js.js'), 'utf8');
+    const pubCopy = fs.readFileSync(path.join(here, '..', 'src', 'public', 'js', 'context-js', 'context-js.js'), 'utf8');
+    check('src/ 里两份 context-js.js 内容一致（resources/js 与 public/js）', srcCopy === pubCopy,
+        srcCopy === pubCopy ? '' : '两份不一致！浏览器加载的是 public/js 那份，别只改 resources/js');
+    const blade = fs.readFileSync(path.join(here, '..', 'src', 'resources', 'views', 'user', 'images.blade.php'), 'utf8');
+    // 找"同时含 context-js.js 和 ?v="的那一行（文件里还有一行注释也提到 context-js.js，别被它骗了）
+    const vline = blade.split('\n').find((l) => l.includes('context-js.js') && l.includes('?v=')) || '';
+    const m = vline.match(/\?v=([\w.-]+)/);
+    check('images.blade.php 里 context-js.js 那行带了资源版本串 ?v=…（每次改补丁要递增，否则 Safari 会吐缓存）', !!m,
+        m ? 'v=' + m[1] : ('那行没找到版本串：' + vline.trim()));
+}
 
 // ---------------------------------------------------------------- iPhone
 console.log('\n[iPhone Safari] 长按应弹出图床自己的菜单');

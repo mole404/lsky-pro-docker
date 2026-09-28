@@ -14,7 +14,7 @@
 ```bash
 cd test
 npm install
-npm test                       # 测 ../overlay/context-js.js
+npm test                       # 测 ../src/public/js/context-js/context-js.js
 node longpress.test.mjs /path/to/other/context-js.js   # 测指定的文件（例如未打补丁的原版）
 node repro-clickthrough.mjs /path/to/context-js.js     # 最小复现：滚动关菜单后紧接着点图片，会不会点穿
 ```
