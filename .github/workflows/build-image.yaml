@@ -174,70 +174,118 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ------------------------------------------------------------------
-      # 强制同步自证（本次新增的数据安全关键路径）
-      #   1. 已有部署的卷：旧代码必须被镜像版本覆盖（换镜像 = 代码也换）
-      #   2. .env / database / storage / bootstrap/cache 一个都不许被碰
-      #   3. 编译视图缓存被清掉（否则 blade 改动不生效）
+      # 代码同步自证（数据安全关键路径；按镜像版本标记条件触发）
+      #   A) 空卷：必须播种；且绝不能把镜像里的 .env 带进空卷
+      #      （实测踩过：带进去了 → Lsky 安装向导 500，全新建站直接挂）
+      #   B) 已有卷 + 旧版本标记：代码必须同步成镜像版本，.env / database /
+      #      storage / bootstrap/cache 一个都不许被碰，编译视图缓存要清
+      #   C) 已有卷 + 同版本标记：必须跳过同步（不白写整棵应用树，手动修补保留）
       # 任何一条不满足就 exit 1 —— 自证不过就不会 promote latest。
       # ------------------------------------------------------------------
-      - name: Verify forced code sync (existing volume, data must survive)
+      - name: Verify code sync (revision-gated) and data safety
         env:
           IMAGE_REF: ${{ env.IMAGE }}:sha-${{ github.sha }}
         run: |
           set -euo pipefail
           VOL=lsky-sync-test
-          docker rm -f lsky-seed lsky-resync >/dev/null 2>&1 || true
+          docker rm -f lsky-a lsky-b lsky-c >/dev/null 2>&1 || true
           docker volume rm -f "$VOL" >/dev/null 2>&1 || true
 
-          echo "== 1) 空卷首次启动（应全量播种）=="
-          docker run -d --name lsky-seed -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
-          for i in $(seq 1 30); do docker exec lsky-seed test -f /var/www/html/public/index.php && break; sleep 2; done
-          docker exec lsky-seed test -f /var/www/html/public/index.php && echo "空卷播种 OK"
-          docker rm -f lsky-seed >/dev/null
+          echo "== A) 空卷首次启动：应播种，且卷里不能出现 .env =="
+          docker run -d --name lsky-a -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
+          A=000
+          for i in $(seq 1 30); do
+            A=$(docker exec lsky-a sh -c 'curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8089/install || true' 2>/dev/null || true)
+            [ "$A" = "200" ] && break
+            sleep 2
+          done
+          echo "全新建站安装页 HTTP：$A"
+          if [ "$A" != "200" ]; then
+            docker logs lsky-a || true
+            echo "::error::空卷播种后安装页不是 200（HTTP $A）"
+            exit 1
+          fi
+          docker exec lsky-a sh -c '
+            echo "IDX=$(test -f /var/www/html/public/index.php && echo yes || echo no)"
+            echo "ENVFILE=$(test -e /var/www/html/.env && echo present || echo absent)"
+            echo "MARKER=$(head -1 /var/www/html/.code-revision 2>/dev/null || echo none)"
+          '
+          if [ "$(docker exec lsky-a sh -c 'test -e /var/www/html/.env && echo present || echo absent')" != "absent" ]; then
+            echo "::error::空卷里出现了镜像的 .env —— 这正是会让安装向导 500 的坑"
+            exit 1
+          fi
+          docker exec lsky-a test -f /var/www/html/.code-revision || { echo "::error::空卷里没有版本标记"; exit 1; }
+          echo "A) 通过：空卷已播种、无 .env、有版本标记、安装页 200"
+          docker rm -f lsky-a >/dev/null
 
-          echo "== 2) 把卷改造成已有部署：旧代码 + 自己的配置/数据/缓存 =="
+          echo "== B) 已有卷 + 旧版本标记：应自动同步代码，数据与配置一项都不许变 =="
           docker run --rm -v "$VOL":/var/www/html --entrypoint sh "$IMAGE_REF" -c '
             set -e
+            echo "fork_sha=STALE" > /var/www/html/.code-revision
             echo "// OLD cached js" > /var/www/html/public/js/context-js/context-js.js
+            echo "<?php // 手动修补过" > /var/www/html/app/Services/ImageService.php
             printf "APP_KEY=SENTINEL_KEEP_ME\n" >> /var/www/html/.env
-            mkdir -p /var/www/html/database
+            chmod 640 /var/www/html/.env
+            mkdir -p /var/www/html/database /var/www/html/storage/framework/views /var/www/html/storage/app/uploads /var/www/html/bootstrap/cache
             echo "SENTINEL_DB" > /var/www/html/database/database.sqlite
-            mkdir -p /var/www/html/storage/framework/views /var/www/html/storage/app/uploads /var/www/html/bootstrap/cache
-            echo "SENTINEL_COMPILED_VIEW" > /var/www/html/storage/framework/views/deadbeef.php
             echo "SENTINEL_UPLOAD" > /var/www/html/storage/app/uploads/keepme.txt
+            echo "SENTINEL_COMPILED_VIEW" > /var/www/html/storage/framework/views/deadbeef.php
             echo "SENTINEL_CONFIG_CACHE" > /var/www/html/bootstrap/cache/config.php
           '
 
-          echo "== 3) 再次启动（应走强制同步分支）=="
-          docker run -d --name lsky-resync -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
+          docker run -d --name lsky-b -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
           for i in $(seq 1 30); do
-            if docker exec lsky-resync md5sum /var/www/html/public/js/context-js/context-js.js 2>/dev/null | grep -q "$CONTEXT_JS_MD5"; then break; fi
+            if docker exec lsky-b md5sum /var/www/html/public/js/context-js/context-js.js 2>/dev/null | grep -q "$CONTEXT_JS_MD5"; then break; fi
             sleep 2
           done
+          docker logs lsky-b 2>&1 | grep '\[lsky\]' || true
+          docker logs lsky-b 2>&1 | grep -q '已同步进卷' || { echo "::error::旧标记时没有走同步分支"; exit 1; }
 
-          REPORT=$(docker exec lsky-resync sh -c '
+          B=$(docker exec lsky-b sh -c '
             echo "JS_MD5=$(md5sum /var/www/html/public/js/context-js/context-js.js | cut -d" " -f1)"
             echo "BLADE_MD5=$(md5sum /var/www/html/resources/views/user/images.blade.php | cut -d" " -f1)"
+            echo "HANDBOOK_GONE=$(grep -c 手动修补过 /var/www/html/app/Services/ImageService.php || true)"
             echo "ENV_SENTINEL=$(grep -c SENTINEL_KEEP_ME /var/www/html/.env || true)"
+            echo "ENV_MODE=$(stat -c %a /var/www/html/.env)"
             echo "DB_SENTINEL=$(cat /var/www/html/database/database.sqlite)"
             echo "UPLOAD_SENTINEL=$(cat /var/www/html/storage/app/uploads/keepme.txt)"
             echo "CONFIG_CACHE=$(cat /var/www/html/bootstrap/cache/config.php)"
             echo "COMPILED_VIEWS=$(ls /var/www/html/storage/framework/views/ | wc -l)"
           ')
-          echo "$REPORT"
+          echo "$B"
+          echo "$B" | grep -q "JS_MD5=${CONTEXT_JS_MD5}"           || { echo "::error::已有卷里的补丁 JS 没被同步成镜像版本"; exit 1; }
+          echo "$B" | grep -q "BLADE_MD5=${BLADE_MD5}"             || { echo "::error::已有卷里的 blade 没被同步"; exit 1; }
+          echo "$B" | grep -q "HANDBOOK_GONE=0"                    || { echo "::error::旧版本的手工改动没被同步覆盖（换镜像应等于换代码）"; exit 1; }
+          echo "$B" | grep -q "ENV_SENTINEL=1"                     || { echo "::error::.env 被覆盖了（会丢 APP_KEY / S3 配置）"; exit 1; }
+          echo "$B" | grep -q "ENV_MODE=640"                       || { echo "::error::.env 的权限位被改了"; exit 1; }
+          echo "$B" | grep -q "DB_SENTINEL=SENTINEL_DB"            || { echo "::error::数据库文件被覆盖了"; exit 1; }
+          echo "$B" | grep -q "UPLOAD_SENTINEL=SENTINEL_UPLOAD"    || { echo "::error::上传文件被覆盖了"; exit 1; }
+          echo "$B" | grep -q "CONFIG_CACHE=SENTINEL_CONFIG_CACHE" || { echo "::error::bootstrap/cache 被动过"; exit 1; }
+          echo "$B" | grep -q "COMPILED_VIEWS=0"                   || { echo "::error::编译视图缓存没清，blade 改动不会生效"; exit 1; }
+          echo "B) 通过：代码已同步，.env / 数据库 / 上传 / 配置缓存均未被碰，视图缓存已清"
 
-          echo "$REPORT" | grep -q "JS_MD5=${CONTEXT_JS_MD5}"            || { echo "::error::已有卷里的补丁 JS 没被同步成镜像版本"; exit 1; }
-          echo "$REPORT" | grep -q "BLADE_MD5=${BLADE_MD5}"              || { echo "::error::已有卷里的 blade 没被同步"; exit 1; }
-          echo "$REPORT" | grep -q "ENV_SENTINEL=1"                     || { echo "::error::.env 被覆盖了（会丢 APP_KEY / S3 配置）"; exit 1; }
-          echo "$REPORT" | grep -q "DB_SENTINEL=SENTINEL_DB"            || { echo "::error::数据库文件被覆盖了"; exit 1; }
-          echo "$REPORT" | grep -q "UPLOAD_SENTINEL=SENTINEL_UPLOAD"    || { echo "::error::上传文件被覆盖了"; exit 1; }
-          echo "$REPORT" | grep -q "CONFIG_CACHE=SENTINEL_CONFIG_CACHE" || { echo "::error::bootstrap/cache 被动过"; exit 1; }
-          echo "$REPORT" | grep -q "COMPILED_VIEWS=0"                   || { echo "::error::编译视图缓存没清，blade 改动不会生效"; exit 1; }
-          echo "强制同步自证通过：代码已更新，.env / 数据库 / 上传 / 配置缓存均未被碰"
+          echo "== C) 已有卷 + 同版本标记：必须跳过同步（手动修补保留）=="
+          docker rm -f lsky-b >/dev/null
+          docker run --rm -v "$VOL":/var/www/html --entrypoint sh "$IMAGE_REF" -c 'echo "<?php // 手动修补过" > /var/www/html/app/Services/ImageService.php'
+          docker run -d --name lsky-c -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
+          for i in $(seq 1 20); do
+            docker logs lsky-c 2>&1 | grep -q '\[lsky\]' && break
+            sleep 1
+          done
+          docker logs lsky-c 2>&1 | grep '\[lsky\]' || true
+          docker logs lsky-c 2>&1 | grep -q '跳过同步' || { echo "::error::同版本标记时应跳过同步"; exit 1; }
+          C=$(docker exec lsky-c sh -c '
+            echo "HANDBOOK_KEPT=$(grep -c 手动修补过 /var/www/html/app/Services/ImageService.php || true)"
+            echo "SERVED_JS=$(curl -s http://127.0.0.1:8089/js/context-js/context-js.js | md5sum | cut -d" " -f1)"
+          ')
+          echo "$C"
+          echo "$C" | grep -q "HANDBOOK_KEPT=1"            || { echo "::error::同版本时手动修补被覆盖了（不该同步）"; exit 1; }
+          echo "$C" | grep -q "SERVED_JS=${CONTEXT_JS_MD5}" || { echo "::error::跳过后对外服务的 JS 不是补丁版"; exit 1; }
+          echo "C) 通过：同版本跳过同步、手动修补保留、对外服务的 JS 仍是补丁版"
 
-          echo "== 4) 同步开销（每次启动多花的拷贝时间）=="
+          echo "== 同步开销（只在标记不一致时发生）=="
           docker run --rm --entrypoint sh "$IMAGE_REF" -c 'du -sh /var/www/lsky; cd /var/www/lsky && time tar cf - --exclude=./.env --exclude=./storage --exclude=./database --exclude=./bootstrap/cache --exclude=./public/i . > /dev/null'
-          docker rm -f lsky-resync >/dev/null 2>&1 || true
+          docker rm -f lsky-c >/dev/null 2>&1 || true
           docker volume rm -f "$VOL" >/dev/null 2>&1 || true
 
       # 自证全过之后才动 latest：验证失败时 latest 保持在上一个已知可用版本
