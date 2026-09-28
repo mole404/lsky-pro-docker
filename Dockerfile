@@ -42,6 +42,9 @@ WORKDIR /build
 #   curl  —— 装 composer
 #   unzip —— composer 解压 dist 包要用（去掉它会导致 composer install 直接失败：CI 实测踩过）
 #   git   —— 部分包会走 source 安装时的兜底
+RUN docker-php-ext-install ftp
+
+# 依赖安装（builder 阶段的平台要求必须满足，否则 composer install 直接失败）
 RUN apt-get update && \
     apt-get install -y curl unzip git && \
     curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && \
@@ -136,11 +139,15 @@ RUN curl -sSL -o /usr/local/bin/install-php-extensions \
 # 开启SSL
 RUN a2enmod ssl && a2ensite default-ssl
 
+# ftp 必须**显式**装进运行时镜像：官方 php:8.1 镜像自带 ftp，php:8.3 的没有
+# （2026-09-28 换 8.3 时 CI 实测：builder 阶段 composer install 直接失败，
+#  报 league/flysystem-ftp requires ext-ftp）。它是 Lsky 的 FTP 存储驱动要用的扩展，
+# 不能依赖"从基镜像继承"。CI 里也加了 ftp 的硬断言。
 RUN apt-get update && \
     apt-get install -y gettext && \
     apt-get clean && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/*  && \
     a2enmod rewrite && chmod +x /usr/local/bin/install-php-extensions && \
-    install-php-extensions imagick bcmath pdo_mysql pdo_pgsql redis && \
+    install-php-extensions imagick bcmath pdo_mysql pdo_pgsql redis ftp && \
     \
     { \
     echo 'post_max_size = 100M;';\
