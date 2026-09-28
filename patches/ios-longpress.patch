@@ -36,7 +36,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   3f845ab5321c2605dcd0f369290fcc7b  src/resources/js/context-js.js
 #   3f845ab5321c2605dcd0f369290fcc7b  src/public/js/context-js/context-js.js
-#   6fbd6760fc153286c6844a631b99ad65  src/resources/views/user/images.blade.php
+#   2afe66b758040d0a341a43e9862b2f57  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
@@ -2040,9 +2040,10 @@
 +        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item flex justify-between items-center group px-2 h-7 rounded-lg w-full bg-surface-2 text-ink hover:bg-surface-3 hover:text-ink">
              <span class="text-sm truncate w-[80%] name">__name__</span>
              <div class="flex items-center justify-center space-x-1 hidden group-hover:block">
-                 <span class="update"><i class="fas fa-edit text-xs"></i></span>
+-                <span class="update"><i class="fas fa-edit text-xs"></i></span>
 -                <span class="delete"><i class="fas fa-trash-alt text-xs text-red-400"></i></span>
-+                <span class="delete"><i class="fas fa-trash-alt text-xs text-danger"></i></span>
++                <span class="update"><i class="fas fa-edit text-[13.5px]"></i></span>
++                <span class="delete"><i class="fas fa-trash-alt text-[13.5px] text-danger"></i></span>
              </div>
 -            <span class="group-hover:hidden text-xs">__image_num__</span>
 +            <span class="group-hover:hidden text-[13.5px]">__image_num__</span>
