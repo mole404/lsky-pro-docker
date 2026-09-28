@@ -11,17 +11,36 @@ on:
   push:
     branches:
       - master
+  # 只用于「试构建」：临时换 PHP 版本验证兼容性，不改仓库里的默认值。
+  # 留空 = 用 Dockerfile 里的 ARG PHP_VERSION。
   workflow_dispatch:
+    inputs:
+      php_version:
+        description: '试构建用的 PHP 版本（如 8.2 / 8.3；留空则用 Dockerfile 里的值）'
+        required: false
+        default: ''
+        type: string
+
+# 串行化：连着推两次时排队执行（不打断正在跑的构建），
+# 保证最后 promote 到 latest 的一定是最新那次提交的产物。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   TZ: Asia/Shanghai
   IMAGE: ghcr.io/mole404/lsky-pro-docker
-  # 与 Dockerfile 里的 LSKY_COMMIT 保持一致，用于打第二个可追溯的 tag
-  LSKY_COMMIT: 911275c13b038c7a8b710de44664f23887eeb6f6
+  # 注意：上游 pin 与 PHP 版本**不在这里写死**，由「Resolve pinned values from Dockerfile」
+  # 从 Dockerfile 解析（单一事实来源）。
+  # 原因（真事故）：这里曾硬编码 911275c，Dockerfile 升到 38d52c46 后它没跟着改，
+  # 于是新镜像被贴上了「911275c」这个 represent-旧快照的 tag → 用那个 tag 回滚会拿到新代码。
   # 补丁后 context-js.js 的 md5（Dockerfile 里也断言了同一份）
   CONTEXT_JS_MD5: e114c840101d021aa416239196925624
   # 补丁后 images.blade.php 的 md5（blade 里改了资源版本串就会变）
   BLADE_MD5: f4e100c87d4becdcce163800db535775
+  # 上游快照里的数据库迁移文件个数。换 pin 时若这个数变了，说明有 schema 变更，
+  # 而 entrypoint 不会自动跑 migrate —— 那种情况必须人工处理，所以在 CI 里钉住提醒。
+  UPSTREAM_MIGRATION_COUNT: "10"
 
 jobs:
   build:
@@ -32,7 +51,32 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # 上游 pin 与 PHP 版本从 Dockerfile 解析 —— 单一事实来源，杜绝 workflow/Dockerfile 漂移
+      - name: Resolve pinned values from Dockerfile
+        id: pin
+        env:
+          # 走 env 传参，不把 input 直接拼进 shell 脚本（避免脚本注入）
+          REQ_PHP_INPUT: ${{ inputs.php_version }}
+        run: |
+          set -euo pipefail
+          PIN=$(grep -oE '^ARG LSKY_COMMIT=[0-9a-f]+' Dockerfile | cut -d= -f2)
+          DEF_PHP=$(grep -oE '^ARG PHP_VERSION=[0-9.]+' Dockerfile | cut -d= -f2)
+          [ -n "$PIN" ] || { echo "::error::Dockerfile 里没找到 ARG LSKY_COMMIT"; exit 1; }
+          [ -n "$DEF_PHP" ] || { echo "::error::Dockerfile 里没找到 ARG PHP_VERSION"; exit 1; }
+          REQ_PHP="${REQ_PHP_INPUT:-$DEF_PHP}"
+          echo "pin=$PIN" >> "$GITHUB_OUTPUT"
+          echo "php_version=$REQ_PHP" >> "$GITHUB_OUTPUT"
+          echo "上游 pin = $PIN"
+          echo "本次构建 PHP = $REQ_PHP（Dockerfile 默认 $DEF_PHP）"
+          # 迁移数守卫：换 pin 时若上游新增迁移，这里报红，提醒必须人工评估 schema 变更
+          N=$(ls src/database/migrations/*.php 2>/dev/null | wc -l | tr -d ' ')
+          echo "上游迁移文件数 = $N（基线 ${UPSTREAM_MIGRATION_COUNT}）"
+          if [ "$N" != "${UPSTREAM_MIGRATION_COUNT}" ]; then
+            echo "::error::上游迁移文件数从 ${UPSTREAM_MIGRATION_COUNT} 变成 $N —— entrypoint 不会自动 migrate，必须人工处理"
+            exit 1
+          fi
 
       # 补丁的行为测试（jsdom + jQuery）。镜像里那份 context-js.js 就是 src/ 里的补丁版本，
       # 所以这里跑绿 = iOS 长按 / 菜单收放 / 触摸端二级菜单的每条分支都过了一遍。
@@ -45,13 +89,13 @@ jobs:
           npm test
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -61,7 +105,7 @@ jobs:
       # 只构建 amd64：老师这台 VPS 是 x86_64，arm64 白烧一半构建时间（2026-09-28 定）。
       # 以后真要 arm64，把 platforms 改回 linux/amd64,linux/arm64 即可，其余步骤不用动。
       - name: Build and push (linux/amd64)
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: ./Dockerfile
@@ -71,6 +115,7 @@ jobs:
             ${{ env.IMAGE }}:sha-${{ github.sha }}
           build-args: |
             FORK_SHA=${{ github.sha }}
+            PHP_VERSION=${{ steps.pin.outputs.php_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -130,6 +175,10 @@ jobs:
             md5sum /var/www/lsky/resources/views/user/images.blade.php
             echo "== 应用入口 =="
             ls -l /var/www/lsky/public/index.php
+            echo "== 代码版本标记 .code-revision =="
+            cat /var/www/lsky/.code-revision
+            echo "== PHP 版本 =="
+            php -v | head -1
           ')
           echo "$REPORT"
 
@@ -171,6 +220,22 @@ jobs:
             exit 1
           fi
           echo "关键扩展断言通过（pdo_sqlite / sqlite3 等）"
+
+          # 镜像里的上游 pin 必须等于 Dockerfile 里的 pin（防止再次出现"标记漂移"）
+          MARKER_PIN=$(echo "$REPORT" | awk -F= '/^lsky_commit=/ {print $2}')
+          if [ "$MARKER_PIN" != "${{ steps.pin.outputs.pin }}" ]; then
+            echo "::error::镜像里的 lsky_commit（$MARKER_PIN）与 Dockerfile 的 pin（${{ steps.pin.outputs.pin }}）不一致"
+            exit 1
+          fi
+          echo "上游 pin 校验通过：$MARKER_PIN"
+
+          # PHP 版本必须是本次请求的那个（build-arg 真的生效了）
+          PHP_ACTUAL=$(echo "$REPORT" | sed -n 's/^PHP \([0-9]*\.[0-9]*\).*/\1/p')
+          if [ "$PHP_ACTUAL" != "${{ steps.pin.outputs.php_version }}" ]; then
+            echo "::error::镜像里的 PHP 版本（$PHP_ACTUAL）与本次请求的（${{ steps.pin.outputs.php_version }}）不一致"
+            exit 1
+          fi
+          echo "PHP 版本校验通过：$PHP_ACTUAL"
 
           # 真起一次容器：默认 8089 端口，入口脚本会把应用播种到 /var/www/html
           docker run -d --name lsky-smoke -p 18089:8089 -e WEB_PORT=8089 "$IMAGE_REF"
@@ -362,10 +427,12 @@ jobs:
       - name: Promote verified image to latest
         run: |
           set -euo pipefail
+          # pin 从 Dockerfile 解析（不要再写死：曾经漂移过一次，把新镜像贴上了旧 pin 的 tag）
+          PIN="${{ steps.pin.outputs.pin }}"
           docker buildx imagetools create \
             -t "${IMAGE}:latest" \
-            -t "${IMAGE}:${LSKY_COMMIT}" \
+            -t "${IMAGE}:${PIN}" \
             "${IMAGE}:sha-${GITHUB_SHA}"
-          echo "已把 sha-${GITHUB_SHA} 提升为 :latest 与 :${LSKY_COMMIT}"
+          echo "已把 sha-${GITHUB_SHA} 提升为 :latest 与 :${PIN}"
           docker buildx imagetools inspect "${IMAGE}:latest" > /tmp/promoted.txt
           head -20 /tmp/promoted.txt
