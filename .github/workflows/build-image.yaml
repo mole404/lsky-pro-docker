@@ -195,8 +195,11 @@ jobs:
           # 关键：Lsky 的安装向导自己会创建 .env，所以必须在**发任何 HTTP 请求之前**
           # 检查 .env 是否已经存在，否则分不清"镜像泄漏"和"向导生成"。
           docker run -d --name lsky-a -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
-          for i in $(seq 1 30); do
-            if docker exec lsky-a test -f /var/www/html/public/index.php; then break; fi
+          # 完成信号必须用「该分支最后写的东西」：播种分支的顺序是 cp 整个应用树（115MB，
+          # 其中 index.php 在字母序里很早就拷完）→ 再拷 .env.example → 最后拷版本标记。
+          # 拿 index.php 当完成信号会假失败（实测踩过），所以盯标记。
+          for i in $(seq 1 60); do
+            if docker exec lsky-a test -f /var/www/html/.code-revision; then break; fi
             sleep 2
           done
           docker exec lsky-a test -f /var/www/html/public/index.php || { echo "::error::空卷没被播种"; exit 1; }
@@ -248,12 +251,15 @@ jobs:
           '
 
           docker run -d --name lsky-b -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
-          for i in $(seq 1 30); do
-            if docker exec lsky-b md5sum /var/www/html/public/js/context-js/context-js.js 2>/dev/null | grep -q "$CONTEXT_JS_MD5"; then break; fi
+          # 同样：同步分支的日志行是在 tar 写完之后才 echo 的，拿它当完成信号，
+          # 避免在 tar 还在写卷的时候就去断言（会读到中间状态）。
+          for i in $(seq 1 60); do
+            if docker logs lsky-b 2>&1 | grep -q '已同步进卷'; then break; fi
             sleep 2
           done
           docker logs lsky-b 2>&1 | grep '\[lsky\]' || true
           docker logs lsky-b 2>&1 | grep -q '已同步进卷' || { echo "::error::旧标记时没有走同步分支"; exit 1; }
+          docker exec lsky-b md5sum /var/www/html/public/js/context-js/context-js.js | grep -q "$CONTEXT_JS_MD5" || { echo "::error::同步后卷里的 JS 不是镜像版本"; exit 1; }
 
           B=$(docker exec lsky-b sh -c '
             echo "JS_MD5=$(md5sum /var/www/html/public/js/context-js/context-js.js | cut -d" " -f1)"
