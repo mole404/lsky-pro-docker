@@ -11,18 +11,18 @@
             <div class="grid-sizer"></div>
             @foreach($images as $image)
                 <div class="grid-item">
-                    <div class="relative bg-white rounded-md overflow-hidden">
+                    <div class="relative bg-surface rounded-md overflow-hidden">
                         @if($image->extension === 'gif')
-                            <span class="absolute top-1 right-1 z-[1] bg-white rounded-md text-sm px-1 py-0">Gif</span>
+                            <span class="absolute top-1 right-1 z-[1] bg-surface rounded-md text-sm px-1 py-0">Gif</span>
                         @endif
                         <a target="_blank" href="{{ $image->url }}">
                             <div class="relative overflow-hidden w-full h-32">
                                 <img class="grow object-cover object-center w-full h-full" src="{{ $image->thumb_url }}"/>
                             </div>
                         </a>
-                        <a target="_blank" href="{{ $image->user->url ?: 'javascript:void(0)' }}" class="flex justify-between items-center px-3 py-2 bg-white overflow-hidden group">
+                        <a target="_blank" href="{{ $image->user->url ?: 'javascript:void(0)' }}" class="flex justify-between items-center px-3 py-2 bg-surface overflow-hidden group">
                             <img src="{{ $image->user->avatar }}" class="w-6 h-6 rounded-full">
-                            <p class="ml-2 truncate group-hover:text-blue-500">{{ $image->user->name }}</p>
+                            <p class="ml-2 truncate group-hover:text-brand">{{ $image->user->name }}</p>
                         </a>
                     </div>
                 </div>

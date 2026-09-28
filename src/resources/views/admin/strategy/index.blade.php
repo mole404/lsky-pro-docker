@@ -5,7 +5,7 @@
         <form action="{{ route('admin.strategies') }}" method="get">
             <div class="mb-3 flex justify-between w-full">
                 <x-button type="button" onclick="window.location.href = '{{ route('admin.strategy.create') }}'">创建储存策略</x-button>
-                <input class="px-2 text-sm rounded-md bg-white border-transparent focus:border-gray-500 focus:bg-white focus:ring-0" name="keywords" placeholder="输入名称回车搜索..." value="{{ request('keywords') }}" />
+                <input class="px-2 text-sm rounded-md ls-input h-9 text-[13px]" name="keywords" placeholder="输入名称回车搜索..." value="{{ request('keywords') }}" />
             </div>
         </form>
 
@@ -22,8 +22,8 @@
                 <td class="px-6 py-4 whitespace-nowrap">{{ $strategy->images_count }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">{{ \App\Utils::formatSize($strategy->images_sum_size * 1024) }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <a href="{{ route('admin.strategy.edit', ['id' => $strategy->id]) }}" class="text-indigo-600 hover:text-indigo-900">编辑</a>
-                    <a href="javascript:void(0)" data-operate="delete" class="text-red-600 hover:text-red-900">删除</a>
+                    <a href="{{ route('admin.strategy.edit', ['id' => $strategy->id]) }}" class="text-brand hover:opacity-80">编辑</a>
+                    <a href="javascript:void(0)" data-operate="delete" class="text-danger hover:opacity-80">删除</a>
                 </td>
             </tr>
             @endforeach

@@ -464,7 +464,8 @@ jobs:
       - name: Promote verified image to latest
         # 试构建（手动指定 php_version 且与 Dockerfile 默认不同）只保留不可变 tag，不动 latest：
         # 免得"还没定案的版本"变成线上 `docker compose pull` 的目标。
-        if: steps.pin.outputs.is_test_build != 'true'
+        # 只有 master 上的构建才许动 latest：分支上的试构建（含 UI 改造）绝不能把线上拉取目标改掉
+        if: steps.pin.outputs.is_test_build != 'true' && github.ref == 'refs/heads/master'
         run: |
           set -euo pipefail
           # pin 从 Dockerfile 解析（不要再写死：曾经漂移过一次，把新镜像贴上了旧 pin 的 tag）
