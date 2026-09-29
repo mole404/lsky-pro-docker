@@ -4,9 +4,9 @@
 }">
     <div class="ls-brand px-5 h-14 flex justify-between items-center border-b border-line">
         <a href="/" class="flex items-center gap-2.5 truncate">
-            <span class="w-7 h-7 rounded-lg bg-brand text-white flex items-center justify-center shrink-0">
-                <i class="fas fa-image text-[13.5px]"></i>
-            </span>
+            {{-- fork：左上角改用 Lsky Pro 官方 logo（透明底，不套背景方块）--}}
+            <img src="{{ asset('static/lsky-logo.png') . '?v=' . \App\Utils::assetVersion('static/lsky-logo.png') }}"
+                 alt="" width="28" height="28" decoding="async" class="w-7 h-7 shrink-0 select-none">
             <span class="ls-brand-name text-[15px] font-semibold text-ink truncate">{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</span>
         </a>
         <a href="javascript:void(0)" class="sm:hidden block w-8 h-8 rounded-lg flex items-center justify-center text-ink-2 hover:bg-surface-2"
