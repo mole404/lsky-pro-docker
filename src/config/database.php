@@ -41,6 +41,21 @@ return [
             'database' => env('DB_DATABASE', database_path('database.sqlite')),
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
+            // --- 并发参数（B9）-------------------------------------------------------------
+            // Laravel 9.52 的 sqlite 驱动**不认** journal_mode / busy_timeout 这两个 config 键：
+            //   Illuminate\Database\Connectors\SQLiteConnector::connect() 只读 database/options；
+            //   Illuminate\Database\SQLiteConnection 只额外读 foreign_key_constraints；
+            //   Connector::getOptions() 只取 $config['options']。
+            // 所以在这里写 'journal_mode' => 'wal' 是**死键**、会被静默忽略（实测过）。
+            // busy_timeout 有 config 路径：PDO::ATTR_TIMEOUT（单位秒 → SQLite 毫秒，5 = 5000）。
+            // 注意：pdo_sqlite 的默认值本来就是 60000ms，这里刻意**收紧**到 5 秒 —— 写锁竞争时
+            // 宁可让请求快速失败，也不要让一个 HTTP 请求挂在锁上 60 秒（真正防「读事务升级成写事务
+            // 立刻 SQLITE_BUSY」的主力是 WAL，busy_timeout 对它不生效，只对写-写竞争生效）。
+            // journal_mode 没有 config 路径，只能 PRAGMA —— 在连接建立时设成 WAL，
+            // 见 App\Providers\AppServiceProvider::tuneSqliteConnection()（那里有详细注释）。
+            'options' => extension_loaded('pdo_sqlite') ? [
+                PDO::ATTR_TIMEOUT => 5,
+            ] : [],
         ],
 
         'mysql' => [
