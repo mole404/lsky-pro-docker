@@ -133,9 +133,9 @@
                     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                         @foreach($limits as [$label, $key, $unit])
                             <div class="rounded-lg bg-surface-2 px-3 py-2">
-                                <p class="text-ink-3 text-[12.5px]">{{ $label }}</p>
+                                <p class="text-ink-2 text-[13px]">{{ $label }}</p>
                                 <p class="mt-0.5 text-ink text-[14px] font-semibold tabular-nums">
-                                    {{ $configs->get($key) }}<span class="ml-0.5 text-ink-3 text-[12.5px] font-normal">{{ $unit }}</span>
+                                    {{ $configs->get($key) }}<span class="ml-0.5 text-ink-2 text-[13px] font-normal">{{ $unit }}</span>
                                 </p>
                             </div>
                         @endforeach

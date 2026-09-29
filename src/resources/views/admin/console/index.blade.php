@@ -17,7 +17,7 @@
                     <span class="w-8 h-8 rounded-lg bg-brand-soft text-brand flex items-center justify-center shrink-0">
                         <i class="fas fa-images text-[13.5px]"></i>
                     </span>
-                    <p class="text-ink-3 text-[12.5px] truncate">图片数量</p>
+                    <p class="text-ink-2 text-[13px] truncate">图片数量</p>
                 </div>
                 <p class="mt-3 text-ink text-[21px] font-semibold tabular-nums truncate">
                     {{ \App\Utils::shortenNumber(\App\Models\Image::query()->count()) }}
@@ -29,7 +29,7 @@
                     <span class="w-8 h-8 rounded-lg bg-brand-soft text-brand flex items-center justify-center shrink-0">
                         <i class="fas fa-tags text-[13.5px]"></i>
                     </span>
-                    <p class="text-ink-3 text-[12.5px] truncate">相册数量</p>
+                    <p class="text-ink-2 text-[13px] truncate">相册数量</p>
                 </div>
                 <p class="mt-3 text-ink text-[21px] font-semibold tabular-nums truncate">
                     {{ \App\Utils::shortenNumber(\App\Models\Album::query()->count()) }}
@@ -41,7 +41,7 @@
                     <span class="w-8 h-8 rounded-lg bg-brand-soft text-brand flex items-center justify-center shrink-0">
                         <i class="fas fa-users text-[13.5px]"></i>
                     </span>
-                    <p class="text-ink-3 text-[12.5px] truncate">用户数量</p>
+                    <p class="text-ink-2 text-[13px] truncate">用户数量</p>
                 </div>
                 <p class="mt-3 text-ink text-[21px] font-semibold tabular-nums truncate">
                     {{ \App\Utils::shortenNumber(\App\Models\User::query()->count()) }}
@@ -53,7 +53,7 @@
                     <span class="w-8 h-8 rounded-lg bg-brand-soft text-brand flex items-center justify-center shrink-0">
                         <i class="fas fa-server text-[13.5px]"></i>
                     </span>
-                    <p class="text-ink-3 text-[12.5px] truncate">占用储存</p>
+                    <p class="text-ink-2 text-[13px] truncate">占用储存</p>
                 </div>
                 <p class="mt-3 text-ink text-[21px] font-semibold tabular-nums truncate">
                     {{ \App\Utils::formatSize(\App\Models\Image::query()->sum('size') * 1024) }}
@@ -69,19 +69,19 @@
                     <div class="px-4 py-3">
                         <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
                             <div class="rounded-lg bg-surface-2 px-3 py-2">
-                                <p class="text-ink-3 text-[12.5px] truncate">今日上传</p>
+                                <p class="text-ink-2 text-[13px] truncate">今日上传</p>
                                 <p class="mt-0.5 text-ink text-[17px] font-semibold tabular-nums truncate">{{ \App\Utils::shortenNumber($numbers['today']) }}</p>
                             </div>
                             <div class="rounded-lg bg-surface-2 px-3 py-2">
-                                <p class="text-ink-3 text-[12.5px] truncate">昨日上传</p>
+                                <p class="text-ink-2 text-[13px] truncate">昨日上传</p>
                                 <p class="mt-0.5 text-ink text-[17px] font-semibold tabular-nums truncate">{{ \App\Utils::shortenNumber($numbers['yesterday']) }}</p>
                             </div>
                             <div class="rounded-lg bg-surface-2 px-3 py-2">
-                                <p class="text-ink-3 text-[12.5px] truncate">本周上传</p>
+                                <p class="text-ink-2 text-[13px] truncate">本周上传</p>
                                 <p class="mt-0.5 text-ink text-[17px] font-semibold tabular-nums truncate">{{ \App\Utils::shortenNumber($numbers['week']) }}</p>
                             </div>
                             <div class="rounded-lg bg-surface-2 px-3 py-2">
-                                <p class="text-ink-3 text-[12.5px] truncate">本月上传</p>
+                                <p class="text-ink-2 text-[13px] truncate">本月上传</p>
                                 <p class="mt-0.5 text-ink text-[17px] font-semibold tabular-nums truncate">{{ \App\Utils::shortenNumber($numbers['month']) }}</p>
                             </div>
                         </div>
