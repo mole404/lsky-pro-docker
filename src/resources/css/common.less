@@ -391,6 +391,112 @@ html {
     .swal2-close:hover {
         color: var(--lsky-text);
     }
+
+    // -----------------------------------------------------------------------
+    // 弹出/关闭动画：与 x-modal 的 x-transition 对齐
+    //   x-modal：enter = transition ease-out duration-300（桌面 opacity 0→1 + scale .95→1；
+    //            手机 opacity 0→1 + translate-y-4→0）
+    //            leave = transition ease-in duration-200（同起止反向）
+    //   sweetalert2 自带的 .swal2-show 是 300ms 线性 scale(.7→1.05→.95→1)、.swal2-hide 是
+    //   150ms 线性 scale(1→.5)，都没有淡入淡出 → 观感与新弹窗不是一套。
+    //   这里直接改这两个类的 animation（sweetalert2 的可见性判断只看「有没有动画 + 动画结束事件」，
+    //   时长/关键帧换成我们的照样会等动画结束再移除节点，关闭动画因此也一致）。
+    //   ease-out = cubic-bezier(0,0,.2,1)，ease-in = cubic-bezier(.4,0,1,1)（就是 Tailwind 的两个缓动）。
+    // -----------------------------------------------------------------------
+    .swal2-show {
+        animation: lsky-swal-in .3s cubic-bezier(0, 0, .2, 1) both;
+    }
+
+    .swal2-hide {
+        animation: lsky-swal-out .2s cubic-bezier(.4, 0, 1, 1) both;
+    }
+
+    @media (max-width: 767px) {
+        // md 以下（<768px）= x-modal 的「不上缩、整块往上滑 16px」那一档
+        .swal2-show {
+            animation-name: lsky-swal-in-mobile;
+        }
+
+        .swal2-hide {
+            animation-name: lsky-swal-out-mobile;
+        }
+    }
+
+    // 遮罩跟着弹窗一起淡：容器原本是 `transition: background-color .1s`（关闭时闪一下、跟弹窗不是一套）。
+    // 注意只能写 background-color 这一个属性：如果把 backdrop-filter 也列进 transition，
+    // Chromium 下 background-color 的过渡会整条不生效（实测遮罩 0.5 → 0 是硬切）。
+    .swal2-container {
+        transition: background-color .2s cubic-bezier(.4, 0, 1, 1);
+    }
+
+    .swal2-container.swal2-backdrop-show,
+    .swal2-container.swal2-noanimation {
+        transition-duration: .3s;
+        transition-timing-function: cubic-bezier(0, 0, .2, 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // 斩断 sweetalert2 对 <body> 的动手脚（这是「弹出后背景元素会挪一下」的真因）
+    // -----------------------------------------------------------------------
+    // 它打开时会：① 给 html/body 加 swal2-shown（默认样式里 body.swal2-shown 是 overflow:hidden，
+    // 滚动条被拿走 → 内容宽度变了 → 整页重排）；② 由 JS 往 body.style 写 padding-right 来「抵消」
+    // 滚动条宽度（行内样式，CSS 盖不住，只能在调用处用 scrollbarPadding:false 关掉，见 images.blade.php）。
+    // 这里负责 ①：权重 (0,3,2) > 它的 (0,3,1)，不用 !important。用可见值（body 打开前的原值就是
+    // visible）而不是 auto —— auto 会让 body 自己变成滚动容器，弹窗开着的那几秒里 sticky 定位的
+    // 参照滚动盒会变。背景能像 x-modal 那样照常滚动，也就不会重排 —— 手机上新弹窗本来也是不锁背景
+    // 滚动的，两端行为一致。
+    body.swal2-shown:not(.swal2-no-backdrop):not(.swal2-toast-shown) {
+        overflow: visible;
+    }
+}
+
+/* sweetalert2 弹出/关闭动画的关键帧（= x-modal 的 enter/leave 起止值） */
+@keyframes lsky-swal-in {
+    from {
+        opacity: 0;
+        transform: scale(.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes lsky-swal-out {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(.95);
+    }
+}
+
+@keyframes lsky-swal-in-mobile {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes lsky-swal-out-mobile {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: translateY(16px);
+    }
 }
 
 /* ---------------------------------------------------------------------------
