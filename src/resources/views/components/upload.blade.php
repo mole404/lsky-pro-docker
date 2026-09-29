@@ -2,17 +2,32 @@
     <input type="file" id="picker" name="file" class="hidden" accept="{{ implode(',', array_map(fn ($ext) => '.'.$ext, $_group->configs->get(\App\Enums\GroupConfigKey::AcceptedFileSuffixes))) }}" multiple>
 
     <div class="mb-4 p-4 ls-card">
-        <h1 class="tracking-wider text-2xl text-ink-2 mb-2" style="text-shadow: -4px 4px 0 rgb(0 0 0 / 10%);">Image Upload</h1>
-        <p class="text-ink-3 text-sm">
+        <h1 class="text-xl font-semibold text-ink mb-2">上传图片</h1>
+        <p class="text-ink-3 text-[13.5px] leading-relaxed">
             最大可上传 {{ \App\Utils::formatSize($_group->configs->get(\App\Enums\GroupConfigKey::MaximumFileSize) * 1024) }} 的图片，上传队列最多
             {{ $_group->configs->get(\App\Enums\GroupConfigKey::ConcurrentUploadNum) }}
             张。本站已托管 {{ \App\Models\Image::query()->count() }} 张图片。
         </p>
-        <div class="mt-3 rounded-md border-2 border-dotted border-line-2 w-full h-full" id="picker-dnd" onclick="$('#picker').click()">
-            <div id="upload-container" class="relative group flex flex-col justify-center items-center p-2 w-full h-full min-h-[150px] sm:min-h-[340px] space-y-4 text-ink-3 cursor-pointer">
-                <i id="clear" class="fas fa-times absolute top-1 right-1 w-8 h-8 flex justify-center items-center cursor-pointer text-xl text-center hidden group-hover:block text-ink-3 hover:text-ink-3"></i>
-                <p id="upload-all" title="点我上传全部"><i class="fas fa-cloud-upload-alt text-6xl hover:text-brand"></i></p>
-                <p class="text-md text-center">拖拽文件到这里，支持多文件同时上传<br/>点击上面的图标上传全部已选择文件</p>
+        <div class="mt-3 rounded-xl border-2 border-dotted border-line-2 w-full h-full" id="picker-dnd" onclick="$('#picker').click()">
+            <div id="upload-container" class="relative group flex flex-col justify-center items-center gap-4 p-6 w-full h-full min-h-[200px] sm:min-h-[320px] text-ink-3 cursor-pointer">
+                <i id="clear" class="fas fa-times absolute top-2 right-2 w-8 h-8 hidden group-hover:flex justify-center items-center rounded-lg cursor-pointer text-ink-3 hover:text-danger hover:bg-surface-3"></i>
+                <div class="flex flex-col sm:flex-row items-center gap-4 sm:gap-5 text-center sm:text-left">
+                    <span class="w-14 h-14 rounded-2xl bg-brand-soft text-brand flex justify-center items-center shrink-0 text-[22px]">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </span>
+                    <div class="flex flex-col items-center sm:items-start gap-1.5">
+                        <p class="text-[15px] font-semibold text-ink">拖拽到此处</p>
+                        <p class="text-[13.5px] text-ink-3 leading-relaxed">支持多文件同时上传，也可以粘贴剪贴板里的图片</p>
+                        <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-1.5">
+                            <button type="button" class="ls-btn ls-btn-primary px-4">
+                                <i class="fas fa-folder-open"></i>选择文件
+                            </button>
+                            <button type="button" id="upload-all" title="上传队列中的全部文件" class="ls-btn ls-btn-primary px-4">
+                                <i class="fas fa-cloud-upload-alt"></i>上传全部
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div id="upload-preview" class="flex m-2 hidden"></div>
         </div>
@@ -56,24 +71,22 @@
 </x-modal>
 
 <script type="text/html" id="image-preview-tpl">
-    <div data-id="__id__" class="w-full flex items-center p-2 mb-2 rounded-md relative bg-surface-2 overflow-hidden">
-        <div class="absolute inset-0">
-            <div class="w-[0%] h-full bg-surface-3 opacity-70 upload-progress"></div>
+    <div data-id="__id__" class="w-full flex items-center gap-3 p-2.5 mb-2 rounded-xl border border-line relative bg-surface-2 overflow-hidden">
+        <div class="absolute left-0 bottom-0 right-0 h-[1.5px] bg-line">
+            <div class="w-[0%] h-full bg-brand upload-progress"></div>
         </div>
-        <div class="relative flex w-full">
-            <div class="w-10 h-10 bg-surface-3 rounded-lg cursor-pointer overflow-hidden">
-                <img class="w-full h-full object-cover" data-operate="preview" src="__src__">
-            </div>
-            <div class="flex justify-end flex-col ml-2 w-[80%] opacity-70">
-                <p class="text-sm truncate">__name__</p>
-                <p class="text-[13.5px] truncate">
-                    <span>__info__</span>, <span class="upload-info">等待上传</span>
-                </p>
-            </div>
+        <div class="w-[36px] h-[36px] rounded-lg bg-surface-3 cursor-pointer overflow-hidden shrink-0">
+            <img class="w-full h-full object-cover" data-operate="preview" src="__src__">
         </div>
-        <div class="absolute right-2 flex space-x-2">
-            <a href="javascript:void(0)" data-operate="remove" class="flex justify-center items-center block shadow-sm w-10 h-10 rounded-full text-ink-2 bg-surface-3 hover:bg-surface-3 aspect-w-1 aspect-h-1"><i class="fas fa-times"></i></a>
-            <a href="javascript:void(0)" data-operate="upload" class="flex justify-center items-center block shadow-sm w-10 h-10 rounded-full text-ink-2 bg-surface-3 hover:bg-surface-3 aspect-w-1 aspect-h-1"><i class="fas fa-upload"></i></a>
+        <div class="flex flex-col justify-center min-w-0 flex-1 gap-0.5">
+            <p class="text-[13.5px] text-ink font-medium truncate">__name__</p>
+            <p class="text-[12.5px] text-ink-3 truncate">
+                <span>__info__</span>, <span class="upload-info">等待上传</span>
+            </p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <a href="javascript:void(0)" data-operate="remove" class="flex justify-center items-center w-[28px] h-[28px] rounded-lg cursor-pointer text-ink-2 bg-surface-3 hover:bg-surface hover:text-danger"><i class="fas fa-times text-[12.5px]"></i></a>
+            <a href="javascript:void(0)" data-operate="upload" class="flex justify-center items-center w-[28px] h-[28px] rounded-lg cursor-pointer text-ink-2 bg-surface-3 hover:bg-surface hover:text-brand"><i class="fas fa-upload text-[12.5px]"></i></a>
         </div>
     </div>
 </script>

@@ -2,139 +2,151 @@
 
 <x-app-layout>
     @if(config('app.debug'))
-        <p class="mt-4 p-2 rounded-md text-sm bg-red-500 text-white">
+        <p class="mt-4 p-3 rounded-xl text-[13.5px] bg-danger-soft text-danger">
             <i class="fas fa-exclamation-triangle"></i>
             当前系统 debug 已被打开，敏感信息暴露在外，可能会被利用从而影响系统稳定性，生产环境中请务必关闭！
         </p>
     @endif
     <div class="my-6 md:my-9">
         <p class="mb-3 font-semibold text-lg text-ink">概览</p>
-        <div class="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div class="flex justify-between rounded-md bg-surface p-3 overflow-hidden shadow-card">
-                <div class="flex flex-col justify-between space-y-2 w-[80%]">
-                    <p class="font-bold text-2xl text-red-700 truncate">
-                        {{ \App\Utils::shortenNumber(\App\Models\Image::query()->count()) }}
-                    </p>
-                    <p class="text-md text-ink-2">图片数量</p>
+
+        {{-- 四张主卡：图标块 + 弱化标签 + 大数字；手机两列，lg 起一行四张 --}}
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+            <div class="bg-surface rounded-xl p-4 shadow-card">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-lg bg-brand-soft text-brand flex items-center justify-center shrink-0">
+                        <i class="fas fa-images text-[13.5px]"></i>
+                    </span>
+                    <p class="text-ink-3 text-[12.5px] truncate">图片数量</p>
                 </div>
-                <i class="fas fa-images text-danger text-2xl"></i>
-            </div>
-            <div class="flex justify-between rounded-md bg-surface p-3 overflow-hidden shadow-card">
-                <div class="flex flex-col justify-between space-y-2 w-[80%]">
-                    <p class="font-bold text-2xl text-lime-700 truncate">
-                        {{ \App\Utils::shortenNumber(\App\Models\Album::query()->count()) }}
-                    </p>
-                    <p class="text-md text-ink-2">相册数量</p>
-                </div>
-                <i class="fas fa-tags text-lime-600 text-2xl"></i>
-            </div>
-            <div class="flex justify-between rounded-md bg-surface p-3 overflow-hidden shadow-card">
-                <div class="flex flex-col justify-between space-y-2 w-[80%]">
-                    <p class="font-bold text-2xl text-brand truncate">
-                        {{ \App\Utils::shortenNumber(\App\Models\User::query()->count()) }}
-                    </p>
-                    <p class="text-md text-ink-2">用户数量</p>
-                </div>
-                <i class="fas fa-users text-brand text-2xl"></i>
-            </div>
-            <div class="flex justify-between rounded-md bg-surface p-3 overflow-hidden shadow-card">
-                <div class="flex flex-col justify-between space-y-2 w-[80%]">
-                    <p class="font-bold text-2xl text-cyan-700 truncate">
-                        {{ \App\Utils::formatSize(\App\Models\Image::query()->sum('size') * 1024) }}
-                    </p>
-                    <p class="text-md text-ink-2">占用储存</p>
-                </div>
-                <i class="fas fa-server text-cyan-600 text-2xl"></i>
+                <p class="mt-3 text-ink text-[21px] font-semibold tabular-nums truncate">
+                    {{ \App\Utils::shortenNumber(\App\Models\Image::query()->count()) }}
+                </p>
             </div>
 
-            <div class="flex justify-between rounded-md bg-surface p-3 overflow-hidden shadow-card">
-                <div class="flex flex-col justify-between space-y-2 w-[80%]">
-                    <p class="font-bold text-2xl text-ink-2 truncate">{{ \App\Utils::shortenNumber($numbers['today']) }}</p>
-                    <p class="text-md text-ink-2">今日上传</p>
+            <div class="bg-surface rounded-xl p-4 shadow-card">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-lg bg-brand-soft text-brand flex items-center justify-center shrink-0">
+                        <i class="fas fa-tags text-[13.5px]"></i>
+                    </span>
+                    <p class="text-ink-3 text-[12.5px] truncate">相册数量</p>
                 </div>
-                <i class="fas fa-upload text-ink-3 text-2xl"></i>
+                <p class="mt-3 text-ink text-[21px] font-semibold tabular-nums truncate">
+                    {{ \App\Utils::shortenNumber(\App\Models\Album::query()->count()) }}
+                </p>
             </div>
-            <div class="flex justify-between rounded-md bg-surface p-3 overflow-hidden shadow-card">
-                <div class="flex flex-col justify-between space-y-2 w-[80%]">
-                    <p class="font-bold text-2xl text-ink-2 truncate">{{ \App\Utils::shortenNumber($numbers['yesterday']) }}</p>
-                    <p class="text-md text-ink-2">昨日上传</p>
+
+            <div class="bg-surface rounded-xl p-4 shadow-card">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-lg bg-brand-soft text-brand flex items-center justify-center shrink-0">
+                        <i class="fas fa-users text-[13.5px]"></i>
+                    </span>
+                    <p class="text-ink-3 text-[12.5px] truncate">用户数量</p>
                 </div>
-                <i class="fas fa-upload text-ink-3 text-2xl"></i>
+                <p class="mt-3 text-ink text-[21px] font-semibold tabular-nums truncate">
+                    {{ \App\Utils::shortenNumber(\App\Models\User::query()->count()) }}
+                </p>
             </div>
-            <div class="flex justify-between rounded-md bg-surface p-3 overflow-hidden shadow-card">
-                <div class="flex flex-col justify-between space-y-2 w-[80%]">
-                    <p class="font-bold text-2xl text-ink-2 truncate">{{ \App\Utils::shortenNumber($numbers['week']) }}</p>
-                    <p class="text-md text-ink-2">本周上传</p>
+
+            <div class="bg-surface rounded-xl p-4 shadow-card">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-lg bg-brand-soft text-brand flex items-center justify-center shrink-0">
+                        <i class="fas fa-server text-[13.5px]"></i>
+                    </span>
+                    <p class="text-ink-3 text-[12.5px] truncate">占用储存</p>
                 </div>
-                <i class="fas fa-upload text-ink-3 text-2xl"></i>
+                <p class="mt-3 text-ink text-[21px] font-semibold tabular-nums truncate">
+                    {{ \App\Utils::formatSize(\App\Models\Image::query()->sum('size') * 1024) }}
+                </p>
             </div>
-            <div class="flex justify-between rounded-md bg-surface p-3 overflow-hidden shadow-card">
-                <div class="flex flex-col justify-between space-y-2 w-[80%]">
-                    <p class="font-bold text-2xl text-ink-2 truncate">{{ \App\Utils::shortenNumber($numbers['month']) }}</p>
-                    <p class="text-md text-ink-2">本月上传</p>
-                </div>
-                <i class="fas fa-upload text-ink-3 text-2xl"></i>
-            </div>
+        </div>
+
+        {{-- 上传统计卡：今日 / 昨日 / 本周 / 本月 四个小格子 --}}
+        <div class="mt-3 md:mt-4 mb-8">
+            <x-box>
+                <x-slot name="title">上传统计</x-slot>
+                <x-slot name="content">
+                    <div class="px-4 py-3">
+                        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <div class="rounded-lg bg-surface-2 px-3 py-2">
+                                <p class="text-ink-3 text-[12.5px] truncate">今日上传</p>
+                                <p class="mt-0.5 text-ink text-[17px] font-semibold tabular-nums truncate">{{ \App\Utils::shortenNumber($numbers['today']) }}</p>
+                            </div>
+                            <div class="rounded-lg bg-surface-2 px-3 py-2">
+                                <p class="text-ink-3 text-[12.5px] truncate">昨日上传</p>
+                                <p class="mt-0.5 text-ink text-[17px] font-semibold tabular-nums truncate">{{ \App\Utils::shortenNumber($numbers['yesterday']) }}</p>
+                            </div>
+                            <div class="rounded-lg bg-surface-2 px-3 py-2">
+                                <p class="text-ink-3 text-[12.5px] truncate">本周上传</p>
+                                <p class="mt-0.5 text-ink text-[17px] font-semibold tabular-nums truncate">{{ \App\Utils::shortenNumber($numbers['week']) }}</p>
+                            </div>
+                            <div class="rounded-lg bg-surface-2 px-3 py-2">
+                                <p class="text-ink-3 text-[12.5px] truncate">本月上传</p>
+                                <p class="mt-0.5 text-ink text-[17px] font-semibold tabular-nums truncate">{{ \App\Utils::shortenNumber($numbers['month']) }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </x-slot>
+            </x-box>
         </div>
 
         <p class="mb-3 font-semibold text-lg text-ink">趋势</p>
         {{-- ECharts 自己会往容器里建画布，这里不用手写 canvas --}}
         <div class="relative p-4 rounded-md bg-surface h-80 mb-8 shadow-card" id="chart"></div>
 
-        <p class="mb-3 font-semibold text-lg text-ink">系统情况</p>
-        <div class="relative rounded-md bg-surface mb-8 overflow-hidden shadow-card">
-            <dl>
-                <div class="bg-surface-2 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">操作系统</dt>
-                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
-                        {{ php_uname() }}
-                    </dd>
+        {{-- 系统信息：原「系统情况」与「软件信息」合并成一张卡，去掉斑马纹 --}}
+        <x-box>
+            <x-slot name="title">系统信息</x-slot>
+            <x-slot name="content">
+                <div class="px-4 py-3">
+                    <dl class="divide-y divide-line">
+                        <div class="py-2.5 sm:grid sm:grid-cols-4 sm:gap-4">
+                            <dt class="text-ink-3 text-[13.5px]">操作系统</dt>
+                            <dd class="mt-0.5 text-ink text-[13.5px] break-words sm:mt-0 sm:col-span-3">
+                                {{ php_uname() }}
+                            </dd>
+                        </div>
+                        <div class="py-2.5 sm:grid sm:grid-cols-4 sm:gap-4">
+                            <dt class="text-ink-3 text-[13.5px]">运行环境</dt>
+                            <dd class="mt-0.5 text-ink text-[13.5px] break-words sm:mt-0 sm:col-span-3">
+                                {{ request()->server('SERVER_SOFTWARE') }}
+                            </dd>
+                        </div>
+                        <div class="py-2.5 sm:grid sm:grid-cols-4 sm:gap-4">
+                            <dt class="text-ink-3 text-[13.5px]">PHP 版本</dt>
+                            <dd class="mt-0.5 text-ink text-[13.5px] break-words sm:mt-0 sm:col-span-3">
+                                {{ phpversion() }}
+                            </dd>
+                        </div>
+                        <div class="py-2.5 sm:grid sm:grid-cols-4 sm:gap-4">
+                            <dt class="text-ink-3 text-[13.5px]">文件上传限制</dt>
+                            <dd class="mt-0.5 text-ink text-[13.5px] break-words sm:mt-0 sm:col-span-3">
+                                {{ ini_get("upload_max_filesize") }}
+                            </dd>
+                        </div>
+                        <div class="py-2.5 sm:grid sm:grid-cols-4 sm:gap-4">
+                            <dt class="text-ink-3 text-[13.5px]">POST 数据最大限制</dt>
+                            <dd class="mt-0.5 text-ink text-[13.5px] break-words sm:mt-0 sm:col-span-3">
+                                {{ ini_get('post_max_size') }}
+                            </dd>
+                        </div>
+                        <div class="py-2.5 sm:grid sm:grid-cols-4 sm:gap-4">
+                            <dt class="text-ink-3 text-[13.5px]">软件版本</dt>
+                            <dd class="mt-0.5 text-ink text-[13.5px] break-words sm:mt-0 sm:col-span-3">
+                                {{ config('app.version') }}@if(\App\Utils::shortCommit()) <span class="font-mono text-ink-2">{{ \App\Utils::shortCommit() }}</span>@endif
+                            </dd>
+                        </div>
+                        {{-- fork：上游的官方网站/使用手册两项已删除（官方早已停更），仓库地址指向本仓库 --}}
+                        <div class="py-2.5 sm:grid sm:grid-cols-4 sm:gap-4">
+                            <dt class="text-ink-3 text-[13.5px]">仓库地址</dt>
+                            <dd class="mt-0.5 text-ink text-[13.5px] break-words sm:mt-0 sm:col-span-3">
+                                <a target="_blank" class="text-brand break-all hover:underline" href="https://github.com/mole404/lsky-pro-docker">https://github.com/mole404/lsky-pro-docker</a>
+                            </dd>
+                        </div>
+                    </dl>
                 </div>
-                <div class="bg-surface px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">运行环境</dt>
-                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
-                        {{ request()->server('SERVER_SOFTWARE') }}
-                    </dd>
-                </div>
-                <div class="bg-surface-2 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">PHP 版本</dt>
-                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
-                        {{ phpversion() }}
-                    </dd>
-                </div>
-                <div class="bg-surface px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">文件上传限制</dt>
-                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
-                        {{ ini_get("upload_max_filesize") }}
-                    </dd>
-                </div>
-                <div class="bg-surface-2 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">POST 数据最大限制</dt>
-                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
-                        {{ ini_get('post_max_size') }}
-                    </dd>
-                </div>
-            </dl>
-        </div>
-
-        <p class="mb-3 font-semibold text-lg text-ink">软件信息</p>
-        <div class="relative rounded-md bg-surface mb-8 overflow-hidden shadow-card">
-            <dl>
-                <div class="bg-surface-2 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">软件版本</dt>
-                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
-                        {{ config('app.version') }}@if(\App\Utils::shortCommit()) <span class="font-mono">{{ \App\Utils::shortCommit() }}</span>@endif
-                    </dd>
-                </div>
-                {{-- fork：上游的官方网站/使用手册两项已删除（官方早已停更），仓库地址指向本仓库 --}}
-                <div class="bg-surface px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">仓库地址</dt>
-                    <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2">
-                        <a target="_blank" class="hover:text-brand" href="https://github.com/mole404/lsky-pro-docker">https://github.com/mole404/lsky-pro-docker</a>
-                    </dd>
-                </div>
-            </dl>
-        </div>
+            </x-slot>
+        </x-box>
     </div>
 
     @push('scripts')
