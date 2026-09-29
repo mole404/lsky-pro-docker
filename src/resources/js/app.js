@@ -164,7 +164,13 @@ window.utils = {
                 },
                 destroy() {
                     $(selector).unbind('scroll.infiniteScroll').unbind('click')
-                    $(window).off('scroll.infiniteScroll')
+                    // 谁注册谁解绑：window 版把监听挂在 window 上，容器版（相册弹窗/移动到相册
+                    // 列表）挂在自己的 selector 上。原来这行是无条件的 —— 容器版一 destroy
+                    // 就把图片墙的整页滚动监听一起摘掉了（相册弹窗开→关之后，滚到底不再自动
+                    // 加载，只能手点列表底部那行哨兵）。回归测试：infinite-scroll-destroy.test.mjs
+                    if (useWindowScroll) {
+                        $(window).off('scroll.infiniteScroll')
+                    }
                 }
             }
         }

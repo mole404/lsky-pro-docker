@@ -36,7 +36,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   b13fc1e4fede8c55c25862eb13cfcfcf  src/resources/js/context-js.js
 #   b13fc1e4fede8c55c25862eb13cfcfcf  src/public/js/context-js/context-js.js
-#   c2014bb78cec8e2e9bfe6e3572eda26b  src/resources/views/user/images.blade.php
+#   cab1ae9abf815ae3ca30a63608dbf004  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
@@ -2208,7 +2208,7 @@
 +})();
 --- a/resources/views/user/images.blade.php
 +++ b/resources/views/user/images.blade.php
-@@ -4,24 +4,50 @@
+@@ -4,24 +4,51 @@
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
@@ -2220,7 +2220,8 @@
 +            scroll 监听，能力没丢（代价同「移动到相册」弹窗：那三种文案在这个弹窗里不再显示，
 +            接口 status=false 时仍有 toastr.error）。
 +         2) 桌面宽度：x-modal 的卡片宽度是给「详细信息」那类宽内容定的（md:max-w-2xl / lg:max-w-4xl），
-+            相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 420px。手机上 x-modal 是底部抽屉
++            相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 520px（原来 420px，用户反馈
++            「稍微加宽一些」）。手机上 x-modal 是底部抽屉
 +            （<640px 贴底），这条 media query 不生效，抽屉行为不受影响。
 +         3) 相册行的编辑/删除是**行内常显的 44×44 按钮**（不再靠 hover 才出现），所以这里
 +            不再需要 @media (hover: none) 那条「给触摸设备常显操作按钮」的补丁 —— 已删掉，
@@ -2232,7 +2233,7 @@
 +
 +        @media (min-width: 768px) {
 +            #album-switch-modal [class*="md:max-w-2xl"] {
-+                max-width: 420px;
++                max-width: 520px;
 +            }
 +        }
 +    </style>
@@ -2268,7 +2269,7 @@
                      </x-slot>
  
                      <x-slot name="content">
-@@ -32,17 +58,18 @@
+@@ -32,17 +59,18 @@
                          <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
                          <x-dropdown-link data-operate="rename" class="hidden" href="javascript:void(0)" @click="open = false">重命名</x-dropdown-link>
                          <x-dropdown-link data-operate="delete" class="hidden" href="javascript:void(0)" @click="open = false">删除</x-dropdown-link>
@@ -2290,7 +2291,7 @@
                      </a>
                  </x-slot>
  
-@@ -59,9 +86,9 @@
+@@ -59,9 +87,9 @@
              </x-dropdown>
              <x-dropdown direction="left">
                  <x-slot name="trigger">
@@ -2302,7 +2303,7 @@
                      </a>
                  </x-slot>
  
-@@ -76,132 +103,248 @@
+@@ -76,132 +104,254 @@
              </x-dropdown>
          </div>
      </div>
@@ -2379,7 +2380,7 @@
 +         里面放的是 #albums-container-tpl（创建表单 + 相册行 + 加载中/空状态）。
 +         列表是弹窗里**唯一的主体**：底部那个「完成」按钮已删掉（右上角 ✕ 关弹窗就够），
 +         所以 max-h-[50vh] + overflow-y-auto 这条限高/滚动规则仍然只归列表自己，别再往底部加东西。
-+         桌面约 420px 宽见文件顶部 @push('styles') 里那条规则。 --}}
++         桌面约 520px 宽见文件顶部 @push('styles') 里那条规则。 --}}
 +    <script type="text/html" id="album-switch-tpl">
 +        <div class="mx-auto flex w-full flex-col">
 +            <p class="text-[16px] font-semibold leading-6 text-ink">__title__</p>
@@ -2427,10 +2428,14 @@
 +         为什么按钮要移出 <a>：它们原来长在行链接里，图标可点区只有十几像素，点不中就落到
 +         <a> 上直接跳进相册 —— 移出来 + 给足 44px 才点得中（顺带不用 group-hover 切换，
 +         张数也不再被按钮顶掉，行内容不再抽动）。
-+         名称保持 <a> 里「第一个直接子 span」（class 带 name）：编辑面板读的就是它；
-+         张数保持 <div class="albums-count">（行内除名称外不放别的 span —— 免得被无限加载
-+         「点 span 加载更多」的委托命中；按钮/图标本身不带 span）。
-+         基础态必须留着 border-line bg-surface，toggleClass 才有东西可换。 --}}
++         名称是 <a> 里的 <div class="name">（**原来这里是 <span>**：utils.infiniteScroll 对列表
++         容器挂的是「点里面的 span 就加载更多」的委托，相册名是 span 时点一下名字就顺手多拉
++         一页相册 —— 现在行内除哨兵外一个 span 都没有；编辑面板按 class 找的 .name 照旧）。
++         张数保持 <div class="albums-count">。
++         基础态必须留着 border-line bg-surface，toggleClass 才有东西可换。
++
++         ⚠ 列表末尾那条「我也是有底线的~」哨兵是 utils.infiniteScroll 自己插进去的
++         `.infinite-scroll > span`，那才是**有意的**触发器，必须保持 span、不要动。 --}}
      <script type="text/html" id="albums-item-tpl">
 -        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item flex justify-between items-center group px-2 h-7 rounded w-full bg-gray-100 text-gray-800 hover:bg-blue-300 hover:text-white">
 -            <span class="text-sm truncate w-[80%] name">__name__</span>
@@ -2439,7 +2444,7 @@
 -                <span class="delete"><i class="fas fa-trash-alt text-xs text-red-400"></i></span>
 +        <div class="albums-row flex items-stretch min-h-[44px] w-full rounded-lg border border-line bg-surface" data-id="__id__" data-json='__json__'>
 +            <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item group flex min-w-0 flex-1 items-center gap-2.5 rounded-l-lg px-3 py-1">
-+                <span class="min-w-0 flex-1 truncate text-[14px] name">__name__</span>
++                <div class="min-w-0 flex-1 truncate text-[14px] name">__name__</div>
 +                __current_badge__
 +                <div class="albums-count shrink-0 text-[13px] text-ink-3">__image_num__ 张</div>
 +            </a>
@@ -2488,15 +2493,15 @@
 -            <div>
 -                <div class="text-sm font-semibold">图片名称</div>
 -                <p class="my-2 break-words text-gray-600">__filename__</p>
--            </div>
--            <div>
--                <div class="text-sm font-semibold">图片原始名称</div>
--                <p class="my-2 break-words text-gray-600">__origin_name__</p>
 +        <div class="mx-auto w-full max-w-2xl">
 +            <div class="mb-4 flex items-center gap-3">
 +                <img src="__thumb_url__" alt="__filename__" class="h-16 w-16 shrink-0 rounded-lg border border-line bg-surface-2 object-cover">
 +                <p class="min-w-0 truncate text-[16px] font-semibold leading-6 text-ink">图片详细信息</p>
              </div>
+-            <div>
+-                <div class="text-sm font-semibold">图片原始名称</div>
+-                <p class="my-2 break-words text-gray-600">__origin_name__</p>
+-            </div>
 -            <div>
 -                <div class="text-sm font-semibold">图片大小</div>
 -                <p class="my-2 break-words text-gray-600">__size__</p>
@@ -2604,8 +2609,10 @@
          </div>
      </script>
  
-+    {{-- 相册列表行：整行是一个点击区（min-h-[44px]），不用 span（避免被无限加载的
-+         "点 span 加载更多"委托命中）。选中态由 JS 切换 border-brand/bg-brand-soft/text-brand
++    {{-- 相册列表行：整行是一个点击区（min-h-[44px]），**行内一个 span 都不用** —— 名称是 <div>、
++         「当前」徽标（JS 拼的 .ls-badge）也是 <div>，免得被无限加载「点 span 加载更多」的委托命中
++         （点一下相册名就多拉一页相册）。列表末尾那条哨兵是 utils.infiniteScroll 插的
++         `.infinite-scroll > span`，那个必须保持 span。选中态由 JS 切换 border-brand/bg-brand-soft/text-brand
 +         （所以基础态必须留着 border-line bg-surface-2 text-ink，toggleClass 才有东西可换）。 --}}
 +    <script type="text/html" id="movements-album-item-tpl">
 +        <a href="javascript:void(0)" data-id="__id__" data-selected="false" class="movements-album flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-ink transition-colors duration-150 hover:bg-surface-3">
@@ -2626,7 +2633,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -219,42 +362,41 @@
+@@ -219,42 +369,41 @@
              const IMAGES_SCROLL = '#images-scroll';
              const IMAGES_GRID = '#images-grid';
              const IMAGES_ITEM = '.images-item';
@@ -2693,7 +2700,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -308,14 +450,42 @@
+@@ -308,14 +457,42 @@
              }
  
              const getAlbums = (options, callback) => {
@@ -2740,7 +2747,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +498,40 @@
+@@ -328,29 +505,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -2791,7 +2798,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +539,13 @@
+@@ -358,12 +546,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -2807,7 +2814,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +554,14 @@
+@@ -372,13 +561,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -2825,7 +2832,7 @@
                              );
                          }
                      });
-@@ -386,6 +569,12 @@
+@@ -386,6 +576,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -2838,7 +2845,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +584,14 @@
+@@ -395,12 +591,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -2855,7 +2862,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +623,18 @@
+@@ -432,15 +630,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -2877,7 +2884,7 @@
                  });
              }
  
-@@ -486,10 +680,10 @@
+@@ -486,10 +687,10 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -2890,7 +2897,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -509,6 +703,26 @@
+@@ -509,6 +710,26 @@
              ds.subscribe('elementselect', _ => bindOperates());
              ds.subscribe('elementunselect', _ => bindOperates());
  
@@ -2917,7 +2924,7 @@
              $photos.on('click', '.image-selector', function () {
                  ds.toggleSelection($(this).closest('a'));
                  bindOperates();
-@@ -535,25 +749,94 @@
+@@ -535,25 +756,94 @@
  
              const methods = {
                  movements() {
@@ -2995,11 +3002,11 @@
 +
 +                            $movementsAlbums.append(html);
 +                        }
-+                    });
+                     });
 +
 +                    $movementsAlbums.off('click', '.movements-album').on('click', '.movements-album', function () {
 +                        selectRow($(this));
-                     });
++                    });
 +
 +                    $('#movements-cancel').off('click').on('click', _ => modal.close(MOVEMENTS_MODAL));
 +
@@ -3029,7 +3036,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +847,9 @@
+@@ -564,7 +854,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -3040,7 +3047,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -574,8 +859,12 @@
+@@ -574,8 +866,12 @@
                  },
                  permission() {
                      Swal.fire({
@@ -3054,7 +3061,7 @@
                          input: 'select',
                          inputOptions: {
                              public: '公开',
-@@ -613,6 +902,10 @@
+@@ -613,6 +909,10 @@
                  rename(e) {
                      let item = $(e).data('json');
                      Swal.fire({
@@ -3065,7 +3072,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +942,10 @@
+@@ -649,6 +949,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -3076,7 +3083,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -684,6 +981,7 @@
+@@ -684,6 +988,7 @@
                          if (response.data.status) {
                              let image = response.data.data.image;
                              let content = $('#image-detail-tpl').html()
@@ -3084,7 +3091,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -697,7 +995,9 @@
+@@ -697,7 +1002,9 @@
                                  .replace(/__permission__/g, image.permission === 1 ? '公开' : '私有')
                                  .replace(/__uploaded_ip__/g, image.uploaded_ip)
                                  .replace(/__created_at__/g, image.created_at)
@@ -3095,7 +3102,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -853,6 +1153,10 @@
+@@ -853,6 +1160,10 @@
                      case 'delete': // 删除
                          methods.delete();
                          break;
