@@ -1,7 +1,12 @@
 @props(['id' => 'modal'])
 
-<div {{ $attributes->merge(['id' => $id, 'class' => "fixed z-10 inset-0 overflow-y-auto"]) }} role="dialog" aria-modal="true" x-data x-cloak x-show="$store.modal.isOpen('{{ $id }}')">
-    <div class="flex min-h-screen text-center md:block md:px-2 lg:px-4" style="font-size: 0">
+{{-- 高度一律用动态视口单位 dvh：手机地址栏可见时 100vh 比"看得见的区域"高，
+     弹窗会伸出屏幕外（下滑就能看到底下一块空白）。100dvh 跟着地址栏收起/展开实时变，
+     两种情形都刚好铺满。--}}
+<div {{ $attributes->merge(['id' => $id, 'class' => "fixed z-10 inset-0 h-[100dvh] overflow-y-auto"]) }} role="dialog" aria-modal="true" x-data x-cloak x-show="$store.modal.isOpen('{{ $id }}')">
+    {{-- min-h-screen(100vh) 保留在前面当兜底：浏览器不认识 dvh 时整条声明作废，退回 100vh（旧行为）。
+         桌面上 100dvh === 100vh，所以这一行对桌面零影响。 --}}
+    <div class="flex min-h-screen min-h-[100dvh] text-center md:block md:px-2 lg:px-4" style="font-size: 0">
         <div x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="transform opacity-0"
              x-transition:enter-end="transform opacity-100"

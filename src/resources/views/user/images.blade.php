@@ -173,57 +173,64 @@
     {{-- 图片「详细信息」：居中卡片弹窗（不再渲染进右侧抽屉）。
          字段顺序按老师要求：**上传时间第一、图片名称紧跟其后**，其余字段一个没删、只换了位置
          （相册名称 / 使用策略 / 图片原始名称 / 图片大小 / 图片类型 / 尺寸 / MD5 / SHA-128 / 权限 / 上传 IP）。
-         排版：标签在左、值在右（窄屏 flex-col 自动上下堆叠）；标签 13px、值 14px，行高 leading-6 宽松一些。
-         顶部一张小缩略图。这里不放任何快捷操作（复制链接/下载/删除都不进这个弹窗）。 --}}
+         排版（老师二次验收提「排版、字号、字体颜色都优化一下」后统一成这一套）：
+         顶部＝小缩略图 + 16px semibold 标题；下面一整块圆角卡片（rounded-lg + border-line + bg-surface-2），
+         字段之间用 divide-line 细线分隔、每行等距 py-3（所以分区间距一致）；
+         标签 13px text-ink-3 在左（sm:w-28 定宽对齐）、值 14px text-ink 在右（窄屏 flex-col 自动上下堆叠），行高 leading-6。
+         颜色全部走设计令牌（surface / ink / line），亮暗两套自动正确。
+         这里不放任何快捷操作（复制链接/下载/删除都不进这个弹窗）。 --}}
     <script type="text/html" id="image-detail-tpl">
         <div class="mx-auto w-full max-w-2xl">
-            <img src="__thumb_url__" alt="__filename__" class="mb-4 h-20 w-20 rounded-lg border border-line bg-surface-2 object-cover">
-            <dl class="space-y-3">
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+            <div class="mb-4 flex items-center gap-3">
+                <img src="__thumb_url__" alt="__filename__" class="h-16 w-16 shrink-0 rounded-lg border border-line bg-surface-2 object-cover">
+                <p class="min-w-0 truncate text-[16px] font-semibold leading-6 text-ink">图片详细信息</p>
+            </div>
+            <dl class="divide-y divide-line rounded-lg border border-line bg-surface-2 px-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">上传时间</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__created_at__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">图片名称</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__filename__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">相册名称</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__album_name__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">使用策略</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__strategy_name__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">图片原始名称</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__origin_name__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">图片大小</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__size__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">图片类型</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__mimetype__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">尺寸</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__width__ * __height__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">MD5</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__md5__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">SHA-128</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__sha1__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">权限</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__permission__</dd>
                 </div>
-                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">上传 IP</dt>
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__uploaded_ip__</dd>
                 </div>
@@ -233,13 +240,21 @@
 
     {{-- 「移动到相册」弹窗：相册列表（单选）+ 底部「移动」「取消」。
          列表数据与顶部工具栏的「相册列表」同一个接口；点一行只选中，底部「移动」才提交。
-         每行 min-h-[44px]（手机点击区 ≥44px），当前所在相册带「当前」标记（__current_badge__）。 --}}
+         每行 min-h-[44px]（手机点击区 ≥44px），当前所在相册带「当前」标记（__current_badge__）。
+         排版（老师二次验收「排版/字号/字体颜色」统一）：标题 16px semibold、副标题 13px text-ink-3、
+         列表行 14px / 数量 13px text-ink-3，间距统一用 mt-4 + gap-1.5；颜色只走设计令牌。
+         底部**不要横线**：老师看到的那条就是 footer 的 border-t，已去掉，只留上间距。
+         按钮沿用全局 ls-btn / ls-btn-primary（与弹窗、页面其它按钮同一套）。
+         ⚠ 列表底部那条「我也是有底线的~」是 utils.infiniteScroll 自动插进 #movements-albums 的哨兵，
+         在这个弹窗里用 CSS 隐藏（见 common.less：#image-movements-modal .infinite-scroll { display: none }），
+         抽屉里的相册列表照旧显示、不受影响；列表容器仍 overflow-y-auto，
+         「滚到底继续加载下一页相册」的能力没丢（每页 40 条，列表实际总是可滚动的）。 --}}
     <script type="text/html" id="movements-container-tpl">
         <div class="mx-auto flex w-full max-w-xl flex-col">
-            <p class="text-[15px] font-semibold text-ink">移动到相册</p>
-            <p class="mt-0.5 mb-3 text-[13px] text-ink-3">已选择 __count__ 张图片</p>
-            <div id="movements-albums" class="flex max-h-[50vh] w-full flex-col space-y-1 overflow-y-auto pr-1"></div>
-            <div class="mt-4 flex justify-end gap-2 border-t border-line pt-3">
+            <p class="text-[16px] font-semibold leading-6 text-ink">移动到相册</p>
+            <p class="mt-1 text-[13px] leading-5 text-ink-3">已选择 __count__ 张图片</p>
+            <div id="movements-albums" class="mt-4 flex max-h-[50vh] w-full flex-col gap-1.5 overflow-y-auto pr-1"></div>
+            <div class="mt-4 flex justify-end gap-2">
                 <button type="button" id="movements-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
                 <button type="button" id="movements-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>移动</button>
             </div>
@@ -247,13 +262,14 @@
     </script>
 
     {{-- 相册列表行：整行是一个点击区（min-h-[44px]），不用 span（避免被无限加载的
-         "点 span 加载更多"委托命中）。选中态由 JS 切换 border-brand/bg-brand-soft/text-brand。 --}}
+         "点 span 加载更多"委托命中）。选中态由 JS 切换 border-brand/bg-brand-soft/text-brand
+         （所以基础态必须留着 border-line bg-surface-2 text-ink，toggleClass 才有东西可换）。 --}}
     <script type="text/html" id="movements-album-item-tpl">
-        <a href="javascript:void(0)" data-id="__id__" data-selected="false" class="movements-album flex min-h-[44px] w-full items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-ink hover:bg-surface-3">
+        <a href="javascript:void(0)" data-id="__id__" data-selected="false" class="movements-album flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-ink transition-colors duration-150 hover:bg-surface-3">
             <i class="selected-mark fas fa-check-circle w-4 shrink-0 text-brand opacity-0" aria-hidden="true"></i>
             <div class="min-w-0 flex-1 truncate text-[14px]">__name__</div>
             __current_badge__
-            <div class="shrink-0 text-[13px] text-ink-3">__image_num__</div>
+            <div class="shrink-0 text-[13px] text-ink-3">__image_num__ 张</div>
         </a>
     </script>
 

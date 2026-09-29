@@ -18,7 +18,7 @@
                     </span>
                     <div class="flex flex-col items-center sm:items-start gap-1.5">
                         <p class="text-[15px] font-semibold text-ink">拖拽到此处</p>
-                        <p class="text-[13.5px] text-ink-3 leading-relaxed">支持多文件同时上传，也可以粘贴剪贴板里的图片</p>
+                        <p class="text-[13.5px] text-ink-3 leading-relaxed">支持多文件上传，也可以粘贴剪贴板里的图片</p>
                         <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-1.5">
                             <button type="button" class="ls-btn ls-btn-primary px-4">
                                 <i class="fas fa-folder-open"></i>选择文件
@@ -333,6 +333,7 @@
             if (method === 'remove') {
                 queue[id].abort();
                 delete queue[id];
+                syncQueueActions();
                 $preview.remove();
             }
             if (method === 'upload' && queue[id].status !== UPLOAD_SUCCESS) {
