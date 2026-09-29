@@ -6,7 +6,9 @@ name: Retag (repoint a tag to an existing image)
 # 安全闸：
 #   · 不允许把 `latest` 当目标（线上拉取目标只能由 build-image 的 Promote 步骤动）
 #   · 源必须是不可变 tag（`sha-<commit>`），避免把某个浮动 tag 的当前指向误复制过去
-#   · 打印改前/改后 digest，便于核对
+#   · 改前/改后都打印 digest，并**断言目标 digest 与源逐字一致**（B7）：
+#     digest 是内容寻址的，相等 ⇒ 只改了指向、没换内容；不一致就 fail（并把两个 digest 都打出来）。
+#     若目标本来就指向同一个 digest 则幂等短路、不做无谓写入。
 
 on:
   workflow_dispatch:
@@ -59,7 +61,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
-      - name: Retag（打印改前/改后 digest）
+      - name: Retag（改前/改后校验源与目标 digest 一致）
         env:
           FROM: ${{ inputs.from_tag }}
           TO: ${{ inputs.to_tag }}
@@ -67,14 +69,72 @@ jobs:
           set -euo pipefail
           IMAGE="ghcr.io/mole404/lsky-pro-docker"
           # 注意：本步骤带 set -o pipefail，`cmd | head` 会因 SIGPIPE 退出 255 把整步搞红
-          # （这个坑以前踩过）→ 一律先写文件再 head。
+          # （这个坑以前踩过）→ 一律先写文件、再 head，不把 inspect 接到 head/grep 的管道里。
+          #
+          # 取某 tag 的**顶层 digest**（multi-arch 时就是 index 的 digest）。取不到返回非 0。
+          digest_of() { # $1=tag  $2=落盘文件
+            docker buildx imagetools inspect "${IMAGE}:$1" > "$2" 2>&1
+          }
+
           echo "== 改前：:${TO} =="
-          docker buildx imagetools inspect "${IMAGE}:${TO}" > /tmp/before.txt 2>&1 || echo "（该 tag 当前不存在）" > /tmp/before.txt
-          head -6 /tmp/before.txt || true
+          BEFORE=""
+          if digest_of "$TO" /tmp/before.txt; then
+            BEFORE=$(awk '$1=="Digest:"{print $2; exit}' /tmp/before.txt)
+            head -6 /tmp/before.txt || true
+            echo "改前 :${TO} digest = ${BEFORE:-（未解析到）}"
+          else
+            echo "（:${TO} 当前不存在）"
+            head -6 /tmp/before.txt || true
+          fi
+
           echo "== 源：:${FROM} =="
-          docker buildx imagetools inspect "${IMAGE}:${FROM}" > /tmp/from.txt 2>&1
+          if ! digest_of "$FROM" /tmp/from.txt; then
+            echo "::error::取不到源 :${FROM} 的 digest —— 源 tag 不存在或无法访问"
+            head -20 /tmp/from.txt || true
+            exit 1
+          fi
           head -6 /tmp/from.txt || true
+          SRC_DIGEST=$(awk '$1=="Digest:"{print $2; exit}' /tmp/from.txt)
+          if ! [[ "$SRC_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::源 :${FROM} 的 digest 格式不对（解析到：'$SRC_DIGEST'）"
+            head -20 /tmp/from.txt || true
+            exit 1
+          fi
+          echo "源 :${FROM} digest = $SRC_DIGEST"
+
+          # 幂等短路：目标已经是同一个 digest（内容一致）就没必要再改
+          if [ -n "$BEFORE" ] && [ "$BEFORE" = "$SRC_DIGEST" ]; then
+            echo "::notice:::${TO} 已指向 $SRC_DIGEST（与源一致），无需变更"
+            exit 0
+          fi
+
           docker buildx imagetools create -t "${IMAGE}:${TO}" "${IMAGE}:${FROM}"
+
           echo "== 改后：:${TO} =="
-          docker buildx imagetools inspect "${IMAGE}:${TO}" > /tmp/after.txt 2>&1
+          if ! digest_of "$TO" /tmp/after.txt; then
+            echo "::error::retag 之后读不到 :${TO} 的 digest —— retag 可能没生效"
+            head -20 /tmp/after.txt || true
+            exit 1
+          fi
           head -6 /tmp/after.txt || true
+          DST_DIGEST=$(awk '$1=="Digest:"{print $2; exit}' /tmp/after.txt)
+
+          # 核心断言：目标 digest 必须**逐字等于**源 digest。
+          # digest 是内容寻址的（同一 digest ⇒ 同一份内容），相等即证明 retag 只改指向、没换内容。
+          # 不一致必须失败 —— 否则等于把一个「和源不同」的镜像悄悄挂到该 tag 上。
+          if [ "$DST_DIGEST" != "$SRC_DIGEST" ]; then
+            echo "::error::retag 源/目标 digest 不一致！"
+            echo "  源   :${FROM} = $SRC_DIGEST"
+            echo "  目标 :${TO} = $DST_DIGEST"
+            echo "--- 源 :${FROM} 完整 inspect ---"; cat /tmp/from.txt || true
+            echo "--- 目标 :${TO} 完整 inspect ---"; cat /tmp/after.txt || true
+            exit 1
+          fi
+          echo "✅ digest 校验通过：:${TO} 与源 :${FROM} 内容一致（$SRC_DIGEST）"
+          {
+            echo "## Retag digest 校验"
+            echo ""
+            echo "- 源   \`:${FROM}\` = \`$SRC_DIGEST\`"
+            echo "- 目标 \`:${TO}\` = \`$DST_DIGEST\`（改前：${BEFORE:-不存在}）"
+            echo "- 结论：一致 ✅"
+          } >> "$GITHUB_STEP_SUMMARY"
