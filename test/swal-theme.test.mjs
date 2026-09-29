@@ -67,31 +67,37 @@ const css = compiledCommonCss();
 const swalCss = read('node_modules', 'sweetalert2', 'dist', 'sweetalert2.css');
 
 // ---------------------------------------------------------------- ① 哨兵 & 横线
-console.log('\n[① 去哨兵] 「移动到相册」弹窗里不再出现「我也是有底线的~」');
+console.log('\n[① 去哨兵] 「移动到相册」「相册」两个弹窗里都不再出现「我也是有底线的~」');
 {
     check('less 里按弹窗 id 收窄：只有 #image-movements-modal 里的 .infinite-scroll 被藏',
         /#image-movements-modal\s*\{\s*\.infinite-scroll\s*\{\s*display:\s*none;?\s*\}\s*\}/.test(less));
-    check('不是一刀切地隐藏 .infinite-scroll（抽屉里的相册列表要照旧显示）',
-        !/(^|\})\s*\.infinite-scroll\s*\{\s*display:\s*none/.test(less));
+    check('不是一刀切地隐藏 .infinite-scroll（图片墙的哨兵要照旧显示）',
+        !/(^|\})\s*\.infinite-scroll\s*{\s*display:\s*none/.test(less));
+    // 相册列表从右侧抽屉搬进 #album-switch-modal 后，哨兵也要在这个弹窗里藏掉。
+    // 那条规则写在 images.blade.php 自己的 <style> 里（本仓库的补丁只改这一个文件，common.less 不动），
+    // 所以这里做静态断言（编译出来的 common.css 里当然没有它）。
+    check('相册弹窗（#album-switch-modal）里同样藏掉哨兵，且 common.less 里那条一个字没动',
+        /#album-switch-modal \.infinite-scroll \{\s*display: none;\s*\}/.test(blade)
+        && /#image-movements-modal\s*\{\s*\.infinite-scroll\s*\{\s*display:\s*none;?\s*\}\s*\}/.test(less));
     check('列表容器仍可滚动（#movements-albums 保留 overflow-y-auto + max-h-[50vh]）',
         /id="movements-albums"[^>]*class="[^"]*overflow-y-auto[^"]*"[^>]*>/.test(movementsTpl)
         && movementsTpl.includes('max-h-[50vh]'));
 
-    // 用真实层叠验证：同一个 .infinite-scroll，在弹窗里 display:none、在抽屉里 display:flex
+    // 用真实层叠验证：同一个 .infinite-scroll，在「移动到相册」弹窗里 display:none、在图片墙里 display:flex
     const dom = new JSDOM(`<!DOCTYPE html><html><head><style>${css}</style></head><body>
         <div id="image-movements-modal"><div id="movements-albums">
             <div class="infinite-scroll"><span>我也是有底线的~</span></div>
         </div></div>
-        <div id="drawer"><div id="drawer-content">
+        <div id="images-scroll">
             <div class="infinite-scroll"><span>我也是有底线的~</span></div>
-        </div></div>
+        </div>
     </body></html>`);
     const display = (sel) => dom.window.getComputedStyle(dom.window.document.querySelector(sel)).display;
     check('弹窗里的哨兵 display=none（那行「我也是有底线的~」看不见了）',
         display('#image-movements-modal .infinite-scroll') === 'none',
         display('#image-movements-modal .infinite-scroll'));
-    check('抽屉里的哨兵不受影响（display=flex，还是原来的样式）',
-        display('#drawer-content .infinite-scroll') === 'flex', display('#drawer-content .infinite-scroll'));
+    check('图片墙的哨兵不受影响（display=flex，还是原来的样式）',
+        display('#images-scroll .infinite-scroll') === 'flex', display('#images-scroll .infinite-scroll'));
     dom.window.close?.();
 }
 

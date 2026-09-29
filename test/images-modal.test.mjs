@@ -1,15 +1,18 @@
 /*
- * 图片页「详细信息 / 移动到相册」改成居中卡片弹窗的回归测试（纯静态断言，不需要浏览器）
+ * 图片页「详细信息 / 移动到相册」改成居中卡片弹窗、以及「相册列表」从右侧抽屉搬进弹窗后的
+ * 回归测试（纯静态断言，不需要浏览器）
  *
- * 背景：这两项原来是画进右侧抽屉 #drawer 的；老师要求换成复用 x-modal 的居中卡片弹窗，
- * 抽屉只保留「顶部工具栏 → 相册列表」这一本职。这个文件就是把那次改动的契约钉住：
- *   1. 新弹窗的钩子都在，且两项确实不再走抽屉（drawer.open 那条调用没了）
- *   2. 抽屉那一套钩子一个都没被改名/删除（菜单绑定、data-operate、data-id、相册列表模板…）
+ * 背景：这两项原来是画进右侧抽屉 #drawer 的；老师要求换成复用 x-modal 的居中卡片弹窗。
+ * 后续又一次改造：连「相册列表」也从抽屉搬进了 #album-switch-modal，抽屉整块删除。
+ * 这个文件把这两次改动的契约钉住：
+ *   1. 三个新弹窗的钩子都在，且没有任何一项再走抽屉（抽屉的 markup / JS / 无限加载容器一个不剩）
+ *   2. 页面该有的钩子一个都没被改名/删除（菜单绑定、data-operate、相册列表模板…）
  *   3. 「详细信息」字段顺序：上传时间第一、图片名称第二，其余字段一个不少
  *   4. 弹窗内容只用设计令牌（不出现硬编码颜色）
  *   5. 「移动」的请求沿用原实现（同一个 route、同一份 payload）
- *   6. 二级菜单「返回」的箭头与文字之间留了 6~8px 间距（改的是 .less，不是钉住的 context-js.js）
+ *   6. 相册弹窗：本地搜索、≥44px 行、当前相册高亮+徽标、创建/重命名、加载中/空状态、底部「完成」
  *   7. 钉住的 context-js.js（两份拷贝）没被碰过 —— 直接对 Dockerfile 里钉的 md5
+ *   8. 二级菜单「返回」的箭头与文字之间留了 6~8px 间距（改的是 .less，不是钉住的 context-js.js）
  *
  * 运行：node images-modal.test.mjs
  */
@@ -33,6 +36,12 @@ function check(name, pass, detail = '') {
     console.log(`${pass ? '  PASS' : '  FAIL'}  ${name}${detail ? '  → ' + detail : ''}`);
 }
 
+// 结构断言先去掉注释：注释里会写「旧的 drawer.close()」这类说明，会把「一个都不剩」的检查带偏
+const bladeCode = blade
+    .replace(/\{\{--[\s\S]*?--\}\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
+
 // 取出一整块 <script type="text/html" id="xxx"> … </script>
 function tpl(id) {
     const start = blade.indexOf(`<script type="text/html" id="${id}">`);
@@ -44,6 +53,12 @@ function tpl(id) {
 const detailTpl = tpl('image-detail-tpl');
 const movementsContainerTpl = tpl('movements-container-tpl');
 const movementsItemTpl = tpl('movements-album-item-tpl');
+// 相册弹窗（列表从右侧抽屉搬进弹窗）的三个模板
+const albumShellTpl = tpl('album-switch-tpl');
+const albumContainerTpl = tpl('albums-container-tpl');
+const albumItemTpl = tpl('albums-item-tpl');
+// 创建/重命名失败时把接口返回的 message 写进表单里的 .error-message 展示（创建与重命名两处共用这一行）
+const FORM_ERROR_SHOW = "$errorMessage.html('<i class=\"fas fa-exclamation-circle\"></i> ' + response.data.message).show();";
 
 // ---------------------------------------------------------------- 新弹窗钩子
 console.log('\n[新弹窗] 两个居中卡片弹窗（复用 x-modal）的钩子');
@@ -73,19 +88,30 @@ console.log('\n[换实现] 两项都不再渲染进右侧抽屉，但「移动�
         /modal\.close\(MOVEMENTS_MODAL\);\s*resetImages\(\);\s*toastr\.success\(response\.data\.message\);/.test(blade));
 }
 
-// ---------------------------------------------------------------- 抽屉本职保留
-console.log('\n[回归] 抽屉保留本职（顶部工具栏「相册列表」），且所有旧钩子都没被改名/删除');
+// ---------------------------------------------------------------- 抽屉已连根删除
+console.log('\n[换实现] 右侧抽屉连根删除：markup、JS 状态、无限加载容器一个都不剩');
 {
-    const drawerHooks = [
+    const drawerGone = [
         'id="drawer-mask"', 'id="drawer"', 'id="drawer-title"', 'id="drawer-content"',
-        "const $drawer = $(\"#drawer\");", "const $drawerMask = $('#drawer-mask');",
-        'const drawer = {', 'open(title, content, callback)', 'close(callback)', 'toggle(title, content, callback)',
-        "drawer.find('#drawer-title').html(title)", "drawer.find('#drawer-content').html(content)",
-        "utils.infiniteScroll('#drawer-content'", 'albumsInfinite', 'const getAlbums = (options, callback) =>',
-        'drawer.toggle(title, content, function ()', 'drawer.close();',
+        'const drawer = {', 'const $drawer', '$drawerMask', 'drawer.close()', 'drawer.toggle(', 'drawer.open(',
+        "utils.infiniteScroll('#drawer-content'", '#drawer-content',
     ];
-    const missing = drawerHooks.filter((h) => !blade.includes(h));
-    check('抽屉钩子一个不少（id / drawer 对象 / 相册列表模板与无限加载）', missing.length === 0, missing.join(' | '));
+    const left = drawerGone.filter((h) => bladeCode.includes(h));
+    check('抽屉那一套一个都不剩（markup / $drawer / drawer 对象 / 无限加载容器）', left.length === 0, left.join(' | '));
+
+    check('顶部工具栏「相册列表」入口改为打开相册弹窗（ALBUM_MODAL + openAlbums + modal.open）',
+        blade.includes('href="javascript:getAlbums()"')
+        && blade.includes("const ALBUM_MODAL = 'album-switch-modal';")
+        && blade.includes('openAlbums(content, function () {')
+        && blade.includes('modal.open(ALBUM_MODAL);'));
+
+    check('相册弹窗钩子：<x-modal id="album-switch-modal"> + #album-switch-content + 外壳模板',
+        blade.includes('<x-modal id="album-switch-modal">') && blade.includes('id="album-switch-content"')
+        && blade.includes('id="album-switch-tpl"'));
+
+    check('「移动到相册 / 详细信息」两个弹窗的钩子没被这次改动碰坏',
+        blade.includes('<x-modal id="image-detail-modal">') && blade.includes('<x-modal id="image-movements-modal">')
+        && blade.includes('modal.open(MOVEMENTS_MODAL)') && blade.includes('modal.open(DETAIL_MODAL)'));
 
     const menuHooks = [
         'href="javascript:getAlbums()"',
@@ -93,16 +119,64 @@ console.log('\n[回归] 抽屉保留本职（顶部工具栏「相册列表」�
         'data-operate="delete"', "case 'movements':", "case 'detail':",
         'context.attach(IMAGES_ITEM', 'context.attach(IMAGES_SCROLL',
         "id=\"images-grid\"", "id=\"images-scroll\"", 'class="images-item',
-        "id=\"albums-container-tpl\"", "id=\"albums-item-tpl\"", "id=\"image-detail-tpl\"",
+        "id=\"albums-container-tpl\"", "id=\"albums-item-tpl\"", "id=\"album-update-tpl\"", "id=\"image-detail-tpl\"",
         'methods.movements()', 'methods.detail(selected[0])',
-        'new ClipboardJS(\'.dropdown-menu li a.copy\'',
+        "new ClipboardJS('.dropdown-menu li a.copy'",
     ];
     const missingMenu = menuHooks.filter((h) => !blade.includes(h));
-    check('菜单/工具栏绑定一个不少（data-operate、右键菜单 actions、相册列表入口）', missingMenu.length === 0, missingMenu.join(' | '));
-
-    check('工具栏「相册列表」入口仍然走抽屉（getAlbums 内部仍 drawer.toggle）',
-        blade.includes('drawer.toggle(title, content, function ()') && !blade.includes('modal.open(\'albums'));
+    check('菜单/工具栏绑定一个不少（data-operate、右键菜单 actions、相册列表模板）', missingMenu.length === 0, missingMenu.join(' | '));
 }
+
+// ---------------------------------------------------------------- 相册弹窗
+console.log('\n[相册弹窗] 标题/搜索/44px 行/当前徽标/加载中/空状态/「完成」');
+{
+    const shellTpl = albumShellTpl;
+    const containerTpl = albumContainerTpl;
+    const itemTpl = albumItemTpl;
+
+    check('标题 16px/600 的「相册」（右上角关闭 ✕ 由 <x-modal> 自带）',
+        /<p class="text-\[16px\] font-semibold[^"]*text-ink">__title__<\/p>/.test(shellTpl));
+    check('搜索框：按名称本地过滤（#album-switch-search + applyFilter 只切已加载行的 hidden，不打接口）',
+        shellTpl.includes('id="album-switch-search"')
+        && blade.includes('const applyFilter = () =>')
+        && blade.includes("$albums.find('>a.albums-item').each(function ()")
+        && blade.includes("$('#album-switch-search').off('input').on('input', _ => applyFilter());"));
+    check('列表容器 max-h-[50vh] + overflow-y-auto（滚到底自动加载下一页）',
+        /id="album-switch-scroll"[^>]*class="[^"]*overflow-y-auto[^"]*"/.test(shellTpl) && shellTpl.includes('max-h-[50vh]'));
+    check('每行点击区 ≥44px、左名右数（名称仍是第一个直接子 span）',
+        itemTpl.includes('min-h-[44px]')
+        && itemTpl.includes('class="min-w-0 flex-1 truncate text-[14px] name"')
+        && itemTpl.includes('albums-count') && itemTpl.includes('__image_num__ 张'));
+    check('当前相册：同一套令牌高亮 + 「当前」徽标',
+        itemTpl.includes('__current_badge__')
+        && blade.includes("toggleClass('border-brand bg-brand-soft text-brand', on)")
+        && blade.includes('<div class="ls-badge shrink-0 bg-brand-soft text-brand">当前</div>'));
+    check('点一行立即切换（沿用旧的 >a 委托 + selectedAlbum + resetImages）',
+        blade.includes("$albums.off('click', '>a').on('click', '>a', function () {")
+        && /resetImages\(\{page: 1, album_id: selectedAlbum\.id \|\| null\}\);\s*\/\/ 选中即切换[\s\S]{0,160}closeAlbums\(\);/.test(blade));
+    check('创建相册：同一个表单 / 接口 / 校验报错展示',
+        containerTpl.includes('action="/user/albums"')
+        && blade.includes("$albums.off('submit', CREATE_ID + ' form')")
+        && blade.includes(FORM_ERROR_SHOW));
+    check('重命名相册：仍走 #album-update-tpl 那一套',
+        blade.includes("$('#album-update-tpl').html()") && blade.includes("$albums.off('submit', UPDATE_ID + ' form')"));
+    check('无限加载容器换成 #album-switch-scroll（每页 40 的接口调用没变：同一个 route）',
+        blade.includes("albumsInfinite = utils.infiniteScroll('#album-switch-scroll', {")
+        && blade.includes("url: '{{ route('user.albums') }}'"));
+    check('空状态：默认隐藏 + 「还没有相册」+ 创建按钮',
+        /id="album-switch-empty" class="hidden /.test(containerTpl)
+        && containerTpl.includes('还没有相册')
+        && /id="album-switch-empty"[\s\S]*?<button[^>]*>创建相册<\/button>/.test(containerTpl));
+    check('加载中：转圈（x-loading-spin）+ 文案，加载完收起',
+        containerTpl.includes('<x-loading-spin />') && containerTpl.includes('加载中...')
+        && blade.includes("$('#album-switch-loading').addClass('hidden');"));
+    check('底部「完成」只关弹窗',
+        shellTpl.includes('id="album-switch-done"') && blade.includes("$('#album-switch-done').off('click').on('click', _ => closeAlbums());"));
+    check('哨兵在相册弹窗里藏掉（同思路写了新的一条，common.less 那条没动）',
+        /#album-switch-modal \.infinite-scroll \{\s*display: none;\s*\}/.test(blade)
+        && /#image-movements-modal\s*\{\s*\.infinite-scroll\s*\{\s*display:\s*none;?\s*\}\s*\}/.test(read('resources', 'css', 'common.less')));
+}
+
 
 // ---------------------------------------------------------------- 详细信息字段顺序
 console.log('\n[详细信息] 字段顺序与一个都不能少');
@@ -153,7 +227,13 @@ console.log('\n[移动到相册] 单选 + 当前相册标记 + 手机点击区 �
 // ---------------------------------------------------------------- 只用设计令牌
 console.log('\n[样式] 弹窗内容只用设计令牌，不硬编码颜色');
 {
-    const blocks = { 'image-detail-tpl': detailTpl, 'movements-container-tpl': movementsContainerTpl, 'movements-album-item-tpl': movementsItemTpl };
+    // 说明：'albums-container-tpl' 不参与这项检查 —— 它里面那行 .error-message（bg-red-500 / text-white）
+    // 是上游原有的创建表单标记，这次没动它（只往里加了新元素）。
+    const blocks = {
+        'image-detail-tpl': detailTpl, 'movements-container-tpl': movementsContainerTpl,
+        'movements-album-item-tpl': movementsItemTpl,
+        'album-switch-tpl': albumShellTpl, 'albums-item-tpl': albumItemTpl,
+    };
     const bad = [];
     for (const [name, text] of Object.entries(blocks)) {
         if (/#[0-9a-fA-F]{3,8}\b/.test(text)) bad.push(`${name}: hex`);
