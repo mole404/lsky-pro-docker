@@ -31,6 +31,34 @@ const UA = {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// ---------------------------------------------------------------- 可控假时钟
+// 库里用 Date.now() 卡两个窗口：MENU_OPEN_GRACE（菜单刚打开这一小段里，抬手补发的 click
+// 不许把菜单关掉）与 MENU_OPEN_IGNORE_INPUT（忽略菜单自己引发的 scroll/resize）。
+// **用真实 sleep 去"卡"这些窗口是抽奖**：事件派发 + jQuery/animation 的真实耗时会抖动，
+// 而这里要断言的恰恰是"间隔必须小于某个阈值"。实测：安卓那条用例 touchstart→click 的真实
+// 间隔在 520ms 附近抖到 891ms，越过 800ms 的 grace → 同一份代码 5 次里 4 次红。
+// 所以把 window.Date.now 换成测试可推进的假时钟：时序完全确定，不靠 sleep、不靠抽奖。
+// 只影响被替换的那个 jsdom window（每个用例各自 boot 一份）；jsdom 的 setTimeout 仍走真实时间。
+function pinClock(window, start = 1700000000000) {
+    const realNow = window.Date.now.bind(window.Date);
+    let fake = start;
+    window.Date.now = () => fake;
+    return {
+        now: () => fake,
+        advance: (ms) => { fake += ms; return fake; },
+        unpin: () => { window.Date.now = realNow; },
+    };
+}
+
+// 阈值/时序不写死成魔法数字：从被测源码里把常量读出来，用例据此构造（源码一改，用例跟着动）
+const GRACE = Number((LIB_SRC.match(/MENU_OPEN_GRACE\s*=\s*(\d+)/) || [])[1]);
+const IGNORE_INPUT = Number((LIB_SRC.match(/MENU_OPEN_IGNORE_INPUT\s*=\s*(\d+)/) || [])[1]);
+const FADE_GUARD = Number((LIB_SRC.match(/MENU_FADE_GUARD\s*=\s*(\d+)/) || [])[1]);
+const TEST_FADE_SPEED = 100;  // boot() 里传给 context.init 的值
+const CLOSE_WINDOW = TEST_FADE_SPEED + FADE_GUARD;  // closeMenus 之后「元素还在屏幕上」的时长
+const ANDROID_HOLD = 520;     // 安卓系统长按约 500ms 才派发 contextmenu（保守取 520）
+const SYNTH_CLICK_DELAY = 30; // 抬手到系统补发那一发 click 的延迟（保守取 30）
+
 // 复刻 images.blade.php 的结构与用法。menuData 为空时用简版菜单（老用例），
 // 传入时用带二级菜单的版本（新用例：复制链接 + 叶子项）。
 function boot({ ua, platform = 'iPhone', maxTouchPoints = 5, hasTouch = true, withSubmenu = false }) {
@@ -158,12 +186,24 @@ const openSub = (window) => !!window.document.querySelector('.dropdown-submenu.t
     // 现在统一用 Utils::assetVersion()（取文件 mtime）自动失效，别退回手写。
     check('images.blade.php 里 context-js.js 那行走自动版本号（Utils::assetVersion）', vline.includes('assetVersion'),
         vline.trim());
+    // 安卓那条用例的前提：真实长按（~520ms）+ 抬手补发 click（~30ms）必须落在 MENU_OPEN_GRACE 里。
+    // 阈值被调小到盖不住真实时序，就是产品 bug —— 这里先钉住，免得用例靠假时钟"自欺欺人"地过。
+    check(`结构自检：MENU_OPEN_GRACE=${GRACE} 盖得住「安卓长按 ${ANDROID_HOLD}ms + 抬手补发 ${SYNTH_CLICK_DELAY}ms」`,
+        Number.isFinite(GRACE) && GRACE > ANDROID_HOLD + SYNTH_CLICK_DELAY
+        && GRACE > ANDROID_HOLD + 1, `MENU_OPEN_GRACE=${GRACE}`);
+    check('结构自检：能从源码里读出时序常量（用假时钟构造用例的前提）',
+        Number.isFinite(IGNORE_INPUT) && Number.isFinite(FADE_GUARD) && IGNORE_INPUT > 0 && FADE_GUARD > 0,
+        `MENU_OPEN_IGNORE_INPUT=${IGNORE_INPUT} MENU_FADE_GUARD=${FADE_GUARD} 关闭窗=${CLOSE_WINDOW}ms`);
 }
 
 // ---------------------------------------------------------------- iPhone
 console.log('\n[iPhone Safari] 长按应弹出图床自己的菜单');
 {
     const { window, $, $item, img } = boot({ ua: UA.iphone });
+    // 假时钟：长按抬手补发的那发 click 必须落在 MENU_OPEN_GRACE 内才有「菜单不关」这个结果，
+    // 而真实 sleep 去卡这个窗口是抽奖（见文件顶部的说明）。这里把间隔钉成 0（最紧的一档）。
+    const clock = pinClock(window);
+    const t0 = clock.now();
     await longPress(window, $item[0]);
     check('长按（≥250ms）后出现自定义菜单', !!menu(window), menuText(window));
     check('菜单内容完整（header + 各项）', menuText(window).includes('图片操作') && menuText(window).includes('复制链接'));
@@ -178,10 +218,11 @@ console.log('\n[iPhone Safari] 长按应弹出图床自己的菜单');
     touch(window, 'touchend', 100, 200, $item[0]);
     tapClick(window, img);
     check('长按抬手补发的 click 被吞掉（不会误开图片预览）', window.__viewerOpened === 0);
-    check('★ 抬手补发的 click 不会把刚打开的菜单关掉（回归：菜单"刚开就自己关"的陷阱）', menuOpen(window) === true);
+    check('★ 抬手补发的 click 不会把刚打开的菜单关掉（回归：菜单"刚开就自己关"的陷阱）', menuOpen(window) === true,
+        `距 touchstart ${clock.now() - t0}ms（MENU_OPEN_GRACE=${GRACE}）`);
 
     // 新规格：菜单开着时，点别处只关菜单，不触发别的交互
-    await sleep(750);
+    clock.advance(750);
     window.__viewerOpened = 0;
     // 真实点按是“按下即抬起”：抬手会取消长按计时器，否则 250ms 后长按会再弹一次菜单
     touch(window, 'touchstart', 300, 300, img);
@@ -196,10 +237,11 @@ console.log('\n[iPhone Safari] 长按应弹出图床自己的菜单');
     check('★ 淡出期间（菜单还看得见）的点击照样被吞', window.__viewerOpened === 0, `viewerOpened=${window.__viewerOpened}`);
 
     // 淡出结束、菜单真的没了之后，正常点击必须照旧生效（不会一直吞点击）
-    await sleep(300);
+    clock.advance(CLOSE_WINDOW + 50);
     window.__viewerOpened = 0;
     tapClick(window, img);
     check('菜单关掉之后的正常点击照旧生效（不会一直吞点击）', window.__viewerOpened === 1, `viewerOpened=${window.__viewerOpened}`);
+    clock.unpin();
 }
 
 // ---------------------------------------------------------------- iPhone: 取消条件
@@ -240,6 +282,8 @@ console.log('\n[iPhone Safari] 长按的取消与边界');
 console.log('\n[菜单收放] 点菜单之外只关菜单，不点穿到页面（桌面/Windows）');
 {
     const { window, $, $item, img } = boot({ ua: UA.windows, platform: 'Win32', maxTouchPoints: 0, hasTouch: false });
+    // 假时钟：「淡出期间仍被吞」这类断言要求检查时菜单还在关闭窗内 —— 真实 sleep 卡不住（见文件顶部）
+    const clock = pinClock(window);
 
     $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
     check('右键打开菜单', menuOpen(window) === true);
@@ -255,7 +299,7 @@ console.log('\n[菜单收放] 点菜单之外只关菜单，不点穿到页面�
     tapClick(window, img);
     check('★ 淡出期间再点图片：仍被吞（看得见就不许点穿）', window.__viewerOpened === 0, `viewerOpened=${window.__viewerOpened}`);
 
-    await sleep(300);
+    clock.advance(CLOSE_WINDOW + 50);
     window.__viewerOpened = 0;
     tapClick(window, img);
     check('菜单关掉后再点图片：正常打开预览', window.__viewerOpened === 1);
@@ -266,6 +310,7 @@ console.log('\n[菜单收放] 点菜单之外只关菜单，不点穿到页面�
     tapClick(window, window.document.querySelector('.dropdown-context li a'));
     check('点菜单内部项：动作照旧执行（没有被守卫吞掉）', window.__pageClicks.length > 0, `pageClicks=${window.__pageClicks.length}`);
     check('点菜单内部项：菜单照旧关闭', menuOpen(window) === false);
+    clock.unpin();
 }
 
 // ---------------------------------------------------------------- 滚动 / 缩放 / Esc
@@ -413,22 +458,28 @@ console.log('\n[Mac（含 M 系列）] 不该被误判成 iPad');
 console.log('\n[Android Chrome] 长按本来就有 contextmenu，必须完全走原路径');
 {
     const { window, $, $item } = boot({ ua: UA.android, platform: 'Linux armv8l', maxTouchPoints: 5 });
-    // 真实安卓时序：手指按住 → 约 500ms 时系统派发 contextmenu（菜单弹出，手指还按着）→ 抬手补发 click
+    // 假时钟：把「长按 520ms → 抬手补发 click」的时序钉死（见文件顶部 pinClock 的说明）。
+    // 真机时序：touchstart → 约 520ms 时系统派发 contextmenu（菜单弹出，手指还按着）→ 抬手补发 click。
+    const clock = pinClock(window);
+    const t0 = clock.now();
     touch(window, 'touchstart', 100, 200, $item[0]);
-    await sleep(520);
+    clock.advance(ANDROID_HOLD);                 // 手指按住的那 520ms（假时钟推进，不真等）
     let prevented = null;
     // 注意：库里的处理函数会 stopPropagation（阻止事件继续冒泡到更外层），
     // 所以这里必须挂在同一层级的委托上才能观察到 defaultPrevented
     $(window.document).on('contextmenu', '.images-item', (e) => { prevented = e.isDefaultPrevented(); });
     $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
+    const tOpen = clock.now();
     check('长按 contextmenu 照旧打开菜单', !!menu(window), menuText(window));
     check('contextmenu 默认行为被阻止（不弹浏览器菜单）', prevented === true);
 
     // 抬手 → 安卓可能补发一发 click，不能把刚打开的菜单关掉
     const img = window.document.querySelector('.images-item img');
+    clock.advance(SYNTH_CLICK_DELAY);            // 抬手到系统补发那一发 click 的延迟
     touch(window, 'touchend', 100, 200, $item[0]);
     tapClick(window, img);
-    check('★ 安卓长按抬手补发的 click 不会关掉刚打开的菜单', menuOpen(window) === true);
+    check('★ 安卓长按抬手补发的 click 不会关掉刚打开的菜单', menuOpen(window) === true,
+        `距 touchstart ${clock.now() - t0}ms / 距菜单打开 ${clock.now() - tOpen}ms（MENU_OPEN_GRACE=${GRACE}）`);
 
     // 但用户真的另点一下（有 touchstart）时，必须先关菜单而不是点穿
     window.__viewerOpened = 0;
@@ -436,6 +487,7 @@ console.log('\n[Android Chrome] 长按本来就有 contextmenu，必须完全走
     tapClick(window, img);
     check('安卓上真手指点别处：只关菜单、不开预览', menuOpen(window) === false && window.__viewerOpened === 0,
         `open=${menuOpen(window)} viewer=${window.__viewerOpened}`);
+    clock.unpin();
 }
 
 // ---------------------------------------------------------------- Windows
@@ -454,11 +506,15 @@ console.log('\n[Windows 桌面] 鼠标右键，必须完全走原路径');
 console.log('\n[回归] 菜单还在屏幕上时，任何路径都不许“点穿”（老师报的 Windows 偶尔点穿）');
 {
     const { window, $, $item, img } = boot({ ua: UA.windows, platform: 'Win32', maxTouchPoints: 0, hasTouch: false });
+    // 假时钟：A/B/C/D 全部是「必须在某个时间窗之内 / 之外」的断言。用真实 sleep 卡窗口是抽奖
+    // （实测：A 前置那条会间歇性红 —— close 之后先跑了一条 console.log，真实耗时偶尔就超过
+    //   fadeSpeed+MENU_FADE_GUARD=150ms 的关闭窗，于是 onScreen 变 false）。这里全部用假时钟推进。
+    const clock = pinClock(window);
 
     // A. 淡出窗口：菜单被关掉后元素还在淡出（屏幕上还看得见），这一瞬间点别的图片
     //    必须照样被吞 —— 原来的实现只看状态，状态一 false 就放行，于是点穿开预览。
     $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
-    await sleep(320);                                   // 越过“菜单刚打开”的忽略窗
+    clock.advance(IGNORE_INPUT + 20);                   // 越过“菜单刚打开”的忽略窗
     window.document.getElementById('images-scroll').dispatchEvent(new window.Event('scroll', { bubbles: true }));
     check('A 前置：滚动把菜单关掉（状态已是 false）', menuOpen(window) === false);
     check('A 前置：但元素还在屏幕上（淡出中）', window.eval('context.isMenuOnScreen()') === true,
@@ -474,7 +530,7 @@ console.log('\n[回归] 菜单还在屏幕上时，任何路径都不许“点�
     // B. 状态与可见性脱节：状态说关了、淡出窗也过了，但菜单其实还画在屏幕上 → 仍必须拦。
     //    （真浏览器里“状态被某条路径提前置 false、而菜单还在”正是偶尔点穿的成因；
     //      jsdom 没有排版引擎、高度恒为 0，所以这里把高度桩成 120。）
-    await sleep(200);
+    clock.advance(CLOSE_WINDOW + 50);                   // 关闭窗彻底过去（onScreen 只能靠 DOM 实测）
     const el = menu(window);
     el.getBoundingClientRect = () => ({ height: 120, width: 160, top: 0, left: 0, right: 160, bottom: 120 });
     check('B 前置：状态 false、淡出窗已过，但 DOM 实测菜单可见',
@@ -494,12 +550,12 @@ console.log('\n[回归] 菜单还在屏幕上时，任何路径都不许“点�
     window.document.getElementById('images-scroll').dispatchEvent(new window.Event('scroll', { bubbles: true }));
     check('★ C 菜单刚打开 300ms 内的滚动（它自己引发的）→ 不关菜单', menuOpen(window) === true);
 
-    await sleep(320);
+    clock.advance(IGNORE_INPUT + 20);
     window.document.getElementById('images-scroll').dispatchEvent(new window.Event('scroll', { bubbles: true }));
     check('C 过了忽略窗之后用户滚动 → 照旧关菜单', menuOpen(window) === false);
 
     // D. 淡出结束、菜单真的没了 → 点击必须恢复正常（绝不能一直吞点击）
-    await sleep(300);
+    clock.advance(CLOSE_WINDOW + 50);
     window.__viewerOpened = 0;
     check('D 前置：菜单确实不在屏幕上了', window.eval('context.isMenuOnScreen()') === false);
     tapClick(window, img);
@@ -507,7 +563,7 @@ console.log('\n[回归] 菜单还在屏幕上时，任何路径都不许“点�
 
     // E. 诊断转储：能拿到开/关记录（含关闭原因），出问题时老师复制出来即可
     $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
-    await sleep(320);
+    clock.advance(IGNORE_INPUT + 20);
     window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     const dump = window.eval('context.debugDump()');
     check('E debugDump() 含打开记录（触发方式）与关闭原因',

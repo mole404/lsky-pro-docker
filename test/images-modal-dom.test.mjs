@@ -24,7 +24,7 @@ import { JSDOM } from 'jsdom';
 const here = path.dirname(decodeURIComponent(new URL(import.meta.url).pathname));
 const SRC = path.join(here, '..', 'src');
 const blade = fs.readFileSync(path.join(SRC, 'resources', 'views', 'user', 'images.blade.php'), 'utf8');
-// app.js 只用来核对那条共用委托选择器没被改掉（本次修法落在模板，不动它）
+// app.js 用来核对那条共用 click 委托的判据（F14 起已收窄到插件自己那条哨兵的专属类）
 const appJs = fs.readFileSync(path.join(SRC, 'resources', 'js', 'app.js'), 'utf8');
 const JQUERY_SRC = fs.readFileSync(path.join(here, 'node_modules/jquery/dist/jquery.js'), 'utf8');
 
@@ -309,9 +309,10 @@ console.log('\n[相册弹窗] 顶部工具栏的「相册」入口：渲染、�
         rows.length === 2 && rows.eq(0).data('id') === 1 && rows.eq(1).data('id') === 9
         && rows.eq(0).find('a.albums-item').data('id') === 1, `${rows.length} 行`);
     check('每行点击区 ≥44px（min-h-[44px]）', rows.eq(0).attr('class').includes('min-h-[44px]'));
-    // 名称是 <div class="name">（原来是 span）：app.js 的无限加载对列表容器挂的是
-    // $(selector).on('click', 'span:not(.disabled)', …) —— 行内有 span 就会被当成「加载更多」，
-    // 点相册名/「当前」徽标会顺手多拉一页相册。这里按那条委托的同一选择器检查。
+    // 名称是 <div class="name">（原来是 span）：老 app.js 的无限加载对列表容器挂的是
+    // $(selector).on('click', 'span:not(.disabled)', …) —— 行内有 span 就会被当成「加载更多」。
+    // F14 起那条委托已收窄到插件自己那条哨兵的专属类（js-infinite-scroll-trigger），行内
+    // 就算有 span 也不会再命中；模板这边「行内不放 span」继续保持（双保险）。
     check('左侧相册名（<a> 里的 .name，非 span）、右侧图片数（div，常显不被按钮顶掉）',
         rows.eq(0).find('a.albums-item > .name').first().text() === '三亚'
         && rows.eq(0).find('a.albums-item > .name').first().is('div')
@@ -321,8 +322,12 @@ console.log('\n[相册弹窗] 顶部工具栏的「相册」入口：渲染、�
     check('行里没有 span:not(.disabled)（点名字/徽标不会再命中「加载更多」的委托）',
         rows.eq(0).find('span:not(.disabled)').length === 0 && rows.eq(1).find('span:not(.disabled)').length === 0,
         `row0 spans=${rows.eq(0).find('span').length} row1 spans=${rows.eq(1).find('span').length}`);
-    check('app.js 那条共用委托选择器本次没动（修法落在模板：行内不放 span）',
-        appJs.includes("$(selector).off('click').on('click', 'span:not(.disabled)'"));
+    // F14：判据从「容器内任意 span」收窄成哨兵专属类 —— 行为回归在
+    // infinite-scroll-click-delegate.test.mjs，这里只核对源码里那条委托确实收窄了。
+    check('app.js 那条共用委托已收窄到哨兵专属类（行内 span 不再被当成「加载更多」）',
+        appJs.includes('js-infinite-scroll-trigger')
+        && appJs.includes('click.infiniteScroll')
+        && ! appJs.includes("'span:not(.disabled)'"));
     check('编辑/删除按钮在 <a> 外面（兄弟节点 .albums-actions 里），且常显（class 里没有 hidden）',
         rows.eq(0).find('a.albums-item').find('button').length === 0
         && rows.eq(0).children('.albums-actions').find('button.update').length === 1

@@ -47,24 +47,55 @@ const movementsTpl = tpl('movements-container-tpl');
 const movementsItemTpl = tpl('movements-album-item-tpl');
 
 // ---------------------------------------------------------------- 编译 common.less
-// lessc 在 src/node_modules 里（仓库工作区自带）；拿不到就退回已经构建好的 public/css/common.css
-// （那份只有重建过 CSS 才含本次的新规则 —— 拿不到新规则时下面会明确 FAIL，不会假绿）。
-function compiledCommonCss() {
-    const lessc = path.join(SRC, 'node_modules', '.bin', 'lessc');
-    if (fs.existsSync(lessc)) {
-        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lsky-less-'));
-        const entry = path.join(tmp, 'common.less');
-        // '~toastr' 是 webpack 的解析写法，lessc 不认；换成一行注释即可（内容与本测试无关）
-        fs.writeFileSync(entry, lessRaw.replace("@import '~toastr';", '// stub'));
-        const out = path.join(tmp, 'common.css');
-        execFileSync(lessc, [entry, out]);
-        return fs.readFileSync(out, 'utf8');
+// 依赖解析：sweetalert2 / less 由 **test/package.json 正经声明**（`npm ci` 之后就在
+// test/node_modules 里）。../src/node_modules 只作本地开发时的后备 —— CI 新拉的 checkout
+// 里没有它，以前直接读那里会让这条测试「换个环境就跑不起来」。
+const DEP_ROOTS = [path.join(here, 'node_modules'), path.join(SRC, 'node_modules')];
+function depResolve(rel, label) {
+    const tried = [];
+    for (const root of DEP_ROOTS) {
+        const p = path.join(root, rel);
+        tried.push(p);
+        if (fs.existsSync(p)) {
+            if (root !== DEP_ROOTS[0]) {
+                console.log(`  （提示）${label} 取自后备路径 ${p} —— 在 test/ 里 npm ci 之后会从 test/node_modules 取`);
+            }
+            return { root, path: p };
+        }
     }
-    return read('public', 'css', 'common.css');
+    throw new Error(`找不到 ${label}（${rel}）。在 test/ 里 npm ci（依赖已声明在 test/package.json）\n  找过：\n  - ${tried.join('\n  - ')}`);
+}
+const depPath = (rel, label) => depResolve(rel, label).path;
+
+function compiledCommonCss() {
+    const lessc = depPath(path.join('.bin', 'lessc'), 'lessc（less 包）');
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lsky-less-'));
+    const entry = path.join(tmp, 'common.less');
+    // '~toastr' 是 webpack 的解析写法，lessc 不认；换成一行注释即可（内容与本测试无关）
+    fs.writeFileSync(entry, lessRaw.replace("@import '~toastr';", '// stub'));
+    const out = path.join(tmp, 'common.css');
+    execFileSync(lessc, [entry, out]);
+    return fs.readFileSync(out, 'utf8');
 }
 
 const css = compiledCommonCss();
-const swalCss = read('node_modules', 'sweetalert2', 'dist', 'sweetalert2.css');
+const swalCss = fs.readFileSync(depPath(path.join('sweetalert2', 'dist', 'sweetalert2.css'), 'sweetalert2 的 CSS'), 'utf8');
+
+// 一致性自检：test 侧装的 sweetalert2 / less 与**应用构建期实际用的那份**（src/package-lock.json）
+// 必须逐版本一致 —— 否则「CSS 层叠 / LESS 编译」这套断言测的就不是应用真正用到的东西了。
+// （实测过代价：sweetalert2 11.26 的默认 CSS 与 11.4 不同，输入框高度、border 简写都变了 → 3 条断言红。
+//   所以 test/package.json 对这两个包是**精确版本**，不是范围；src 一升级，这里要同步跟着升。）
+{
+    const appLock = JSON.parse(read('package-lock.json'));
+    const locked = (name) => ((appLock.packages || {})[`node_modules/${name}`] || {}).version || '';
+    for (const name of ['sweetalert2', 'less']) {
+        const installed = JSON.parse(fs.readFileSync(
+            depResolve(path.join(name, 'package.json'), `${name} 的 package.json`).path, 'utf8'));
+        check(`test 侧 ${name} 与应用锁定的版本逐字一致（src/package-lock.json ↔ test/package.json）`,
+            installed.version === locked(name) && !!locked(name),
+            `test=${installed.version} src 锁定=${locked(name) || '(缺)'}`);
+    }
+}
 
 // ---------------------------------------------------------------- ① 哨兵 & 横线
 console.log('\n[① 去哨兵] 「移动到相册」「相册」两个弹窗里都不再出现「我也是有底线的~」');
