@@ -45,7 +45,10 @@ ARG PHP_EXT_INSTALLER_VERSION=2.12.0
 #      -> 看响应头 Docker-Content-Digest（8.3-apache-bookworm 同理，两个都要查）
 #   3) 把拿到的 sha256 填进下面的 ARG（**tag 保留**，digest 附在 @ 之后，形如 php:8.3-apache-bookworm@sha256:…）
 # 注意：钉死后上游的安全修复**不会**自己进来 —— 想拿新修复就得重跑上面两步、更新 digest，再重建镜像。
-# 试构建（CI 的 workflow_dispatch 换 PHP 版本）也要一并覆盖对应的 digest ARG。
+# 试构建（CI 的 workflow_dispatch 换 PHP 版本）也要一并覆盖对应的 digest ARG：
+# 带 `@digest` 时 **digest 优先、tag 只作装饰**，只换 PHP_VERSION 不换 digest 会静默构建出旧版本。
+# CI 已自动化：build-image.yaml 的 Resolve 步骤会按请求的 PHP 版本解析出对应 digest 并覆盖这两个 ARG
+# （也可在 workflow_dispatch 里手工传 php_cli_digest / php_apache_digest）。上面这套手工方法仅用于本地/离线场景。
 # 实测（2026-09-30，Docker Hub Registry API 原始响应头，见提交说明/报告）：
 #   php:8.3-cli-bookworm    -> sha256:4687aec76c4a895b68b91bcd5e48f1ba7a3dea120f6de50bba7e1a93af5372dd
 #   php:8.3-apache-bookworm -> sha256:06df07e2e1d72581dde4fd97bc98d2d0b78686fc13d6a041c520da9a6ce73055
@@ -168,7 +171,12 @@ RUN printf '%s\n' \
 # 所以这里再对三处构建期内容做确定性哈希，把它们也编进标记：
 #   app_src_md5 = app/ config/ routes/ 三个目录下所有文件「按路径排序后内容拼接」的 md5
 #                 （排序用 sort -z，与文件系统返回顺序无关 = 同一份源码在任何机器上结果一致）；
-#   app_js_md5  = public/js/app.js 的 md5；app_css_md5 = public/css/app.css 的 md5。
+#   app_js_md5  = public/js/app.js 的 md5；app_css_md5 = public/css/app.css 的 md5；
+#   composer_lock_md5 = composer.lock 的 md5（应用根目录，构建后镜像里是 /var/www/lsky/composer.lock）。
+#                 补这一条的背景：上面的指纹只覆盖「代码」，而 composer.lock 变了（只升级 vendor 依赖、
+#                 其它 PHP/前端都没动）时，标记不变 → 老卷不会重新同步 → 卷里是旧依赖、镜像里是新依赖。
+#                 composer install 是在 build 阶段、镜像自带的 vendor/ 已经按新 lock 装好；
+#                 加了这一条，只换依赖的镜像也会让标记变、触发一次同步。
 # 任何一个不存在 / 命令失败都写 none（标记照写）—— **绝不能让构建失败**。
 # 入口脚本比的是整个标记文件的内容，所以多出这几行 = 换镜像时自动触发同步，entrypoint 不需要改。
 RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z | xargs -0 -r cat 2>/dev/null | md5sum | cut -d' ' -f1); \
@@ -177,6 +185,8 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
     [ -n "$APP_JS_MD5" ] || APP_JS_MD5=none; \
     APP_CSS_MD5=$(md5sum public/css/app.css 2>/dev/null | cut -d' ' -f1); \
     [ -n "$APP_CSS_MD5" ] || APP_CSS_MD5=none; \
+    COMPOSER_LOCK_MD5=$(md5sum composer.lock 2>/dev/null | cut -d' ' -f1); \
+    [ -n "$COMPOSER_LOCK_MD5" ] || COMPOSER_LOCK_MD5=none; \
     printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
@@ -185,6 +195,7 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
+        "composer_lock_md5=${COMPOSER_LOCK_MD5}" \
         > .code-revision \
     && cat .code-revision
 
@@ -289,6 +300,7 @@ RUN grep -q -- '--exclude=.\/.env' /entrypoint.sh \
     && grep -q 'code-revision' /entrypoint.sh \
     && test -f /var/www/lsky/.code-revision \
     && grep -q '^fork_sha=' /var/www/lsky/.code-revision \
+    && grep -q '^composer_lock_md5=' /var/www/lsky/.code-revision \
     && grep -q 'tar cf - --exclude=./.env --exclude=./.code-revision' /entrypoint.sh \
     && grep -q 'cp -a "$IMAGE_MARKER" "$VOLUME_MARKER"' /entrypoint.sh
 
