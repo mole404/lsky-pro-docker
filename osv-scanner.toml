@@ -1,0 +1,99 @@
+# =============================================================================
+# OSV 依赖漏洞门禁 —— 白名单（B8）
+#
+# 用途：CI 的 `deps-scan` job 对 src/composer.lock 与 test/package-lock.json 跑
+#       osv-scanner。**不在本文件里的**漏洞会让 CI 失败（退出非 0），
+#       本文件里的（IgnoredVulns）会被过滤掉并在日志里打印「...filtered out because: <reason>」。
+#
+# 维护规则：
+#   · 只白名单「我们明确接受」的告警，每条都要写清 reason 与 ignoreUntil（复审日期）。
+#   · `ignoreUntil` 到期后该条不再生效（漏洞会重新报出来），逼你复审 —— 别当永久豁免。
+#   · 清单一旦变化（升级依赖 / 上游发新公告），CI 会红；那时要么修依赖，要么按下面格式加条目。
+#   · 白名单条目的 id 用 GHSA-…（osv-scanner 会把 CVE 等别名一并归到 GHSA 上）。
+#
+# 本文件内容 = 2026-09-30 真实扫描（osv-scanner v2.2.2）得到的全部命中，
+# 逐条评估后接受；详见各条 reason。如何「修掉」而不是「白名单」见各组注释。
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1) laravel/framework 9.52.22 —— 生产依赖（会进镜像），Laravel 9 已 EOL
+#    上游修复只落在 10.x / 11.x / 12.x / 13.x（见各条 fixed 版本），9.x 线拿不到补丁。
+#    真正升级 = 跨大版本重写应用，不在「只维护镜像」的范围内；接受。
+#    想根治：升到 laravel/framework 12.x 线（需同步改 src/ 应用代码）。
+# -----------------------------------------------------------------------------
+[[IgnoredVulns]]
+id = "GHSA-5vg9-5847-vvmq"        # CVE-2026-48019：默认 email 规则里的 CRLF 注入
+ignoreUntil = 2027-06-30
+reason = "laravel/framework 9.x：上游修复在 12.60.0/13.10.0，9.x(EOL) 无补丁；站点非公开注册、未用该 email 规则"
+
+[[IgnoredVulns]]
+id = "GHSA-78fx-h6xr-vch4"        # CVE-2025-27515：文件校验绕过
+ignoreUntil = 2027-06-30
+reason = "laravel/framework 9.x：上游修复在 10.48.29/11.44.1/12.1.1，9.x(EOL) 无补丁；控制上传入口的校验规则已自行加固"
+
+[[IgnoredVulns]]
+id = "GHSA-crmm-hgp2-wgrp"        # 临时签名 URL 路径混淆
+ignoreUntil = 2027-06-30
+reason = "laravel/framework 9.x：上游修复在 12.61.1/13.12.0，9.x(EOL) 无补丁；本站未使用临时签名 URL 功能"
+
+[[IgnoredVulns]]
+id = "GHSA-jh5r-qr3c-85q8"        # CVE-2026-102279：调试页 XSS
+ignoreUntil = 2027-06-30
+reason = "laravel/framework 9.x：上游修复在 12.69.0/13.30.0，9.x(EOL) 无补丁；镜像里 APP_DEBUG 关闭，调试页不对外"
+
+# -----------------------------------------------------------------------------
+# 2) psy/psysh v0.11.12 —— 生产依赖（随 laravel/tinker 进镜像）
+#    上游已在 **同一条 0.11 线** 发修复（0.11.23），是可修的。
+#    但改它必须动 src/composer.lock，而 Dockerfile 对 composer.lock 有 md5 自证，
+#    牵一发动全身；不在本次「只加门禁」范围内 —— 记为待办，到期前处理。
+#    想根治：把 psy/psysh 升到 >=0.11.23 并同步更新 Dockerfile 里的 lock md5 自证。
+# -----------------------------------------------------------------------------
+[[IgnoredVulns]]
+id = "GHSA-4486-gxhx-5mg7"        # CVE-2026-25129：CWD 下 .psysh.php 自动加载导致本地提权
+ignoreUntil = 2026-12-31
+reason = "psy/psysh 0.11.12：同线 0.11.23 已修，但升级需改 composer.lock + Dockerfile md5 自证（待办）；镜像内 psysh 仅本机可触达，无远程面"
+
+# -----------------------------------------------------------------------------
+# 3) maximebf/debugbar v1.18.2 —— **开发依赖**（packages-dev）
+#    Dockerfile 用 `composer install --no-dev` 构建镜像 → 不随镜像发布。
+#    命中的两条其实是它捆绑的 jQuery 的 XSS（CVE-2019-11358 / CVE-2020-11022），
+#    对「镜像里有没有这个东西」无影响。
+# -----------------------------------------------------------------------------
+[[IgnoredVulns]]
+id = "GHSA-6c3j-c64m-qhgq"        # CVE-2019-11358：jQuery 原型污染 XSS（debugbar 捆绑）
+ignoreUntil = 2027-06-30
+reason = "maximebf/debugbar 是 packages-dev 开发依赖，镜像用 --no-dev 构建 → 不进镜像；命中为捆绑的旧 jQuery"
+
+[[IgnoredVulns]]
+id = "GHSA-gxr4-xjj5-5px2"        # CVE-2020-11022：jQuery XSS（debugbar 捆绑）
+ignoreUntil = 2027-06-30
+reason = "同上：dev-only，不进 --no-dev 镜像"
+
+# -----------------------------------------------------------------------------
+# 4) phpunit/phpunit 9.6.5 —— **开发依赖**（packages-dev），不进镜像。
+#    上游已发 9.6.33（同线可修），同 psy/psysh，升级需动 lock + md5 自证 → 待办。
+# -----------------------------------------------------------------------------
+[[IgnoredVulns]]
+id = "GHSA-vvj3-c3rp-c85p"        # CVE-2026-24765：PHPT 覆盖率处理里的不安全反序列化
+ignoreUntil = 2026-12-31
+reason = "phpunit 是 packages-dev 开发依赖，不进 --no-dev 镜像；同线 9.6.33 已修，升级需动 lock（待办）"
+
+# -----------------------------------------------------------------------------
+# 5) sweetalert2@11.4.6 —— 只被 test/ 的行为测试用（test/package-lock.json），
+#    是测试工具链依赖，不随镜像发布（镜像里没有 sweetalert2）。
+#    上游已发 11.22.4（同线可修）→ 升级 test/package-lock.json 即可，属待办。
+# -----------------------------------------------------------------------------
+[[IgnoredVulns]]
+id = "GHSA-457r-cqc8-9vj9"
+ignoreUntil = 2026-12-31
+reason = "sweetalert2 仅为 test/ 行为测试依赖，不进镜像；同线 11.22.4 已修，升 test/package-lock.json 即消（待办）"
+
+[[IgnoredVulns]]
+id = "GHSA-8jh9-wqpf-q52c"
+ignoreUntil = 2026-12-31
+reason = "同上：test-only 依赖，不进镜像，同线可修"
+
+[[IgnoredVulns]]
+id = "GHSA-pg98-6v7f-2xfv"
+ignoreUntil = 2026-12-31
+reason = "同上：test-only 依赖，不进镜像，同线可修"

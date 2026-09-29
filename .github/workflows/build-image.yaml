@@ -13,10 +13,29 @@ on:
       - master
   # 只用于「试构建」：临时换 PHP 版本验证兼容性，不改仓库里的默认值。
   # 留空 = 用 Dockerfile 里的 ARG PHP_VERSION。
+  #
+  # ⚠ 为什么还要 digest 参数（B5 修复）：Dockerfile 的 FROM 写成
+  #   php:${PHP_VERSION}-cli-${DEBIAN_RELEASE}@${PHP_CLI_IMAGE_DIGEST}。
+  #   带 `@digest` 时 **digest 优先、tag 只作装饰** —— 只把 PHP_VERSION 换成 8.2 而
+  #   不换 digest，拉到的仍是 8.3 那份内容（见本次实测：8.2-cli 的 tag 配 8.3 的 digest
+  #   解析出来仍是 8.3.35），构建会「成功」但版本不对，随后被 PHP 版本校验判红。
+  #   所以试构建必须一并给出与新版本匹配的 digest。
+  #   这两个输入**可以留空**：留空时 Resolve 步骤会自动按请求的 PHP 版本从 Docker Hub
+  #   解析出对应 index digest（正常路径无需手填）；只有在自动解析不可用时才手工指定。
   workflow_dispatch:
     inputs:
       php_version:
         description: '试构建用的 PHP 版本（如 8.2 / 8.3；留空则用 Dockerfile 里的值）'
+        required: false
+        default: ''
+        type: string
+      php_cli_digest:
+        description: '（试构建用，可留空）PHP cli 基镜像 digest：sha256:…；留空=自动解析'
+        required: false
+        default: ''
+        type: string
+      php_apache_digest:
+        description: '（试构建用，可留空）PHP apache 基镜像 digest：sha256:…；留空=自动解析'
         required: false
         default: ''
         type: string
@@ -41,9 +60,68 @@ env:
   # 上游快照里的数据库迁移文件个数。换 pin 时若这个数变了，说明有 schema 变更，
   # 而 entrypoint 不会自动跑 migrate —— 那种情况必须人工处理，所以在 CI 里钉住提醒。
   UPSTREAM_MIGRATION_COUNT: "10"
+  # 「真升级用例」（tools/upgrade-test.sh）的升级基线：**不可变** tag（sha-<commit>）。
+  # 为什么用它、不用 :latest：immutable tag 公开可拉、永不变动，是唯一可复现的「旧版本」；
+  # latest 会随每次 promote 漂移（甚至可能正好就是本次这次构建的同 commit 产物 —— 那就成了
+  # 自己升级自己）。它不算「事实的副本」：脚本会拿 tag 名里的 sha 去核镜像自带的
+  # .code-revision（互相印证），谁把 tag 挪到别的版本上都会当场报错（这个仓库真的贴错过 tag）。
+  UPGRADE_FROM_TAG: sha-cd14a3b9a5e176bf929c962d0575a418e9d80cd3
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # B8 依赖漏洞门禁：构建镜像**之前**先扫两个 lockfile，有「不在 osv-scanner.toml
+  # 白名单里」的漏洞就红。build `needs` 本 job → 带新漏洞的 lock 不可能产出新镜像，
+  # 更不可能推进 latest。
+  #   · 扫描器钉到 image digest（可复现；与 Dockerfile 钉基镜像 digest 同理）。
+  #   · 白名单与「接受理由」在仓库根的 osv-scanner.toml；osv-scanner 会在日志里打印
+  #     「…filtered out because: <reason>」，便于核对到底滤掉了什么。
+  #   · 结果同时进 CI 日志与 step summary；出现未白名单的漏洞（退出非 0）本 job 即失败。
+  # ---------------------------------------------------------------------------
+  deps-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: OSV scan lockfiles (pinned scanner image digest)
+        run: |
+          set -euo pipefail
+          # 扫描器：官方 google/osv-scanner 容器镜像，钉到具体版本 + digest。
+          # 选它的理由：官方维护；直接吃 composer.lock / package-lock.json（无需先出 SBOM）；
+          #             支持白名单文件（osv-scanner.toml）；CLI 退出码可直接当门禁。
+          # 更新方式（**只改下面这一行**）：`docker buildx imagetools inspect ghcr.io/google/osv-scanner:<新版本>`
+          #   取顶层 Digest，把镜像引用写成 <新版本>@sha256:<新digest>。
+          SCANNER="ghcr.io/google/osv-scanner:v2.2.2@sha256:fd62daecbaaed24442031574540e8af6dbaf0ab0a3e28c626bec0dd235a28346"
+          echo "扫描器：$SCANNER"
+          # 结果先落文件再整段打印（不在管道里接 head/grep：pipefail 下 SIGPIPE 会假红）。
+          set +e
+          docker run --rm -v "$PWD:/src:ro" "$SCANNER" \
+            scan source \
+              -L /src/src/composer.lock \
+              -L /src/test/package-lock.json \
+            --config /src/osv-scanner.toml \
+            --format table > "$RUNNER_TEMP/osv.txt" 2>&1
+          RC=$?
+          set -e
+          cat "$RUNNER_TEMP/osv.txt"
+          {
+            echo "## OSV 依赖漏洞扫描（src/composer.lock + test/package-lock.json）"
+            echo ""
+            echo '```'
+            cat "$RUNNER_TEMP/osv.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RC" != "0" ]; then
+            echo "::error::OSV 扫描发现「不在白名单里」的漏洞（扫描器退出 $RC）。若确属可接受，按 osv-scanner.toml 的格式加白名单并写明 reason / ignoreUntil；否则请升级依赖。"
+            exit 1
+          fi
+          echo "OSV 扫描通过：命中的漏洞全部在 osv-scanner.toml 白名单内。"
+
   build:
+    # 依赖门禁不过就不构建（见文件顶部注释与 osv-scanner.toml）
+    needs: deps-scan
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -59,22 +137,74 @@ jobs:
         env:
           # 走 env 传参，不把 input 直接拼进 shell 脚本（避免脚本注入）
           REQ_PHP_INPUT: ${{ inputs.php_version }}
+          REQ_CLI_DIGEST: ${{ inputs.php_cli_digest }}
+          REQ_APACHE_DIGEST: ${{ inputs.php_apache_digest }}
         run: |
           set -euo pipefail
           PIN=$(grep -oE '^ARG LSKY_COMMIT=[0-9a-f]+' Dockerfile | cut -d= -f2)
           DEF_PHP=$(grep -oE '^ARG PHP_VERSION=[0-9.]+' Dockerfile | cut -d= -f2)
+          DEB=$(grep -oE '^ARG DEBIAN_RELEASE=[a-z]+' Dockerfile | cut -d= -f2)
           [ -n "$PIN" ] || { echo "::error::Dockerfile 里没找到 ARG LSKY_COMMIT"; exit 1; }
           [ -n "$DEF_PHP" ] || { echo "::error::Dockerfile 里没找到 ARG PHP_VERSION"; exit 1; }
+          [ -n "$DEB" ] || { echo "::error::Dockerfile 里没找到 ARG DEBIAN_RELEASE"; exit 1; }
           REQ_PHP="${REQ_PHP_INPUT:-$DEF_PHP}"
           echo "pin=$PIN" >> "$GITHUB_OUTPUT"
           echo "php_version=$REQ_PHP" >> "$GITHUB_OUTPUT"
           echo "php_default=$DEF_PHP" >> "$GITHUB_OUTPUT"
+          echo "debian_release=$DEB" >> "$GITHUB_OUTPUT"
+
+          # build-args 先落文件：默认只带 FORK_SHA / PHP_VERSION（基镜像 digest 用 Dockerfile 的 ARG 默认值）。
+          # 试构建时再追加两条 digest 覆盖项。最后整体塞进一个**多行 output** 给 build 步骤，
+          # 这样非试构建时根本不会出现「空值的 digest build-arg」（空值会把 Dockerfile 默认 ARG 覆盖成空，
+          # 让 FROM 变成 php:8.3-cli-bookworm@ 这种非法串）。
+          BA="$RUNNER_TEMP/build-args.txt"
+          printf 'FORK_SHA=%s\nPHP_VERSION=%s\n' "$GITHUB_SHA" "$REQ_PHP" > "$BA"
+
           if [ "$REQ_PHP" != "$DEF_PHP" ]; then
             echo "is_test_build=true" >> "$GITHUB_OUTPUT"
             echo "::notice::试构建（PHP $REQ_PHP ≠ Dockerfile 默认 $DEF_PHP）：本次不会提升 latest"
+            # B5：试构建必须换成与新 PHP 版本匹配的基镜像 digest（原因见 workflow_dispatch 上方注释）。
+            # 解析方法 = Docker Hub Registry API 原始响应头（与 Dockerfile 注释里教的手工方法同源）：
+            # 对 library/php 这个 repo 按 tag 取 manifest，读 Docker-Content-Digest。
+            resolve_php_digest() { # $1 = tag，如 8.2-cli-bookworm
+              local tag="$1"
+              local tok
+              tok=$(curl -fsS \
+                'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/php:pull' \
+                | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+              curl -fsSI \
+                -H "Authorization: Bearer ${tok}" \
+                -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+                "https://registry-1.docker.io/v2/library/php/manifests/${tag}" \
+                | tr -d '\r' | awk 'tolower($1)=="docker-content-digest:"{print $2}'
+            }
+            CLI_DIGEST="${REQ_CLI_DIGEST:-}"
+            APACHE_DIGEST="${REQ_APACHE_DIGEST:-}"
+            [ -n "$CLI_DIGEST" ] || CLI_DIGEST=$(resolve_php_digest "${REQ_PHP}-cli-${DEB}" || true)
+            [ -n "$APACHE_DIGEST" ] || APACHE_DIGEST=$(resolve_php_digest "${REQ_PHP}-apache-${DEB}" || true)
+            # 断言格式：必须 sha256:<64 hex>，否则拼出来的 FROM 不是合法 repo:tag@sha256:…
+            [[ "$CLI_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] \
+              || { echo "::error::拿不到 ${REQ_PHP}-cli-${DEB} 的合法 digest（得到：'$CLI_DIGEST'）—— 可在 workflow_dispatch 里手工指定 php_cli_digest"; exit 1; }
+            [[ "$APACHE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] \
+              || { echo "::error::拿不到 ${REQ_PHP}-apache-${DEB} 的合法 digest（得到：'$APACHE_DIGEST'）—— 可在 workflow_dispatch 里手工指定 php_apache_digest"; exit 1; }
+            echo "php_cli_digest=$CLI_DIGEST" >> "$GITHUB_OUTPUT"
+            echo "php_apache_digest=$APACHE_DIGEST" >> "$GITHUB_OUTPUT"
+            printf 'PHP_CLI_IMAGE_DIGEST=%s\nPHP_APACHE_IMAGE_DIGEST=%s\n' "$CLI_DIGEST" "$APACHE_DIGEST" >> "$BA"
+            echo "试构建基镜像 digest：${REQ_PHP}-cli-${DEB}@$CLI_DIGEST"
+            echo "试构建基镜像 digest：${REQ_PHP}-apache-${DEB}@$APACHE_DIGEST"
           else
             echo "is_test_build=false" >> "$GITHUB_OUTPUT"
           fi
+
+          # 多行 output（GITHUB_OUTPUT heredoc 语法）→ build 步骤直接 build-args: ${{ steps.pin.outputs.build_args }}
+          {
+            echo "build_args<<__BUILD_ARGS__"
+            cat "$BA"
+            echo "__BUILD_ARGS__"
+          } >> "$GITHUB_OUTPUT"
+          echo "--- 本次 build-args ---"
+          cat "$BA"
+
           echo "上游 pin = $PIN"
           echo "本次构建 PHP = $REQ_PHP（Dockerfile 默认 $DEF_PHP）"
           # 迁移数守卫：换 pin 时若上游新增迁移，这里报红，提醒必须人工评估 schema 变更
@@ -134,9 +264,10 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE }}:sha-${{ github.sha }}
-          build-args: |
-            FORK_SHA=${{ github.sha }}
-            PHP_VERSION=${{ steps.pin.outputs.php_version }}
+          # build-args 由 Resolve 步骤统一产出（含试构建时按 PHP 版本解析出的基镜像 digest）：
+          # 非试构建 = 只有 FORK_SHA / PHP_VERSION（digest 走 Dockerfile 默认 ARG）；
+          # 试构建   = 再追加 PHP_CLI_IMAGE_DIGEST / PHP_APACHE_IMAGE_DIGEST 两个覆盖项。
+          build-args: ${{ steps.pin.outputs.build_args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -729,6 +860,25 @@ jobs:
           docker run --rm --entrypoint bash "$IMAGE_REF" -c 'du -sh /var/www/lsky; cd /var/www/lsky && time tar cf - --exclude=./.env --exclude=./storage --exclude=./database --exclude=./bootstrap/cache --exclude=./public/i . > /dev/null' || echo "（测速失败，不影响结论）"
           docker rm -f lsky-c >/dev/null 2>&1 || true
           docker volume rm -f "$VOL" >/dev/null 2>&1 || true
+
+      # ------------------------------------------------------------------
+      # 真升级用例（B6）：用**已发布的旧镜像**把一个独立卷养成真实站点（真实代码树 + 真实数据面），
+      # 再换上本次构建的新镜像挂同一个卷起 —— 等价于线上 `docker compose pull && up -d` 那条
+      # 真实路径。断言升级后数据逐字节不变、代码确实换成了新镜像那一版、日志走了同步分支。
+      #   A/B/C 三段是拿「手工改坏的标记 / 手工改坏的代码」在同一次构建里模拟升级，只证明得了
+      #   entrypoint 的分支逻辑；这一段才证明「从旧版镜像真的升上来」没问题。
+      #   脚本单独放在 tools/upgrade-test.sh —— 本地可以原样复跑（见脚本头部的用法注释），
+      #   所以不存在「workflow 里抄一份、本地跑的是另一份」的漂移。
+      #   名字/端口与其它步骤全错开：容器 lsky-up-old / lsky-up-new、卷 lsky-upgrade-vol、
+      #   宿主端口 18090（smoke 用 18089），且严格串行（旧容器先 rm 再起新的）。
+      # ------------------------------------------------------------------
+      - name: Verify real upgrade from previous image (data byte-identical)
+        env:
+          IMAGE_REF: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          UPGRADE_FROM_TAG: ${{ env.UPGRADE_FROM_TAG }}
+        run: |
+          set -euo pipefail
+          bash tools/upgrade-test.sh
 
       # 自证全过之后才动 latest：验证失败时 latest 保持在上一个已知可用版本
       - name: Promote verified image to latest
