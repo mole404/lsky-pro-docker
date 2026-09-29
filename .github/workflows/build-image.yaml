@@ -277,6 +277,21 @@ jobs:
           fi
           curl -s -o /tmp/root.html -w 'GET / → %{http_code}\n' -L http://127.0.0.1:18089/
 
+          # 路由与静态目录撞名的回归防护（曾把默认头像放进 public/images/ 撞上 /images 路由：
+          # Apache 目录重定向 301 → /images/ 无 index → 403 → 首页 302→/images 整站打不开）
+          IMG_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18089/images || true)
+          IMG_FINAL=$(curl -s -o /dev/null -w '%{http_code}' -L http://127.0.0.1:18089/images || true)
+          AVATAR=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18089/static/default-avatar.svg || true)
+          echo "GET /images → 首跳 $IMG_CODE / 跟随重定向后 $IMG_FINAL ；默认头像 → $AVATAR"
+          if [ "$IMG_CODE" = "301" ]; then
+            echo "::error::/images 返回 301 —— public/ 下有与路由同名的真实目录，页面会打不开"
+            exit 1
+          fi
+          if [ "$IMG_FINAL" != "200" ] || [ "$AVATAR" != "200" ]; then
+            echo "::error::/images 跟随重定向后 $IMG_FINAL、默认头像 $AVATAR（都应 200）"
+            exit 1
+          fi
+
           # 端到端：验 Apache 真正吐给浏览器的 JS（不是磁盘上的文件）
           SERVED_JS=$(curl -s http://127.0.0.1:18089/js/context-js/context-js.js | md5sum | awk '{print $1}')
           echo "Apache 对外吐出的 context-js.js md5：$SERVED_JS"
