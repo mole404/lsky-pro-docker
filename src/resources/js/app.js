@@ -132,11 +132,25 @@ window.utils = {
             load();
             $(selector).off('click').on('click', 'span:not(.disabled)', () => load());
 
-            $(selector).scroll(function () {
+            // 滚动到底自动加载。默认跟「容器自己的滚动条」（抽屉这类固定高度面板）；
+            // options.root = 'window' 时跟整页滚动 —— 图片墙已改成整页滚动（手机地址栏才会收起）。
+            const useWindowScroll = options.root === 'window';
+            const onScroll = function () {
+                if (useWindowScroll) {
+                    if ($(window).scrollTop() + $(window).height() >= $(document).height() - offset) {
+                        load();
+                    }
+                    return;
+                }
                 if (this.scrollTop + $(selector).height() >= this.scrollHeight - offset) {
                     load();
                 }
-            });
+            };
+            if (useWindowScroll) {
+                $(window).on('scroll.infiniteScroll', onScroll);
+            } else {
+                $(selector).on('scroll.infiniteScroll', onScroll);
+            }
 
             return {
                 refresh(params) {
@@ -149,7 +163,8 @@ window.utils = {
                     load();
                 },
                 destroy() {
-                    $(selector).unbind('scroll').unbind('click')
+                    $(selector).unbind('scroll.infiniteScroll').unbind('click')
+                    $(window).off('scroll.infiniteScroll')
                 }
             }
         }

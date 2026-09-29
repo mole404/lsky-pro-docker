@@ -109,7 +109,7 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 RUN printf '%s\n' \
         'b916555ab122d2b3db99153d9316a887  ./public/js/context-js/context-js.js' \
         'b916555ab122d2b3db99153d9316a887  ./resources/js/context-js.js' \
-        '91839d2fdbe34face7ab07065b4d72b2  ./resources/views/user/images.blade.php' \
+        '5da6f22c67fc824d5af88a7de32ad7f6  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -130,7 +130,7 @@ RUN printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
         "context_js_md5=b916555ab122d2b3db99153d9316a887" \
-        "images_blade_md5=91839d2fdbe34face7ab07065b4d72b2" \
+        "images_blade_md5=5da6f22c67fc824d5af88a7de32ad7f6" \
         > .code-revision \
     && cat .code-revision
 
