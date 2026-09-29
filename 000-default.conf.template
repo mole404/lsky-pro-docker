@@ -32,8 +32,10 @@
     DocumentRoot /var/www/html/public
 
     SSLEngine on
-    SSLCertificateFile "/etc/ssl/certs/ssl-cert-snakeoil.pem"
-    SSLCertificateKeyFile "/etc/ssl/private/ssl-cert-snakeoil.key"
+    # F21：这两个文件**不在镜像里**，由 entrypoint.sh 首次启动时用 openssl 自签生成
+    # （幂等：已存在就跳过）。路径写死，因为模板只被 envsubst 渲染 ${WEB_PORT} / ${HTTPS_PORT}。
+    SSLCertificateFile "/etc/apache2/ssl/lsky-selfsigned.crt"
+    SSLCertificateKeyFile "/etc/apache2/ssl/lsky-selfsigned.key"
 
     ErrorLog ${APACHE_LOG_DIR}/error.log
     CustomLog ${APACHE_LOG_DIR}/access.log combined
