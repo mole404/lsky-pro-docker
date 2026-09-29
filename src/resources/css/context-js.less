@@ -167,6 +167,13 @@
         }
     }
 }
+
+/* 手机端二级菜单「就地展开」时，顶部那行「＜ 返回」里的箭头与文字贴在一起很难看：
+   箭头是图标（fas fa-chevron-left，标记里自带 mr-1 ≈ 4px），这里统一补到 7px 间距。
+   三条类选择器的权重高于工具类 .mr-1，所以不依赖 CSS 打包顺序；其余样式一个字没动。 */
+.dropdown-context .submenu-back > a > i {
+    margin-right: 7px;
+}
 .dropdown-context:before, .dropdown-context-up:before {
     position: absolute;
     top: -7px;
