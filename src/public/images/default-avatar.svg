@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+    <!-- fork：全站唯一默认头像（本地资源）。全站没有换头像功能，所有用户都是这一个图标。
+         它由 <img src="..."> 引入，因此不能用 CSS 变量 / currentColor（外部 SVG 文档里
+         currentColor 会解析成默认黑，暗色主题下等于隐形）——只能写死一个颜色。
+         #7d8794 是刻意挑的中间灰：在浅色主题的底色 bg-surface-2(#fafbfc) 上对比度
+         3.52:1，在暗色主题的 bg-surface-2(#1b2027) 上 4.50:1，两边都过 WCAG 图形元素
+         要求的 3:1，也两边都看得清。背景保持透明（两套主题都靠同一个灰）。 -->
+    <circle cx="48" cy="34" r="16" fill="#7d8794"/>
+    <path d="M20 84a28 28 0 0 1 56 0Z" fill="#7d8794"/>
+</svg>

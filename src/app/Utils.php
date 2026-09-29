@@ -24,18 +24,20 @@ class Utils
     /**
      * 获取头像地址
      *
-     * @param $email
-     * @param int $s
-     * @param string $d
-     * @param string $r
-     * @return string
+     * fork：改为返回本地默认头像（public/images/default-avatar.svg）。
+     * 全站没有换头像功能 —— 所有用户都是同一个固定图标，为一个静态图标每次请求
+     * 都去 cravatar.cn 拉一次（外站，实测 376B / 0.85~0.96s，还多一次重定向，
+     * 慢的时候整页的 load 都跟着等）没有任何收益。改成同源静态文件后是零外站依赖：
+     * 快（本地文件，可缓存）、稳（外站挂了也照样出图）。
+     *
+     * $s / $d / $r 是远程服务（尺寸 / 默认图类型 / 分级过滤）的参数，本地图标用不上，
+     * 保留形参只为兼容既有调用方。
      */
     public static function getAvatar($email, int $s = 96, string $d = 'mp', string $r = 'g'): string
     {
-        $url = 'https://cravatar.cn/avatar/';
-        $url .= md5(strtolower(trim($email)));
-        $url .= "?s=$s&d=$d&r=$r";
-        return $url;
+        $path = 'images/default-avatar.svg';
+
+        return asset($path).'?v='.self::assetVersion($path);
     }
 
     /**
