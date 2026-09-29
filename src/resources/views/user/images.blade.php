@@ -14,8 +14,9 @@
          2) 桌面宽度：x-modal 的卡片宽度是给「详细信息」那类宽内容定的（md:max-w-2xl / lg:max-w-4xl），
             相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 420px。手机上 x-modal 是底部抽屉
             （<640px 贴底），这条 media query 不生效，抽屉行为不受影响。
-         3) 触摸设备没有真正的 hover：编辑/删除不能只靠 hover 才出现，否则手机上改不了相册名。
-            （Tailwind 3.0.23 生成的 hover 变体不过滤设备，全站都是这个行为，这里只补这一处。）--}}
+         3) 相册行的编辑/删除是**行内常显的 44×44 按钮**（不再靠 hover 才出现），所以这里
+            不再需要 @media (hover: none) 那条「给触摸设备常显操作按钮」的补丁 —— 已删掉，
+            别再写回来：按钮本来就常显，触摸端与桌面端行为一套。--}}
     <style>
         #album-switch-modal .infinite-scroll {
             display: none;
@@ -24,12 +25,6 @@
         @media (min-width: 768px) {
             #album-switch-modal [class*="md:max-w-2xl"] {
                 max-width: 420px;
-            }
-        }
-
-        @media (hover: none) {
-            #album-switch-modal .albums-item .albums-actions {
-                display: flex;
             }
         }
     </style>
@@ -164,16 +159,15 @@
     {{-- fork：「相册」弹窗的外壳（内容在 getAlbums() 里渲染进 #album-switch-content）。
          标题 16px/600；搜索框按相册名**本地**即时过滤已加载的行（不打接口）；
          #album-switch-scroll 是无限加载容器（每页 40 条、滚到底自动加载下一页），
-         里面放的是 #albums-container-tpl（创建表单 + 相册行 + 加载中/空状态）；
-         底部「完成」只负责关弹窗。桌面约 420px 宽见文件顶部 @push('styles') 里那条规则。 --}}
+         里面放的是 #albums-container-tpl（创建表单 + 相册行 + 加载中/空状态）。
+         列表是弹窗里**唯一的主体**：底部那个「完成」按钮已删掉（右上角 ✕ 关弹窗就够），
+         所以 max-h-[50vh] + overflow-y-auto 这条限高/滚动规则仍然只归列表自己，别再往底部加东西。
+         桌面约 420px 宽见文件顶部 @push('styles') 里那条规则。 --}}
     <script type="text/html" id="album-switch-tpl">
         <div class="mx-auto flex w-full flex-col">
             <p class="text-[16px] font-semibold leading-6 text-ink">__title__</p>
             <input type="text" id="album-switch-search" class="ls-input mt-3" placeholder="搜索相册">
             <div id="album-switch-scroll" class="mt-3 flex max-h-[50vh] w-full flex-col overflow-y-auto pr-1"></div>
-            <div class="mt-4 flex justify-end">
-                <button type="button" id="album-switch-done" class="ls-btn h-11 px-4 sm:h-9">完成</button>
-            </div>
         </div>
     </script>
 
@@ -206,23 +200,29 @@
         </div>
     </script>
 
-    {{-- fork：相册行（列表从抽屉搬进弹窗后重做）：整行是一个点击区（min-h-[44px]，手机也够点），
-         左侧相册名、右侧图片数；当前相册由 getAlbums() 用同一套令牌高亮
-         （border-brand / bg-brand-soft / text-brand）并插入「当前」徽标。
-         编辑/删除沿用原来的 .update / .delete 委托（桌面 hover 才出现，触摸设备靠文件顶部那条规则常显）；
-         基础态必须留着 border-line bg-surface-2 text-ink，toggleClass 才有东西可换。
-         名称保持「第一个直接子 span」：编辑面板里 $item.find('>span').html() 读的就是它。
-         行内除名称外不再放 span（避免被无限加载的「点 span 加载更多」委托命中）。 --}}
+    {{-- fork：相册行（列表从抽屉搬进弹窗、再重做成「行内分区」）：
+         外层 .albums-row（承载 border/bg + 当前相册高亮 + data-id/data-json）里分两块 ——
+         左边 <a class="albums-item"> 是切换区（min-h-[44px]，名称 + 「当前」徽标 + 张数），
+         右边 .albums-actions 是**常显的两个 44×44 按钮**（编辑/删除）。
+         为什么按钮要移出 <a>：它们原来长在行链接里，图标可点区只有十几像素，点不中就落到
+         <a> 上直接跳进相册 —— 移出来 + 给足 44px 才点得中（顺带不用 group-hover 切换，
+         张数也不再被按钮顶掉，行内容不再抽动）。
+         名称保持 <a> 里「第一个直接子 span」（class 带 name）：编辑面板读的就是它；
+         张数保持 <div class="albums-count">（行内除名称外不放别的 span —— 免得被无限加载
+         「点 span 加载更多」的委托命中；按钮/图标本身不带 span）。
+         基础态必须留着 border-line bg-surface，toggleClass 才有东西可换。 --}}
     <script type="text/html" id="albums-item-tpl">
-        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item group flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-ink transition-colors duration-150 hover:bg-surface-3">
-            <span class="min-w-0 flex-1 truncate text-[14px] name">__name__</span>
-            __current_badge__
-            <div class="albums-actions flex items-center justify-center space-x-1 hidden group-hover:flex">
-                <span class="update"><i class="fas fa-edit text-[13.5px]"></i></span>
-                <span class="delete"><i class="fas fa-trash-alt text-[13.5px] text-danger"></i></span>
+        <div class="albums-row flex items-stretch min-h-[44px] w-full rounded-lg border border-line bg-surface" data-id="__id__" data-json='__json__'>
+            <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item group flex min-w-0 flex-1 items-center gap-2.5 rounded-l-lg px-3 py-1">
+                <span class="min-w-0 flex-1 truncate text-[14px] name">__name__</span>
+                __current_badge__
+                <div class="albums-count shrink-0 text-[13px] text-ink-3">__image_num__ 张</div>
+            </a>
+            <div class="albums-actions flex shrink-0 items-center border-l border-line">
+                <button type="button" class="update flex h-11 w-11 items-center justify-center text-ink-2 hover:bg-surface-3 hover:text-brand" aria-label="重命名相册"><i class="fas fa-edit text-[15px]"></i></button>
+                <button type="button" class="delete flex h-11 w-11 items-center justify-center text-danger hover:bg-surface-3" aria-label="删除相册"><i class="fas fa-trash-alt text-[15px]"></i></button>
             </div>
-            <div class="albums-count shrink-0 text-[13px] text-ink-3 group-hover:hidden">__image_num__ 张</div>
-        </a>
+        </div>
     </script>
 
     <script type="text/html" id="album-update-tpl">
@@ -362,7 +362,10 @@
             const IMAGES_SCROLL = '#images-scroll';
             const IMAGES_GRID = '#images-grid';
             const IMAGES_ITEM = '.images-item';
-            const ALBUM_ITEM = '.albums-item';
+            // 相册行容器（承载 data-id / data-json + 当前相册高亮）。
+            // 行不再是「整行一个 <a>」，而是 .albums-row 里「左边切换链接 + 右边常显按钮」，
+            // 所以按钮往上找 id 要 closest 到这一层，不能再用 .albums-item（那是 <a> 自己）。
+            const ALBUM_ROW = '.albums-row';
 
             const $headerTitle = $(HEADER_TITLE);
             const $photos = $(IMAGES_GRID);
@@ -448,7 +451,7 @@
 
             const getAlbums = (options, callback) => {
                 // 相册列表从右侧抽屉搬进居中卡片弹窗（与「移动到相册」同一套 x-modal）：
-                // 外壳（标题 + 本地搜索框 + 列表容器 + 底部「完成」）进 #album-switch-content，
+                // 外壳（标题 + 本地搜索框 + 列表容器 —— 底部的「完成」按钮已删）进 #album-switch-content，
                 // 列表内容（#albums-container：创建/重命名表单 + 相册行）进无限加载容器 #album-switch-scroll。
                 // 创建入口也从抽屉标题的 + 号搬进了列表里（见 #albums-container-tpl）。
                 let content = $('#album-switch-tpl').html().replace(/__title__/g, (options || {}).title || '相册');
@@ -459,8 +462,8 @@
 
                     // 空状态：一行都没有 → 「还没有相册」；有相册但被搜索过滤光了 → 「没有匹配的相册」
                     const updateEmpty = () => {
-                        let total = $albums.find('>a').length;
-                        let visible = $albums.find('>a:not(.hidden)').length;
+                        let total = $albums.find('> ' + ALBUM_ROW).length;
+                        let visible = $albums.find('> ' + ALBUM_ROW + ':not(.hidden)').length;
                         $('#album-switch-empty').toggleClass('hidden', visible > 0);
                         $('#album-switch-empty-text').text(total === 0 ? '还没有相册' : '没有匹配的相册');
                     };
@@ -468,7 +471,7 @@
                     // 搜索框：只在已加载的相册里按名称即时过滤（本地过滤，不打接口）
                     const applyFilter = () => {
                         let keyword = ($('#album-switch-search').val() || '').trim().toLowerCase();
-                        $albums.find('>a.albums-item').each(function () {
+                        $albums.find('> ' + ALBUM_ROW).each(function () {
                             $(this).toggleClass('hidden', keyword !== '' && $(this).find('.name').text().toLowerCase().indexOf(keyword) === -1);
                         });
                         updateEmpty();
@@ -509,12 +512,14 @@
 
                             $albums.append(html);
 
-                            // 当前相册高亮：与「移动到相册」弹窗同一套令牌切换
-                            $albums.find('>a').each(function () {
+                            // 当前相册高亮：与「移动到相册」弹窗同一套令牌切换。
+                            // 打在行容器（.albums-row）上 —— 高亮边框要包住右边的两个按钮；
+                            // 基础态就是模板里的 border-line bg-surface，on 时一起摘掉换成品牌色。
+                            $albums.find('> ' + ALBUM_ROW).each(function () {
                                 let on = $(this).data('id') === selectedAlbum.id;
                                 $(this)
                                     .toggleClass('border-brand bg-brand-soft text-brand', on)
-                                    .toggleClass('border-line bg-surface-2 text-ink', ! on);
+                                    .toggleClass('border-line bg-surface', ! on);
                             });
 
                             // 新追加的页也要跟上当前的搜索词
@@ -524,7 +529,9 @@
                         }
                     });
 
-                    $albums.off('click', '>a').on('click', '>a', function () {
+                    // 切换只挂在行内的 <a class="albums-item"> 上：编辑/删除按钮现在是 <a> 的兄弟节点，
+                    // 点它们冒泡到不了这里（这正是「点不中就跳进相册」的修法）。
+                    $albums.off('click', '.albums-item').on('click', '.albums-item', function () {
                         // 如果当前已经为选中状态则清除
                         if (selectedAlbum.id === $(this).data('id')) {
                             selectedAlbum = {};
@@ -538,7 +545,7 @@
                     });
 
                     const resetAlbums = () => {
-                        $albums.find('>a').remove();
+                        $albums.find('> ' + ALBUM_ROW).remove();
                         $albums.find(CREATE_ID).addClass('hidden');
                         $albums.find(UPDATE_ID).remove();
                         albumsInfinite.refresh({page: 1});
@@ -547,13 +554,14 @@
                     $albums.off('click', '.update').on('click', '.update', function (e) {
                         e.stopPropagation();
                         let selectedId = $albums.find(UPDATE_ID).data('id');
-                        let $item = $(this).closest('a.albums-item');
+                        // 按钮在 <a> 外面，id / 名称 / 简介都要从外层行容器再往下取
+                        let $item = $(this).closest(ALBUM_ROW);
                         $albums.find(UPDATE_ID).remove();
                         if (selectedId !== $item.data('id')) {
                             $item.after($('#album-update-tpl').html()
                                 .replace(/__id__/g, $item.data('id'))
-                                .replace(/__name__/g, $item.find('>span').html())
-                                .replace(/__intro__/g, $item.attr('title'))
+                                .replace(/__name__/g, $item.find('.name').html())
+                                .replace(/__intro__/g, $item.find('a.albums-item').attr('title'))
                             );
                         }
                     });
@@ -576,7 +584,7 @@
                             confirmButtonText: '确认',
                         }).then((result) => {
                             if (result.isConfirmed) {
-                                let id = $(this).closest(ALBUM_ITEM).data('id');
+                                let id = $(this).closest(ALBUM_ROW).data('id');
                                 axios.delete(`/user/albums/${id}`).then(response => {
                                     if (response.data.status) {
                                         selectedAlbum = {};
@@ -615,9 +623,9 @@
                             let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                             if (response.data.status) {
                                 let $editContainer = $(this).closest(UPDATE_ID);
-                                $albums.find(`>a[data-id=${$editContainer.data('id')}]`)
-                                    .attr('title', $form.find('textarea').val())
-                                    .find('.name').text($form.find('input').val());
+                                let $row = $albums.find(`> ${ALBUM_ROW}[data-id=${$editContainer.data('id')}]`);
+                                $row.find('a.albums-item').attr('title', $form.find('textarea').val());
+                                $row.find('.name').text($form.find('input').val());
                                 $editContainer.remove();
                             } else {
                                 $errorMessage.html('<i class="fas fa-exclamation-circle"></i> ' + response.data.message).show();
@@ -627,9 +635,6 @@
 
                     // 搜索框：输入即过滤（本地，不打接口）
                     $('#album-switch-search').off('input').on('input', _ => applyFilter());
-
-                    // 底部「完成」：只关弹窗
-                    $('#album-switch-done').off('click').on('click', _ => closeAlbums());
                 });
             }
 

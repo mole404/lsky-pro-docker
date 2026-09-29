@@ -36,7 +36,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   b13fc1e4fede8c55c25862eb13cfcfcf  src/resources/js/context-js.js
 #   b13fc1e4fede8c55c25862eb13cfcfcf  src/public/js/context-js/context-js.js
-#   dc55603d2d2db64112db520fc809fb4b  src/resources/views/user/images.blade.php
+#   c2014bb78cec8e2e9bfe6e3572eda26b  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
@@ -2208,7 +2208,7 @@
 +})();
 --- a/resources/views/user/images.blade.php
 +++ b/resources/views/user/images.blade.php
-@@ -4,24 +4,55 @@
+@@ -4,24 +4,50 @@
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
@@ -2222,8 +2222,9 @@
 +         2) 桌面宽度：x-modal 的卡片宽度是给「详细信息」那类宽内容定的（md:max-w-2xl / lg:max-w-4xl），
 +            相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 420px。手机上 x-modal 是底部抽屉
 +            （<640px 贴底），这条 media query 不生效，抽屉行为不受影响。
-+         3) 触摸设备没有真正的 hover：编辑/删除不能只靠 hover 才出现，否则手机上改不了相册名。
-+            （Tailwind 3.0.23 生成的 hover 变体不过滤设备，全站都是这个行为，这里只补这一处。）--}}
++         3) 相册行的编辑/删除是**行内常显的 44×44 按钮**（不再靠 hover 才出现），所以这里
++            不再需要 @media (hover: none) 那条「给触摸设备常显操作按钮」的补丁 —— 已删掉，
++            别再写回来：按钮本来就常显，触摸端与桌面端行为一套。--}}
 +    <style>
 +        #album-switch-modal .infinite-scroll {
 +            display: none;
@@ -2232,12 +2233,6 @@
 +        @media (min-width: 768px) {
 +            #album-switch-modal [class*="md:max-w-2xl"] {
 +                max-width: 420px;
-+            }
-+        }
-+
-+        @media (hover: none) {
-+            #album-switch-modal .albums-item .albums-actions {
-+                display: flex;
 +            }
 +        }
 +    </style>
@@ -2273,7 +2268,7 @@
                      </x-slot>
  
                      <x-slot name="content">
-@@ -32,17 +63,18 @@
+@@ -32,17 +58,18 @@
                          <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
                          <x-dropdown-link data-operate="rename" class="hidden" href="javascript:void(0)" @click="open = false">重命名</x-dropdown-link>
                          <x-dropdown-link data-operate="delete" class="hidden" href="javascript:void(0)" @click="open = false">删除</x-dropdown-link>
@@ -2295,7 +2290,7 @@
                      </a>
                  </x-slot>
  
-@@ -59,9 +91,9 @@
+@@ -59,9 +86,9 @@
              </x-dropdown>
              <x-dropdown direction="left">
                  <x-slot name="trigger">
@@ -2307,7 +2302,7 @@
                      </a>
                  </x-slot>
  
-@@ -76,60 +108,120 @@
+@@ -76,132 +103,248 @@
              </x-dropdown>
          </div>
      </div>
@@ -2381,16 +2376,15 @@
 +    {{-- fork：「相册」弹窗的外壳（内容在 getAlbums() 里渲染进 #album-switch-content）。
 +         标题 16px/600；搜索框按相册名**本地**即时过滤已加载的行（不打接口）；
 +         #album-switch-scroll 是无限加载容器（每页 40 条、滚到底自动加载下一页），
-+         里面放的是 #albums-container-tpl（创建表单 + 相册行 + 加载中/空状态）；
-+         底部「完成」只负责关弹窗。桌面约 420px 宽见文件顶部 @push('styles') 里那条规则。 --}}
++         里面放的是 #albums-container-tpl（创建表单 + 相册行 + 加载中/空状态）。
++         列表是弹窗里**唯一的主体**：底部那个「完成」按钮已删掉（右上角 ✕ 关弹窗就够），
++         所以 max-h-[50vh] + overflow-y-auto 这条限高/滚动规则仍然只归列表自己，别再往底部加东西。
++         桌面约 420px 宽见文件顶部 @push('styles') 里那条规则。 --}}
 +    <script type="text/html" id="album-switch-tpl">
 +        <div class="mx-auto flex w-full flex-col">
 +            <p class="text-[16px] font-semibold leading-6 text-ink">__title__</p>
 +            <input type="text" id="album-switch-search" class="ls-input mt-3" placeholder="搜索相册">
 +            <div id="album-switch-scroll" class="mt-3 flex max-h-[50vh] w-full flex-col overflow-y-auto pr-1"></div>
-+            <div class="mt-4 flex justify-end">
-+                <button type="button" id="album-switch-done" class="ls-btn h-11 px-4 sm:h-9">完成</button>
-+            </div>
 +        </div>
 +    </script>
 +
@@ -2426,32 +2420,39 @@
          </div>
      </script>
  
-+    {{-- fork：相册行（列表从抽屉搬进弹窗后重做）：整行是一个点击区（min-h-[44px]，手机也够点），
-+         左侧相册名、右侧图片数；当前相册由 getAlbums() 用同一套令牌高亮
-+         （border-brand / bg-brand-soft / text-brand）并插入「当前」徽标。
-+         编辑/删除沿用原来的 .update / .delete 委托（桌面 hover 才出现，触摸设备靠文件顶部那条规则常显）；
-+         基础态必须留着 border-line bg-surface-2 text-ink，toggleClass 才有东西可换。
-+         名称保持「第一个直接子 span」：编辑面板里 $item.find('>span').html() 读的就是它。
-+         行内除名称外不再放 span（避免被无限加载的「点 span 加载更多」委托命中）。 --}}
++    {{-- fork：相册行（列表从抽屉搬进弹窗、再重做成「行内分区」）：
++         外层 .albums-row（承载 border/bg + 当前相册高亮 + data-id/data-json）里分两块 ——
++         左边 <a class="albums-item"> 是切换区（min-h-[44px]，名称 + 「当前」徽标 + 张数），
++         右边 .albums-actions 是**常显的两个 44×44 按钮**（编辑/删除）。
++         为什么按钮要移出 <a>：它们原来长在行链接里，图标可点区只有十几像素，点不中就落到
++         <a> 上直接跳进相册 —— 移出来 + 给足 44px 才点得中（顺带不用 group-hover 切换，
++         张数也不再被按钮顶掉，行内容不再抽动）。
++         名称保持 <a> 里「第一个直接子 span」（class 带 name）：编辑面板读的就是它；
++         张数保持 <div class="albums-count">（行内除名称外不放别的 span —— 免得被无限加载
++         「点 span 加载更多」的委托命中；按钮/图标本身不带 span）。
++         基础态必须留着 border-line bg-surface，toggleClass 才有东西可换。 --}}
      <script type="text/html" id="albums-item-tpl">
 -        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item flex justify-between items-center group px-2 h-7 rounded w-full bg-gray-100 text-gray-800 hover:bg-blue-300 hover:text-white">
 -            <span class="text-sm truncate w-[80%] name">__name__</span>
 -            <div class="flex items-center justify-center space-x-1 hidden group-hover:block">
 -                <span class="update"><i class="fas fa-edit text-xs"></i></span>
 -                <span class="delete"><i class="fas fa-trash-alt text-xs text-red-400"></i></span>
-+        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item group flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-ink transition-colors duration-150 hover:bg-surface-3">
-+            <span class="min-w-0 flex-1 truncate text-[14px] name">__name__</span>
-+            __current_badge__
-+            <div class="albums-actions flex items-center justify-center space-x-1 hidden group-hover:flex">
-+                <span class="update"><i class="fas fa-edit text-[13.5px]"></i></span>
-+                <span class="delete"><i class="fas fa-trash-alt text-[13.5px] text-danger"></i></span>
++        <div class="albums-row flex items-stretch min-h-[44px] w-full rounded-lg border border-line bg-surface" data-id="__id__" data-json='__json__'>
++            <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item group flex min-w-0 flex-1 items-center gap-2.5 rounded-l-lg px-3 py-1">
++                <span class="min-w-0 flex-1 truncate text-[14px] name">__name__</span>
++                __current_badge__
++                <div class="albums-count shrink-0 text-[13px] text-ink-3">__image_num__ 张</div>
++            </a>
++            <div class="albums-actions flex shrink-0 items-center border-l border-line">
++                <button type="button" class="update flex h-11 w-11 items-center justify-center text-ink-2 hover:bg-surface-3 hover:text-brand" aria-label="重命名相册"><i class="fas fa-edit text-[15px]"></i></button>
++                <button type="button" class="delete flex h-11 w-11 items-center justify-center text-danger hover:bg-surface-3" aria-label="删除相册"><i class="fas fa-trash-alt text-[15px]"></i></button>
              </div>
 -            <span class="group-hover:hidden text-xs">__image_num__</span>
-+            <div class="albums-count shrink-0 text-[13px] text-ink-3 group-hover:hidden">__image_num__ 张</div>
-         </a>
+-        </a>
++        </div>
      </script>
  
-@@ -137,71 +229,122 @@
+     <script type="text/html" id="album-update-tpl">
          <div id="album-edit" data-id="__id__" class="flex flex-col w-full border rounded p-2">
              <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
              <form class="w-full space-y-2" action="/user/albums/__id__">
@@ -2491,7 +2492,11 @@
 -            <div>
 -                <div class="text-sm font-semibold">图片原始名称</div>
 -                <p class="my-2 break-words text-gray-600">__origin_name__</p>
--            </div>
++        <div class="mx-auto w-full max-w-2xl">
++            <div class="mb-4 flex items-center gap-3">
++                <img src="__thumb_url__" alt="__filename__" class="h-16 w-16 shrink-0 rounded-lg border border-line bg-surface-2 object-cover">
++                <p class="min-w-0 truncate text-[16px] font-semibold leading-6 text-ink">图片详细信息</p>
+             </div>
 -            <div>
 -                <div class="text-sm font-semibold">图片大小</div>
 -                <p class="my-2 break-words text-gray-600">__size__</p>
@@ -2523,11 +2528,6 @@
 -            <div>
 -                <div class="text-sm font-semibold">上传时间</div>
 -                <p class="my-2 break-words text-gray-600">__created_at__</p>
-+        <div class="mx-auto w-full max-w-2xl">
-+            <div class="mb-4 flex items-center gap-3">
-+                <img src="__thumb_url__" alt="__filename__" class="h-16 w-16 shrink-0 rounded-lg border border-line bg-surface-2 object-cover">
-+                <p class="min-w-0 truncate text-[16px] font-semibold leading-6 text-ink">图片详细信息</p>
-+            </div>
 +            <dl class="divide-y divide-line rounded-lg border border-line bg-surface-2 px-4">
 +                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
 +                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">上传时间</dt>
@@ -2626,7 +2626,15 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -223,38 +366,34 @@
+@@ -219,42 +362,41 @@
+             const IMAGES_SCROLL = '#images-scroll';
+             const IMAGES_GRID = '#images-grid';
+             const IMAGES_ITEM = '.images-item';
+-            const ALBUM_ITEM = '.albums-item';
++            // 相册行容器（承载 data-id / data-json + 当前相册高亮）。
++            // 行不再是「整行一个 <a>」，而是 .albums-row 里「左边切换链接 + 右边常显按钮」，
++            // 所以按钮往上找 id 要 closest 到这一层，不能再用 .albums-item（那是 <a> 自己）。
++            const ALBUM_ROW = '.albums-row';
  
              const $headerTitle = $(HEADER_TITLE);
              const $photos = $(IMAGES_GRID);
@@ -2685,7 +2693,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -308,14 +447,42 @@
+@@ -308,14 +450,42 @@
              }
  
              const getAlbums = (options, callback) => {
@@ -2693,7 +2701,7 @@
 -                let content = $('#albums-container-tpl').html();
 -                drawer.toggle(title, content, function () {
 +                // 相册列表从右侧抽屉搬进居中卡片弹窗（与「移动到相册」同一套 x-modal）：
-+                // 外壳（标题 + 本地搜索框 + 列表容器 + 底部「完成」）进 #album-switch-content，
++                // 外壳（标题 + 本地搜索框 + 列表容器 —— 底部的「完成」按钮已删）进 #album-switch-content，
 +                // 列表内容（#albums-container：创建/重命名表单 + 相册行）进无限加载容器 #album-switch-scroll。
 +                // 创建入口也从抽屉标题的 + 号搬进了列表里（见 #albums-container-tpl）。
 +                let content = $('#album-switch-tpl').html().replace(/__title__/g, (options || {}).title || '相册');
@@ -2705,8 +2713,8 @@
 +
 +                    // 空状态：一行都没有 → 「还没有相册」；有相册但被搜索过滤光了 → 「没有匹配的相册」
 +                    const updateEmpty = () => {
-+                        let total = $albums.find('>a').length;
-+                        let visible = $albums.find('>a:not(.hidden)').length;
++                        let total = $albums.find('> ' + ALBUM_ROW).length;
++                        let visible = $albums.find('> ' + ALBUM_ROW + ':not(.hidden)').length;
 +                        $('#album-switch-empty').toggleClass('hidden', visible > 0);
 +                        $('#album-switch-empty-text').text(total === 0 ? '还没有相册' : '没有匹配的相册');
 +                    };
@@ -2714,7 +2722,7 @@
 +                    // 搜索框：只在已加载的相册里按名称即时过滤（本地过滤，不打接口）
 +                    const applyFilter = () => {
 +                        let keyword = ($('#album-switch-search').val() || '').trim().toLowerCase();
-+                        $albums.find('>a.albums-item').each(function () {
++                        $albums.find('> ' + ALBUM_ROW).each(function () {
 +                            $(this).toggleClass('hidden', keyword !== '' && $(this).find('.name').text().toLowerCase().indexOf(keyword) === -1);
 +                        });
 +                        updateEmpty();
@@ -2732,7 +2740,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,24 +495,31 @@
+@@ -328,29 +498,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -2759,12 +2767,14 @@
  
                              $albums.append(html);
  
-+                            // 当前相册高亮：与「移动到相册」弹窗同一套令牌切换
-+                            $albums.find('>a').each(function () {
++                            // 当前相册高亮：与「移动到相册」弹窗同一套令牌切换。
++                            // 打在行容器（.albums-row）上 —— 高亮边框要包住右边的两个按钮；
++                            // 基础态就是模板里的 border-line bg-surface，on 时一起摘掉换成品牌色。
++                            $albums.find('> ' + ALBUM_ROW).each(function () {
 +                                let on = $(this).data('id') === selectedAlbum.id;
 +                                $(this)
 +                                    .toggleClass('border-brand bg-brand-soft text-brand', on)
-+                                    .toggleClass('border-line bg-surface-2 text-ink', ! on);
++                                    .toggleClass('border-line bg-surface', ! on);
 +                            });
 +
 +                            // 新追加的页也要跟上当前的搜索词
@@ -2773,7 +2783,15 @@
                              callback && callback.call(this, $albums.get(0));
                          }
                      });
-@@ -358,7 +532,8 @@
+ 
+-                    $albums.off('click', '>a').on('click', '>a', function () {
++                    // 切换只挂在行内的 <a class="albums-item"> 上：编辑/删除按钮现在是 <a> 的兄弟节点，
++                    // 点它们冒泡到不了这里（这正是「点不中就跳进相册」的修法）。
++                    $albums.off('click', '.albums-item').on('click', '.albums-item', function () {
+                         // 如果当前已经为选中状态则清除
+                         if (selectedAlbum.id === $(this).data('id')) {
+                             selectedAlbum = {};
+@@ -358,12 +539,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -2783,7 +2801,31 @@
                          ds.clearSelection();
                      });
  
-@@ -386,6 +561,12 @@
+                     const resetAlbums = () => {
+-                        $albums.find('>a').remove();
++                        $albums.find('> ' + ALBUM_ROW).remove();
+                         $albums.find(CREATE_ID).addClass('hidden');
+                         $albums.find(UPDATE_ID).remove();
+                         albumsInfinite.refresh({page: 1});
+@@ -372,13 +554,14 @@
+                     $albums.off('click', '.update').on('click', '.update', function (e) {
+                         e.stopPropagation();
+                         let selectedId = $albums.find(UPDATE_ID).data('id');
+-                        let $item = $(this).closest('a.albums-item');
++                        // 按钮在 <a> 外面，id / 名称 / 简介都要从外层行容器再往下取
++                        let $item = $(this).closest(ALBUM_ROW);
+                         $albums.find(UPDATE_ID).remove();
+                         if (selectedId !== $item.data('id')) {
+                             $item.after($('#album-update-tpl').html()
+                                 .replace(/__id__/g, $item.data('id'))
+-                                .replace(/__name__/g, $item.find('>span').html())
+-                                .replace(/__intro__/g, $item.attr('title'))
++                                .replace(/__name__/g, $item.find('.name').html())
++                                .replace(/__intro__/g, $item.find('a.albums-item').attr('title'))
+                             );
+                         }
+                     });
+@@ -386,6 +569,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -2796,7 +2838,13 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -400,7 +581,9 @@
+@@ -395,12 +584,14 @@
+                             confirmButtonText: '确认',
+                         }).then((result) => {
+                             if (result.isConfirmed) {
+-                                let id = $(this).closest(ALBUM_ITEM).data('id');
++                                let id = $(this).closest(ALBUM_ROW).data('id');
+                                 axios.delete(`/user/albums/${id}`).then(response => {
                                      if (response.data.status) {
                                          selectedAlbum = {};
                                          resetImages();
@@ -2807,20 +2855,29 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -441,6 +624,12 @@
+@@ -432,15 +623,18 @@
+                             let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
+                             if (response.data.status) {
+                                 let $editContainer = $(this).closest(UPDATE_ID);
+-                                $albums.find(`>a[data-id=${$editContainer.data('id')}]`)
+-                                    .attr('title', $form.find('textarea').val())
+-                                    .find('.name').text($form.find('input').val());
++                                let $row = $albums.find(`> ${ALBUM_ROW}[data-id=${$editContainer.data('id')}]`);
++                                $row.find('a.albums-item').attr('title', $form.find('textarea').val());
++                                $row.find('.name').text($form.find('input').val());
+                                 $editContainer.remove();
+                             } else {
+                                 $errorMessage.html('<i class="fas fa-exclamation-circle"></i> ' + response.data.message).show();
                              }
                          });
                      });
 +
 +                    // 搜索框：输入即过滤（本地，不打接口）
 +                    $('#album-switch-search').off('input').on('input', _ => applyFilter());
-+
-+                    // 底部「完成」：只关弹窗
-+                    $('#album-switch-done').off('click').on('click', _ => closeAlbums());
                  });
              }
  
-@@ -486,10 +675,10 @@
+@@ -486,10 +680,10 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -2833,7 +2890,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -509,6 +698,26 @@
+@@ -509,6 +703,26 @@
              ds.subscribe('elementselect', _ => bindOperates());
              ds.subscribe('elementunselect', _ => bindOperates());
  
@@ -2860,7 +2917,7 @@
              $photos.on('click', '.image-selector', function () {
                  ds.toggleSelection($(this).closest('a'));
                  bindOperates();
-@@ -535,25 +744,94 @@
+@@ -535,25 +749,94 @@
  
              const methods = {
                  movements() {
@@ -2972,7 +3029,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +842,9 @@
+@@ -564,7 +847,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -2983,7 +3040,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -574,8 +854,12 @@
+@@ -574,8 +859,12 @@
                  },
                  permission() {
                      Swal.fire({
@@ -2997,7 +3054,7 @@
                          input: 'select',
                          inputOptions: {
                              public: '公开',
-@@ -613,6 +897,10 @@
+@@ -613,6 +902,10 @@
                  rename(e) {
                      let item = $(e).data('json');
                      Swal.fire({
@@ -3008,7 +3065,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +937,10 @@
+@@ -649,6 +942,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -3019,7 +3076,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -684,6 +976,7 @@
+@@ -684,6 +981,7 @@
                          if (response.data.status) {
                              let image = response.data.data.image;
                              let content = $('#image-detail-tpl').html()
@@ -3027,7 +3084,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -697,7 +990,9 @@
+@@ -697,7 +995,9 @@
                                  .replace(/__permission__/g, image.permission === 1 ? '公开' : '私有')
                                  .replace(/__uploaded_ip__/g, image.uploaded_ip)
                                  .replace(/__created_at__/g, image.created_at)
@@ -3038,7 +3095,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -853,6 +1148,10 @@
+@@ -853,6 +1153,10 @@
                      case 'delete': // 删除
                          methods.delete();
                          break;

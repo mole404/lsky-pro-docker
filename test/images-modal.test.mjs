@@ -10,7 +10,8 @@
  *   3. 「详细信息」字段顺序：上传时间第一、图片名称第二，其余字段一个不少
  *   4. 弹窗内容只用设计令牌（不出现硬编码颜色）
  *   5. 「移动」的请求沿用原实现（同一个 route、同一份 payload）
- *   6. 相册弹窗：本地搜索、≥44px 行、当前相册高亮+徽标、创建/重命名、加载中/空状态、底部「完成」
+ *   6. 相册弹窗：本地搜索、行内分区（≥44px 切换区 + 行内常显的 44×44 编辑/删除按钮，按钮在 <a> 外面）、
+ *      当前相册高亮+徽标、创建/重命名、加载中/空状态；底部的「完成」按钮已删（不回退）
  *   7. 钉住的 context-js.js（两份拷贝）没被碰过 —— 直接对 Dockerfile 里钉的 md5
  *   8. 二级菜单「返回」的箭头与文字之间留了 6~8px 间距（改的是 .less，不是钉住的 context-js.js）
  *
@@ -128,7 +129,7 @@ console.log('\n[换实现] 右侧抽屉连根删除：markup、JS 状态、无�
 }
 
 // ---------------------------------------------------------------- 相册弹窗
-console.log('\n[相册弹窗] 标题/搜索/44px 行/当前徽标/加载中/空状态/「完成」');
+console.log('\n[相册弹窗] 标题/搜索/行内分区（44px 切换区 + 常显 44×44 按钮）/当前徽标/加载中/空状态（无底部「完成」）');
 {
     const shellTpl = albumShellTpl;
     const containerTpl = albumContainerTpl;
@@ -139,20 +140,38 @@ console.log('\n[相册弹窗] 标题/搜索/44px 行/当前徽标/加载中/空�
     check('搜索框：按名称本地过滤（#album-switch-search + applyFilter 只切已加载行的 hidden，不打接口）',
         shellTpl.includes('id="album-switch-search"')
         && blade.includes('const applyFilter = () =>')
-        && blade.includes("$albums.find('>a.albums-item').each(function ()")
+        && blade.includes("$albums.find('> ' + ALBUM_ROW).each(function ()")
         && blade.includes("$('#album-switch-search').off('input').on('input', _ => applyFilter());"));
     check('列表容器 max-h-[50vh] + overflow-y-auto（滚到底自动加载下一页）',
         /id="album-switch-scroll"[^>]*class="[^"]*overflow-y-auto[^"]*"/.test(shellTpl) && shellTpl.includes('max-h-[50vh]'));
-    check('每行点击区 ≥44px、左名右数（名称仍是第一个直接子 span）',
+    check('每行点击区 ≥44px、左名右数（名称仍是 <a> 里第一个直接子 span，张数仍是 <div>）',
         itemTpl.includes('min-h-[44px]')
         && itemTpl.includes('class="min-w-0 flex-1 truncate text-[14px] name"')
-        && itemTpl.includes('albums-count') && itemTpl.includes('__image_num__ 张'));
-    check('当前相册：同一套令牌高亮 + 「当前」徽标',
+        && /<div class="albums-count shrink-0 text-\[13px\] text-ink-3">__image_num__ 张<\/div>/.test(itemTpl));
+
+    const linkPart = itemTpl.slice(itemTpl.indexOf('<a '), itemTpl.indexOf('</a>') + 4);
+    const actionsPart = itemTpl.slice(itemTpl.indexOf('albums-actions'));
+    check('编辑/删除按钮移出 <a>（点按钮不会再跳进相册），行容器与 <a> 都带 data-id',
+        linkPart.length > 0 && ! linkPart.includes('class="update') && ! linkPart.includes('class="delete')
+        && actionsPart.includes('class="update') && actionsPart.includes('class="delete')
+        && (itemTpl.match(/data-id="__id__"/g) || []).length === 2
+        && (itemTpl.match(/data-json='__json__'/g) || []).length === 2);
+    check('两个操作按钮 44×44（h-11 w-11）+ 无障碍标签，且常显（模板里没有 hidden / group-hover）',
+        (actionsPart.match(/class="(?:update|delete) flex h-11 w-11 items-center justify-center/g) || []).length === 2
+        && (actionsPart.match(/aria-label="(?:重命名|删除)相册"/g) || []).length === 2
+        && ! itemTpl.includes('hidden') && ! itemTpl.includes('group-hover'));
+    // 注意用 bladeCode（已去掉注释）：注释里会写「那条 @media (hover: none) 已删」这类说明
+    check('触摸端「常显操作按钮」的媒体查询已删（按钮本来就常显，不留无用/矛盾规则）',
+        ! bladeCode.includes('hover: none')
+        && ! /#album-switch-modal \.albums-item \.albums-actions/.test(bladeCode));
+    check('当前相册：高亮打在行容器 .albums-row 上（边框包得住两个按钮）+ 「当前」徽标',
         itemTpl.includes('__current_badge__')
+        && blade.includes("$albums.find('> ' + ALBUM_ROW).each(function ()")
         && blade.includes("toggleClass('border-brand bg-brand-soft text-brand', on)")
+        && blade.includes("toggleClass('border-line bg-surface', ! on)")
         && blade.includes('<div class="ls-badge shrink-0 bg-brand-soft text-brand">当前</div>'));
-    check('点一行立即切换（沿用旧的 >a 委托 + selectedAlbum + resetImages）',
-        blade.includes("$albums.off('click', '>a').on('click', '>a', function () {")
+    check('点切换区立即切换（委托到 .albums-item + selectedAlbum + resetImages）',
+        blade.includes("$albums.off('click', '.albums-item').on('click', '.albums-item', function () {")
         && /resetImages\(\{page: 1, album_id: selectedAlbum\.id \|\| null\}\);\s*\/\/ 选中即切换[\s\S]{0,160}closeAlbums\(\);/.test(blade));
     check('创建相册：同一个表单 / 接口 / 校验报错展示',
         containerTpl.includes('action="/user/albums"')
@@ -170,8 +189,9 @@ console.log('\n[相册弹窗] 标题/搜索/44px 行/当前徽标/加载中/空�
     check('加载中：转圈（x-loading-spin）+ 文案，加载完收起',
         containerTpl.includes('<x-loading-spin />') && containerTpl.includes('加载中...')
         && blade.includes("$('#album-switch-loading').addClass('hidden');"));
-    check('底部「完成」只关弹窗',
-        shellTpl.includes('id="album-switch-done"') && blade.includes("$('#album-switch-done').off('click').on('click', _ => closeAlbums());"));
+    check('底部「完成」删干净（markup / 事件绑定 / 外层空包裹 div 一个都不剩）',
+        ! blade.includes('album-switch-done') && ! shellTpl.includes('album-switch-done')
+        && ! /mt-4 flex justify-end/.test(shellTpl));
     check('哨兵在相册弹窗里藏掉（同思路写了新的一条，common.less 那条没动）',
         /#album-switch-modal \.infinite-scroll \{\s*display: none;\s*\}/.test(blade)
         && /#image-movements-modal\s*\{\s*\.infinite-scroll\s*\{\s*display:\s*none;?\s*\}\s*\}/.test(read('resources', 'css', 'common.less')));
