@@ -82,7 +82,9 @@
          所以这里不能再靠祖先的高度：h-full 的百分比会解析成 auto，里面的
          #images-scroll（absolute inset-0）就跟着算成 0 高 —— 图片墙整片消失。
          改成 flex-1（容器是 flex flex-col + min-h-screen），自己吃掉除工具栏外的剩余高度。--}}
-    <div class="relative overflow-hidden flex-1">
+    {{-- -mb-14 抵消布局容器的 pb-14（56px）：不留底栏，图片墙直接铺到视口底，
+         否则最下面会空出一条 56px 的白带。容器没有固定底栏要吃这个内边距。--}}
+    <div class="relative overflow-hidden flex-1 -mb-14">
         <!-- content -->
         <div id="images-scroll" class="absolute inset-0 overflow-y-scroll dragselect select-none">
             <div id="images-grid" class="dragselect"></div>
@@ -105,7 +107,10 @@
                     <i class="fas fa-check-circle block rounded-full bg-white text-white border border-line-2"></i>
                 </div>
             </div>
-            <div class="image-mask absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
+            {{-- 缩略图上的名称/时间遮罩：老师要求先隐藏（不要删代码，以后可能改回来）。
+                 要恢复：把下面这个 hidden 去掉即可，其余一个字没动。
+                 注意：遮罩隐藏后点击落在 img 上，看图器照旧正常打开（原来靠这里的 onclick 转发）。--}}
+            <div class="image-mask hidden absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
                 <div class="absolute left-2 bottom-2 text-white z-[2] w-[90%]">
                     <p class="text-sm truncate filename" title="__name__">__name__</p>
                     <p class="text-[13.5px] date" title="__human_date__">__date__</p>

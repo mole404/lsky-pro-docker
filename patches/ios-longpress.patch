@@ -34,9 +34,9 @@
 #      桌面端不受影响：仍是 hover 侧开 + fitSubmenu 钳制。
 #
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
-#   3f845ab5321c2605dcd0f369290fcc7b  src/resources/js/context-js.js
-#   3f845ab5321c2605dcd0f369290fcc7b  src/public/js/context-js/context-js.js
-#   b1151d9a5d0565d2f3a761017f5af5ff  src/resources/views/user/images.blade.php
+#   b916555ab122d2b3db99153d9316a887  src/resources/js/context-js.js
+#   b916555ab122d2b3db99153d9316a887  src/public/js/context-js/context-js.js
+#   91839d2fdbe34face7ab07065b4d72b2  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
@@ -95,7 +95,7 @@
      let options = {
          fadeSpeed: 100,
          filter: function ($obj) {
-@@ -15,14 +55,693 @@
+@@ -15,14 +55,736 @@
          compress: false
      };
  
@@ -250,7 +250,8 @@
 +    let suppressClickUntil = 0;
 +    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
 +    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
-+    let armedGestureId = 0;         // 二级菜单是在哪一次手势里被打开的     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
++    let armedGestureId = 0;         // 二级菜单是在哪一次手势里被打开的
++    let submenuArmingTimer = null;  // 「刚弹出、先别高亮」的收尾定时器     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
 +    let menuStylesInjected = false;
 +    let menuGuardInstalled = false;
 +
@@ -284,6 +285,11 @@
 +            + ' min-width: 0 !important; margin: 0 !important; padding: 0 !important;'
 +            + ' border: 0 !important; border-radius: 0 !important; box-shadow: none !important;'
 +            + ' background: transparent !important; }'
++            // 刚弹出的一瞬间：项不接受指针事件（浏览器就不会把它当成 hover 目标 → 不会高亮），
++            // 同时把 hover 底色压平做双保险；不改变任何尺寸/位置，面板本身照旧接收点击（由守卫吞掉）。
++            + '.dropdown-context.submenu-inplace.submenu-arming > li.submenu-active > .dropdown-menu > li > a,'
++            + ' .dropdown-context.submenu-inplace.submenu-arming > li.submenu-back > a {'
++            + ' pointer-events: none !important; background-color: transparent !important; }'
 +            + '.dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu:before,'
 +            + ' .dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu:after { display: none !important; }'
 +        );
@@ -383,6 +389,7 @@
 +    // 只改定位，不碰显示/隐藏逻辑 —— 长按与点击防护依赖 CSS :hover 的真实可见性，动不得。
 +    const EDGE_MARGIN = 8;
 +    const SUBMENU_GUARD = 350;      // 二级菜单「就地替换」后这段毫秒内，触摸点击一律吞掉（防按住误选）
++    const SUBMENU_ARM_MS = 420;     // 二级菜单刚弹出的这段毫秒内，先别接受指针指向（防那一下高亮跳色）
 +
 +    function viewportSize() {
 +        const de = document.documentElement;
@@ -520,6 +527,21 @@
 +        return $li.closest('.dropdown-context:not(.dropdown-context-sub)');
 +    }
 +
++    // 刚弹出的一瞬间先别让任何一项成为指针目标（否则浏览器会把手指底下那项判成 hover → 跳高亮）。
++    // 窗口从「本次按下」起算，并在抬手时续到抬手之后 —— 按住不动超过窗口也照样不跳色。
++    function armSubmenuHoverGuard(ms) {
++        $('.dropdown-context').addClass('submenu-arming');
++        clearTimeout(submenuArmingTimer);
++        submenuArmingTimer = setTimeout(function () {
++            $('.dropdown-context').removeClass('submenu-arming');
++        }, ms);
++    }
++
++    function clearSubmenuHoverGuard() {
++        clearTimeout(submenuArmingTimer);
++        $('.dropdown-context').removeClass('submenu-arming');
++    }
++
 +    // 打开某个父项的二级菜单：手机惯例是「按下就开」，这样抬手那发合成 click 也有东西可吞。
 +    function openSubmenuFor($li) {
 +        $li.siblings('.dropdown-submenu').removeClass('touch-open');
@@ -544,6 +566,12 @@
 +                '<i class="fas fa-chevron-left mr-1"></i>返回</a></li>'));
 +        }
 +
++        // 刚弹出的一瞬间，手指还压在同一位置上：浏览器会把「手指底下那个元素」当成 hover 目标，
++        // 于是二级菜单里会有一项立刻跳成高亮 —— 功能上不误触，但观感很脏。
++        // 弹出后 SUBMENU_ARM_MS 内给面板挂 .submenu-arming：里面的项不接受指针事件、hover 底色也压平，
++        // 手指不动就不会有高亮；过了这段时间（或者手指动/再点）恢复如常。
++        armSubmenuHoverGuard(SUBMENU_ARM_MS);
++
 +        submenuInplaceAt = Date.now();
 +        clampMenu($menu);                               // 面板高度变了，重新夹一次视口
 +    }
@@ -554,6 +582,7 @@
 +            return;
 +        }
 +
++        clearSubmenuHoverGuard();
 +        $menu.removeClass('submenu-inplace').children('.submenu-back').remove();
 +        $menu.children('.submenu-active').removeClass('submenu-active touch-open')
 +            .find('.dropdown-context-sub:first').removeClass('drop-left')
@@ -698,6 +727,18 @@
 +        // 手指一按到「带二级菜单的父项」上：立刻就地切换 + 武装防误触窗口。
 +        // 这一步必须在 touchstart 做 —— 真机的粘滞 :hover 会让二级菜单先出现，
 +        // 等抬手才处理就晚了（那时 click 已经落在菜单项上了）。
++        // 抬手：面板若还在「刚弹出」窗口内，把窗口续到抬手之后 —— 按住再久，那一刻也不跳高亮。
++        ['touchend', 'touchcancel'].forEach(function (evt) {
++            document.addEventListener(evt, function () {
++                // 判据是「这一发手指就是打开二级菜单的那一发」——不能看 .submenu-arming 还在不在：
++                // 按住超过 SUBMENU_ARM_MS 时，那个类早就被定时器摘掉了（踩过）。
++                if (armedGestureId && armedGestureId === touchGestureId
++                    && $('.dropdown-context.submenu-inplace').length) {
++                    armSubmenuHoverGuard(260);      // 抬手后再压 260ms，抬手那一刻也不会跳色
++                }
++            }, true);
++        });
++
 +        document.addEventListener('touchstart', function (e) {
 +            touchGestureId++;                       // 新手势：上一发的防误触自动失效
 +
@@ -713,6 +754,8 @@
 +                }
 +                submenuInplaceAt = Date.now();
 +                armedGestureId = touchGestureId;    // 武装到本次手势：这根手指抬起来的那发 click 必吞
++            } else if ($('.dropdown-context.submenu-arming').length) {
++                clearSubmenuHoverGuard();           // 手指挪去点别的东西了：立刻恢复正常 hover/点击
 +            }
 +        }, true);
 +
@@ -792,7 +835,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +749,8 @@
+@@ -30,13 +792,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -808,7 +851,7 @@
          });
  
      }
-@@ -130,12 +844,15 @@
+@@ -130,12 +887,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -829,7 +872,7 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -144,42 +861,108 @@
+@@ -144,42 +904,108 @@
              $('body').append($menu);
  
              $('.dropdown-context:not(.dropdown-context-sub)').hide();
@@ -950,7 +993,7 @@
  })();
 --- a/public/js/context-js/context-js.js
 +++ b/public/js/context-js/context-js.js
-@@ -1 +1,968 @@
+@@ -1 +1,1011 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1160,7 +1203,8 @@
 +    let suppressClickUntil = 0;
 +    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
 +    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
-+    let armedGestureId = 0;         // 二级菜单是在哪一次手势里被打开的     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
++    let armedGestureId = 0;         // 二级菜单是在哪一次手势里被打开的
++    let submenuArmingTimer = null;  // 「刚弹出、先别高亮」的收尾定时器     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
 +    let menuStylesInjected = false;
 +    let menuGuardInstalled = false;
 +
@@ -1194,6 +1238,11 @@
 +            + ' min-width: 0 !important; margin: 0 !important; padding: 0 !important;'
 +            + ' border: 0 !important; border-radius: 0 !important; box-shadow: none !important;'
 +            + ' background: transparent !important; }'
++            // 刚弹出的一瞬间：项不接受指针事件（浏览器就不会把它当成 hover 目标 → 不会高亮），
++            // 同时把 hover 底色压平做双保险；不改变任何尺寸/位置，面板本身照旧接收点击（由守卫吞掉）。
++            + '.dropdown-context.submenu-inplace.submenu-arming > li.submenu-active > .dropdown-menu > li > a,'
++            + ' .dropdown-context.submenu-inplace.submenu-arming > li.submenu-back > a {'
++            + ' pointer-events: none !important; background-color: transparent !important; }'
 +            + '.dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu:before,'
 +            + ' .dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu:after { display: none !important; }'
 +        );
@@ -1293,6 +1342,7 @@
 +    // 只改定位，不碰显示/隐藏逻辑 —— 长按与点击防护依赖 CSS :hover 的真实可见性，动不得。
 +    const EDGE_MARGIN = 8;
 +    const SUBMENU_GUARD = 350;      // 二级菜单「就地替换」后这段毫秒内，触摸点击一律吞掉（防按住误选）
++    const SUBMENU_ARM_MS = 420;     // 二级菜单刚弹出的这段毫秒内，先别接受指针指向（防那一下高亮跳色）
 +
 +    function viewportSize() {
 +        const de = document.documentElement;
@@ -1430,6 +1480,21 @@
 +        return $li.closest('.dropdown-context:not(.dropdown-context-sub)');
 +    }
 +
++    // 刚弹出的一瞬间先别让任何一项成为指针目标（否则浏览器会把手指底下那项判成 hover → 跳高亮）。
++    // 窗口从「本次按下」起算，并在抬手时续到抬手之后 —— 按住不动超过窗口也照样不跳色。
++    function armSubmenuHoverGuard(ms) {
++        $('.dropdown-context').addClass('submenu-arming');
++        clearTimeout(submenuArmingTimer);
++        submenuArmingTimer = setTimeout(function () {
++            $('.dropdown-context').removeClass('submenu-arming');
++        }, ms);
++    }
++
++    function clearSubmenuHoverGuard() {
++        clearTimeout(submenuArmingTimer);
++        $('.dropdown-context').removeClass('submenu-arming');
++    }
++
 +    // 打开某个父项的二级菜单：手机惯例是「按下就开」，这样抬手那发合成 click 也有东西可吞。
 +    function openSubmenuFor($li) {
 +        $li.siblings('.dropdown-submenu').removeClass('touch-open');
@@ -1454,6 +1519,12 @@
 +                '<i class="fas fa-chevron-left mr-1"></i>返回</a></li>'));
 +        }
 +
++        // 刚弹出的一瞬间，手指还压在同一位置上：浏览器会把「手指底下那个元素」当成 hover 目标，
++        // 于是二级菜单里会有一项立刻跳成高亮 —— 功能上不误触，但观感很脏。
++        // 弹出后 SUBMENU_ARM_MS 内给面板挂 .submenu-arming：里面的项不接受指针事件、hover 底色也压平，
++        // 手指不动就不会有高亮；过了这段时间（或者手指动/再点）恢复如常。
++        armSubmenuHoverGuard(SUBMENU_ARM_MS);
++
 +        submenuInplaceAt = Date.now();
 +        clampMenu($menu);                               // 面板高度变了，重新夹一次视口
 +    }
@@ -1464,6 +1535,7 @@
 +            return;
 +        }
 +
++        clearSubmenuHoverGuard();
 +        $menu.removeClass('submenu-inplace').children('.submenu-back').remove();
 +        $menu.children('.submenu-active').removeClass('submenu-active touch-open')
 +            .find('.dropdown-context-sub:first').removeClass('drop-left')
@@ -1608,6 +1680,18 @@
 +        // 手指一按到「带二级菜单的父项」上：立刻就地切换 + 武装防误触窗口。
 +        // 这一步必须在 touchstart 做 —— 真机的粘滞 :hover 会让二级菜单先出现，
 +        // 等抬手才处理就晚了（那时 click 已经落在菜单项上了）。
++        // 抬手：面板若还在「刚弹出」窗口内，把窗口续到抬手之后 —— 按住再久，那一刻也不跳高亮。
++        ['touchend', 'touchcancel'].forEach(function (evt) {
++            document.addEventListener(evt, function () {
++                // 判据是「这一发手指就是打开二级菜单的那一发」——不能看 .submenu-arming 还在不在：
++                // 按住超过 SUBMENU_ARM_MS 时，那个类早就被定时器摘掉了（踩过）。
++                if (armedGestureId && armedGestureId === touchGestureId
++                    && $('.dropdown-context.submenu-inplace').length) {
++                    armSubmenuHoverGuard(260);      // 抬手后再压 260ms，抬手那一刻也不会跳色
++                }
++            }, true);
++        });
++
 +        document.addEventListener('touchstart', function (e) {
 +            touchGestureId++;                       // 新手势：上一发的防误触自动失效
 +
@@ -1623,6 +1707,8 @@
 +                }
 +                submenuInplaceAt = Date.now();
 +                armedGestureId = touchGestureId;    // 武装到本次手势：这根手指抬起来的那发 click 必吞
++            } else if ($('.dropdown-context.submenu-arming').length) {
++                clearSubmenuHoverGuard();           // 手指挪去点别的东西了：立刻恢复正常 hover/点击
 +            }
 +        }, true);
 +
@@ -1988,7 +2074,7 @@
                      </a>
                  </x-slot>
  
-@@ -76,17 +78,21 @@
+@@ -76,17 +78,23 @@
              </x-dropdown>
          </div>
      </div>
@@ -1997,7 +2083,9 @@
 +         所以这里不能再靠祖先的高度：h-full 的百分比会解析成 auto，里面的
 +         #images-scroll（absolute inset-0）就跟着算成 0 高 —— 图片墙整片消失。
 +         改成 flex-1（容器是 flex flex-col + min-h-screen），自己吃掉除工具栏外的剩余高度。--}}
-+    <div class="relative overflow-hidden flex-1">
++    {{-- -mb-14 抵消布局容器的 pb-14（56px）：不留底栏，图片墙直接铺到视口底，
++         否则最下面会空出一条 56px 的白带。容器没有固定底栏要吃这个内边距。--}}
++    <div class="relative overflow-hidden flex-1 -mb-14">
          <!-- content -->
          <div id="images-scroll" class="absolute inset-0 overflow-y-scroll dragselect select-none">
              <div id="images-grid" class="dragselect"></div>
@@ -2015,7 +2103,7 @@
              </div>
              <div id="drawer-content" class="overflow-y-auto"></div>
          </div>
-@@ -96,13 +102,13 @@
+@@ -96,13 +104,16 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -2023,7 +2111,11 @@
 +                    <i class="fas fa-check-circle block rounded-full bg-white text-white border border-line-2"></i>
                  </div>
              </div>
-             <div class="image-mask absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
+-            <div class="image-mask absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
++            {{-- 缩略图上的名称/时间遮罩：老师要求先隐藏（不要删代码，以后可能改回来）。
++                 要恢复：把下面这个 hidden 去掉即可，其余一个字没动。
++                 注意：遮罩隐藏后点击落在 img 上，看图器照旧正常打开（原来靠这里的 onclick 转发）。--}}
++            <div class="image-mask hidden absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
                  <div class="absolute left-2 bottom-2 text-white z-[2] w-[90%]">
                      <p class="text-sm truncate filename" title="__name__">__name__</p>
 -                    <p class="text-xs date" title="__human_date__">__date__</p>
@@ -2031,7 +2123,7 @@
                  </div>
              </div>
              <img alt="__name__" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
-@@ -114,22 +120,22 @@
+@@ -114,22 +125,22 @@
              <div id="album-add" class="flex flex-col w-full hidden border rounded p-2">
                  <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
                  <form class="w-full space-y-2" action="/user/albums">
@@ -2061,7 +2153,7 @@
          </a>
      </script>
  
-@@ -137,9 +143,9 @@
+@@ -137,9 +148,9 @@
          <div id="album-edit" data-id="__id__" class="flex flex-col w-full border rounded p-2">
              <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
              <form class="w-full space-y-2" action="/user/albums/__id__">
@@ -2074,7 +2166,7 @@
              </form>
          </div>
      </script>
-@@ -148,51 +154,51 @@
+@@ -148,51 +159,51 @@
          <div class="my-4 px-4 space-y-3">
              <div>
                  <span class="text-sm font-semibold">相册名称</span>
@@ -2138,7 +2230,7 @@
              </div>
          </div>
      </script>
-@@ -201,7 +207,8 @@
+@@ -201,7 +212,8 @@
          <script src="{{ asset('js/justified-gallery/jquery.justifiedGallery.min.js') }}"></script>
          <script src="{{ asset('js/viewer-js/viewer.min.js') }}"></script>
          <script src="{{ asset('js/dragselect/ds.min.js') }}"></script>
@@ -2148,7 +2240,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -308,7 +315,7 @@
+@@ -308,7 +320,7 @@
              }
  
              const getAlbums = (options, callback) => {
@@ -2157,7 +2249,7 @@
                  let content = $('#albums-container-tpl').html();
                  drawer.toggle(title, content, function () {
                      let $albums = $('#albums-container');
-@@ -337,8 +344,8 @@
+@@ -337,8 +349,8 @@
                                  if (albums[i].id === selectedAlbum.id) {
                                      // 选中的相册高亮
                                      item = item
@@ -2168,7 +2260,7 @@
                                  }
  
                                  html += item;
-@@ -486,10 +493,10 @@
+@@ -486,10 +498,10 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -2181,7 +2273,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -509,6 +516,26 @@
+@@ -509,6 +521,26 @@
              ds.subscribe('elementselect', _ => bindOperates());
              ds.subscribe('elementunselect', _ => bindOperates());
  
@@ -2208,7 +2300,7 @@
              $photos.on('click', '.image-selector', function () {
                  ds.toggleSelection($(this).closest('a'));
                  bindOperates();
-@@ -575,7 +602,7 @@
+@@ -575,7 +607,7 @@
                  permission() {
                      Swal.fire({
                          title: '选择一个权限',
@@ -2217,7 +2309,7 @@
                          input: 'select',
                          inputOptions: {
                              public: '公开',
-@@ -853,6 +880,10 @@
+@@ -853,6 +885,10 @@
                      case 'delete': // 删除
                          methods.delete();
                          break;
