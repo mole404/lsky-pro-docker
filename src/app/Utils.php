@@ -24,7 +24,7 @@ class Utils
     /**
      * 获取头像地址
      *
-     * fork：改为返回本地默认头像（public/images/default-avatar.svg）。
+     * fork：改为返回本地默认头像（public/static/default-avatar.svg）。
      * 全站没有换头像功能 —— 所有用户都是同一个固定图标，为一个静态图标每次请求
      * 都去 cravatar.cn 拉一次（外站，实测 376B / 0.85~0.96s，还多一次重定向，
      * 慢的时候整页的 load 都跟着等）没有任何收益。改成同源静态文件后是零外站依赖：
@@ -35,7 +35,7 @@ class Utils
      */
     public static function getAvatar($email, int $s = 96, string $d = 'mp', string $r = 'g'): string
     {
-        $path = 'images/default-avatar.svg';
+        $path = 'static/default-avatar.svg';
 
         return asset($path).'?v='.self::assetVersion($path);
     }

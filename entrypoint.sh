@@ -68,4 +68,12 @@ fi
     chgrp -R www-data /var/www/html
     chmod -R 755 /var/www/html/
 
+# ---------------------------------------------------------------- fork 修复（2026-09-29）
+# 曾把默认头像放在 public/images/，而 /images 是应用路由：Apache 遇到真实目录会 301 到
+# /images/（那里没有 index → 403），于是首页 / → 302 → /images → 301 整站打不开。
+# 卷同步是「只增不删」，所以从旧镜像升级上来的卷里会残留这个目录 —— 这里无条件清掉。
+# 只删我们自己放过的那一个文件（目录空了再删目录），其余一律不碰。
+rm -f /var/www/html/public/images/default-avatar.svg 2>/dev/null || true
+rmdir /var/www/html/public/images 2>/dev/null || true
+
 exec "$@"
