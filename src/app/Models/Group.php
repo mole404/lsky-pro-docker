@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\GroupConfigKey;
 use App\Utils;
 use Illuminate\Support\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -38,6 +39,46 @@ class Group extends Model
         'is_guest' => 'bool',
         'configs' => 'collection'
     ];
+
+    /**
+     * fork（F3）：读取侧硬过滤 SVG 后缀。
+     *
+     * convention.php 里的 accepted_file_suffixes 只是**默认值**：Utils::parseConfigs()
+     * 对列表型值走 array_is_list() 那支，stored 整份覆盖默认 —— 存量实例的 DB 里
+     * （InstallSeeder 播下的「系统默认组&游客组」）存的白名单含 svg，升级后不会自动
+     * 变干净，只能靠去后台点一次保存（现在 GroupRequest 的 in: 不认 svg）。
+     * 所以最后一道闸门放读取侧：这里是「上传取可上传后缀」的唯一咽喉点 ——
+     * ImageService::store() 的 $configs = $group->configs（再 get(AcceptedFileSuffixes)），
+     * 登录上传走 $user->group、游客上传走 Group::where('is_guest', true)，同一模型同一
+     * accessor；组配置没有缓存层（Utils 的 Cache::rememberForever('configs') 只缓存
+     * configs 表的系统配置，与组无关）。
+     *
+     * 作用域：只滤掉「可上传后缀」这一个键里的 svg/svgz（大小写不敏感），其它配置键、
+     * 其它后缀、顺序、标量型配置、不传 stored 的默认值路径全部逐字不变；
+     * 非 collection 的读取结果（如 configs 为 NULL）原样返回，与改动前一致。
+     *
+     * @param  mixed  $value
+     * @return Collection|null
+     */
+    public function getConfigsAttribute($value): ?Collection
+    {
+        // 读取语义与原来的 cast('collection') 完全一致，只是不再直接返回
+        $configs = $value instanceof Collection ? $value->collect() : $this->castAttribute('configs', $value);
+
+        if (! $configs instanceof Collection) {
+            return $configs;
+        }
+
+        $suffixes = $configs->get(GroupConfigKey::AcceptedFileSuffixes);
+        if (is_array($suffixes)) {
+            $configs->put(GroupConfigKey::AcceptedFileSuffixes, array_values(array_filter(
+                $suffixes,
+                static fn ($suffix) => ! in_array(strtolower((string) $suffix), ['svg', 'svgz'], true)
+            )));
+        }
+
+        return $configs;
+    }
 
     const POSITIONS = [
         'top-left' => '左上角',

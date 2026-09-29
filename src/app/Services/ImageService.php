@@ -151,8 +151,8 @@ class ImageService
         // 上传频率限制
         $this->rateLimiter($configs, $request);
 
-        // 图片处理，跳过 ico gif svg
-        if (! in_array($extension, ['ico', 'gif', 'svg'])) {
+        // 图片处理，跳过 ico gif
+        if (! in_array($extension, ['ico', 'gif'])) {
             // 图片保存质量与格式
             $quality = $configs->get(GroupConfigKey::ImageSaveQuality, 75);
             $format = $configs->get(GroupConfigKey::ImageSaveFormat);
@@ -245,8 +245,8 @@ class ImageService
             throw new UploadException('图片记录保存失败');
         }
 
-        // 图片检测，跳过 tif、ico、psd、svg 格式
-        if ($configs->get(GroupConfigKey::IsEnableScan) && ! in_array($extension, ['psd', 'ico', 'tif', 'svg'])) {
+        // 图片检测，跳过 tif、ico、psd 格式
+        if ($configs->get(GroupConfigKey::IsEnableScan) && ! in_array($extension, ['psd', 'ico', 'tif'])) {
             $scanConfigs = $configs->get(GroupConfigKey::ScanConfigs);
             if ($this->scan(
                 driver: $scanConfigs['driver'],
@@ -557,26 +557,22 @@ class ImageService
                     @mkdir(dirname($pathname));
                 }
 
-                // 生成缩略图，svg等格式本身体积足够小且网页原生支持(比生成的png缩略图还小)，不用生成缩略图，直接复制文件
-                if($image->extension ==='svg') {
-                    copy($data->getPathname(), $pathname);
-                }else{
-                    @ini_set('memory_limit', '512M');
+                // 生成缩略图（原图缩放后统一编码为 png）
+                @ini_set('memory_limit', '512M');
 
-                    $img = InterventionImage::make($data);
+                $img = InterventionImage::make($data);
 
-                    $width = $w = $image->width;
-                    $height = $h = $image->height;
+                $width = $w = $image->width;
+                $height = $h = $image->height;
 
-                    if ($w > $max && $h > $max) {
-                        $scale = min($max / $w, $max / $h);
-                        $width  = (int)($w * $scale);
-                        $height = (int)($h * $scale);
-                    }
-
-                    $img->fit($width, $height, fn($constraint) => $constraint->upsize())->encode('png', 60)->save($pathname);
-                    $img->destroy();
+                if ($w > $max && $h > $max) {
+                    $scale = min($max / $w, $max / $h);
+                    $width  = (int)($w * $scale);
+                    $height = (int)($h * $scale);
                 }
+
+                $img->fit($width, $height, fn($constraint) => $constraint->upsize())->encode('png', 60)->save($pathname);
+                $img->destroy();
             } catch (\Throwable $e) {
                 Utils::e($e, '生成缩略图时出现异常');
             }
