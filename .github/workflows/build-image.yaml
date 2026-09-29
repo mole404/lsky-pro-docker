@@ -632,12 +632,17 @@ jobs:
           docker run -d --name lsky-b -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
           # 同样：同步分支的日志行是在 tar 写完之后才 echo 的，拿它当完成信号，
           # 避免在 tar 还在写卷的时候就去断言（会读到中间状态）。
+          # 本步骤开了 `set -euo pipefail`：`docker logs | grep -q` 会在 grep 提前命中退出时
+          # 让 docker logs 吃到 SIGPIPE（exit 141）→ 整条管道非 0 → 假红（真踩过）。
+          # 所以统一「先落文件、再 grep」；等待信号也改成等该分支**最后**打的那行。
+          BLOG=/tmp/lsky-b.log
           for i in $(seq 1 60); do
-            if docker logs lsky-b 2>&1 | grep -q '已同步进卷'; then break; fi
+            docker logs lsky-b > "$BLOG" 2>&1 || true
+            grep -q '已同步进卷' "$BLOG" && break
             sleep 2
           done
           docker logs lsky-b 2>&1 | grep '\[lsky\]' || true
-          docker logs lsky-b 2>&1 | grep -q '已同步进卷' || { echo "::error::旧标记时没有走同步分支"; exit 1; }
+          grep -q '已同步进卷' "$BLOG" || { echo "::error::旧标记时没有走同步分支"; echo '--- lsky-b 日志 ---'; cat "$BLOG"; exit 1; }
           docker exec lsky-b md5sum /var/www/html/public/js/context-js/context-js.js | grep -q "$EXP_CTX" || { echo "::error::同步后卷里的 JS 不是镜像版本"; exit 1; }
 
           B=$(docker exec lsky-b sh -c '
@@ -689,12 +694,17 @@ jobs:
           docker rm -f lsky-b >/dev/null
           docker run --rm -v "$VOL":/var/www/html --entrypoint sh "$IMAGE_REF" -c 'echo "<?php // 手动修补过" > /var/www/html/app/Services/ImageService.php'
           docker run -d --name lsky-c -v "$VOL":/var/www/html -e WEB_PORT=8089 "$IMAGE_REF"
-          for i in $(seq 1 20); do
-            if docker logs lsky-c 2>&1 | grep -q '\[lsky\]'; then break; fi
+          # 等待信号必须是「跳过同步」这行**本身**（技能第 16 条：别等第一条 [lsky] ——
+          # 入口脚本越早打的其它行，比如自签证书那行，会把这里的时序带偏）。
+          # 同样「先落文件再 grep」，避开 pipefail + SIGPIPE 的假红。
+          CLOG=/tmp/lsky-c.log
+          for i in $(seq 1 30); do
+            docker logs lsky-c > "$CLOG" 2>&1 || true
+            grep -q '跳过同步' "$CLOG" && break
             sleep 1
           done
-          docker logs lsky-c 2>&1 | grep '\[lsky\]' || true
-          docker logs lsky-c 2>&1 | grep -q '跳过同步' || { echo "::error::同版本标记时应跳过同步"; exit 1; }
+          grep '\[lsky\]' "$CLOG" || true
+          grep -q '跳过同步' "$CLOG" || { echo "::error::同版本标记时应跳过同步"; echo '--- lsky-c 日志 ---'; cat "$CLOG"; exit 1; }
           C=$(docker exec lsky-c sh -c '
             echo "HANDBOOK_KEPT=$(grep -c 手动修补过 /var/www/html/app/Services/ImageService.php || true)"
           ')
