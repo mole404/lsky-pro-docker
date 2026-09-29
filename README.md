@@ -385,9 +385,83 @@ by mole404
 - `WEB_PORT`：容器内 `Apache` 监听端口，默认 `8089`（`-e WEB_PORT=8089` 可改）
 - `HTTPS_PORT`：HTTPS 端口，默认 `8088`（用 Nginx 反代 HTTPS 时才需要）
 
+本 fork 另有一组 `APACHE_*`（Apache MPM 并发/内存相关），默认值面向低配单用户、可逐项覆盖，
+见下面「[Apache MPM（并发与内存占用）](#apache-mpm并发与内存占用2026-09-30)」一节。
+
 ### Windows内以`WSL`的方式部署`Docker`容器
 
 按照 [#13](https://github.com/HalcyonAzure/lsky-pro-docker/issues/13) 的反馈来看，如果在`Windows`内创建容器出现了将文件挂载于`WSL`内，然后出现了重启系统文件未识别的情况，可以将映射目录修改为类似 `\\wsl$\Ubuntu\path-mount-lsky\` 的形式
+
+## Apache MPM（并发与内存占用，2026-09-30）
+
+镜像内置了一套**面向低配单用户**的 Apache MPM（prefork）参数，覆盖 Debian/php-apache 的出厂值
+（出厂是 `StartServers 5` / `MinSpareServers 5` / `MaxSpareServers 10` / `MaxRequestWorkers 150` /
+`MaxConnectionsPerChild 0` —— 光常驻就 5 个进程、空闲下限 5 个，对只有自己在用的小机器太重）。
+
+默认值（不设任何 `APACHE_*` 时渲染进 `/etc/apache2/conf-enabled/mpm.conf`）：
+
+```apache
+StartServers 2
+MinSpareServers 1
+MaxSpareServers 3
+MaxRequestWorkers 5
+MaxConnectionsPerChild 5
+KeepAlive Off
+```
+
+每一项都能**逐项**用环境变量覆盖（写哪个改哪个，没写的保持默认）：
+
+| 环境变量 | 默认值 | 说明 |
+|---|---|---|
+| `APACHE_START_SERVERS` | `2` | 启动时预建的子进程数 |
+| `APACHE_MIN_SPARE_SERVERS` | `1` | 空闲子进程下限 |
+| `APACHE_MAX_SPARE_SERVERS` | `3` | 空闲子进程上限 |
+| `APACHE_MAX_REQUEST_WORKERS` | `5` | 并发请求上限（内存占用的主要来源） |
+| `APACHE_MAX_CONNECTIONS_PER_CHILD` | `5` | 单个子进程处理多少个请求后回收；`0` = 永不回收（合法，但内存只涨不落） |
+| `APACHE_KEEP_ALIVE` | `Off` | 只接受 `On` / `Off`（大小写不敏感）；`Off` 时连接用完即关，最省内存 |
+
+两个**可选**变量本身没有默认值，只在 `APACHE_KEEP_ALIVE=On` 且显式设置时才各多写一行；
+不设就整行不出现，即**跟随 Apache 发行版默认：`KeepAliveTimeout` 5 秒 / `MaxKeepAliveRequests` 100**：
+
+| 环境变量 | 渲染出的行 |
+|---|---|
+| `APACHE_KEEPALIVE_TIMEOUT` | `KeepAliveTimeout <值>`（仅 `KeepAlive On` 时） |
+| `APACHE_MAX_KEEPALIVE_REQUESTS` | `MaxKeepAliveRequests <值>`（仅 `KeepAlive On` 时） |
+
+> 开了 KeepAlive 又想省内存，建议显式写 `APACHE_KEEPALIVE_TIMEOUT=2`；
+> **别写 `0`** —— 在 Apache 里 0 不是「更省」而是「不限制」，长连接会一直挂着占进程和内存。
+> `APACHE_MAX_KEEPALIVE_REQUESTS` 同理（单条连接最多复用多少次），也别写 0。
+> 两个变量写了非法值（非正整数）只会被忽略并打警告，不会让容器起不来。
+
+**值写错不会让容器起不来**：任何一项写了非法值（非整数、越界、`APACHE_KEEP_ALIVE` 不是 On/Off、
+两个可选值不是正整数），都只把**那一项**退回默认值并在日志打一行 `[lsky] 警告：…`，其余项照常生效；
+`MaxRequestWorkers ≥ MaxSpareServers ≥ MinSpareServers ≥ 1` 不满足时同样只回退出问题的那一项。
+渲染彻底失败（模板缺失 / 目标不可写）也只打警告，容器照常启动。
+
+每次启动都按当前环境变量重新渲染（幂等，以 compose/环境变量为准），启动日志里有摘要：
+
+```
+[lsky] Apache MPM 已写入 /etc/apache2/conf-enabled/mpm.conf：StartServers=2 MinSpareServers=1 MaxSpareServers=3 MaxRequestWorkers=5 MaxConnectionsPerChild=5 KeepAlive=Off（KeepAlive=Off，未写 KeepAliveTimeout / MaxKeepAliveRequests）
+```
+
+自查：`docker compose logs lskypro | grep '\[lsky\]'`，或进容器 `cat /etc/apache2/conf-enabled/mpm.conf`。
+
+**人多/高配的参考值**（加进 compose 的 `environment`；示例：8 核 8G、十来个人同时用）：
+
+```yaml
+environment:
+  - APACHE_START_SERVERS=5
+  - APACHE_MIN_SPARE_SERVERS=5
+  - APACHE_MAX_SPARE_SERVERS=10
+  - APACHE_MAX_REQUEST_WORKERS=25
+  - APACHE_MAX_CONNECTIONS_PER_CHILD=5000
+  - APACHE_KEEP_ALIVE=On
+  - APACHE_KEEPALIVE_TIMEOUT=2
+  - APACHE_MAX_KEEPALIVE_REQUESTS=50
+```
+
+按「一个 prefork 子进程跑起 Laravel 后 ≈ 30–50MB」估算 `MaxRequestWorkers × 单进程内存 ≤ 机器可用内存`，
+**宁小勿大** —— 超了被 OOM 杀掉比排队慢得多。
 
 ## 反代HTTPS
 

@@ -194,6 +194,9 @@ COPY ./ssl /etc/ssl
 COPY --from=build /build /var/www/lsky/
 COPY ./000-default.conf.template /etc/apache2/sites-enabled/
 COPY ./ports.conf.template /etc/apache2/
+# Apache MPM 模板：入口脚本会把它（按 APACHE_* 渲染后）写到 /etc/apache2/conf-enabled/mpm.conf，
+# 覆盖 mods-enabled 里 mpm_prefork.conf 的出厂值（apache2.conf 先 include mods-enabled 再 include conf-enabled）。
+COPY ./mpm.conf.template /etc/apache2/
 COPY entrypoint.sh /
 
 # 数据安全护栏：强制同步的排除清单缺任何一项都可能覆盖站点数据/配置，缺了就构建失败。
@@ -209,6 +212,18 @@ RUN grep -q -- '--exclude=.\/.env' /entrypoint.sh \
     && grep -q '^fork_sha=' /var/www/lsky/.code-revision \
     && grep -q 'tar cf - --exclude=./.env --exclude=./.code-revision' /entrypoint.sh \
     && grep -q 'cp -a "$IMAGE_MARKER" "$VOLUME_MARKER"' /entrypoint.sh
+
+# MPM 模板护栏：模板必须真的进镜像、入口脚本必须真的往 conf-enabled 写（漏了 COPY 或改了目标路径就构建失败）。
+# 这里只做静态断言；渲染/覆盖是否生效由 CI 里的真容器自证（Verify Apache MPM defaults and overrides）。
+RUN test -f /etc/apache2/mpm.conf.template \
+    && test -d /etc/apache2/conf-enabled \
+    && grep -q 'conf-enabled/mpm.conf' /entrypoint.sh \
+    && grep -q 'APACHE_START_SERVERS' /etc/apache2/mpm.conf.template \
+    && grep -q 'APACHE_MIN_SPARE_SERVERS' /etc/apache2/mpm.conf.template \
+    && grep -q 'APACHE_MAX_SPARE_SERVERS' /etc/apache2/mpm.conf.template \
+    && grep -q 'APACHE_MAX_REQUEST_WORKERS' /etc/apache2/mpm.conf.template \
+    && grep -q 'APACHE_MAX_CONNECTIONS_PER_CHILD' /etc/apache2/mpm.conf.template \
+    && grep -q 'APACHE_KEEP_ALIVE' /etc/apache2/mpm.conf.template
 WORKDIR /var/www/html/
 VOLUME /var/www/html
 ENV WEB_PORT 8089

@@ -320,6 +320,157 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ------------------------------------------------------------------
+      # Apache MPM 自证（真容器里跑）
+      #   镜像内置低配默认值 + APACHE_* 逐项覆盖 + 脏值兜底。渲染发生在入口脚本里，
+      #   所以必须真的起容器（不能用 --entrypoint sh，那会跳过 entrypoint.sh）。
+      #   ① 不设任何 APACHE_* → mpm.conf 就是那 6 行（多一行少一行都算失败）
+      #   ② 只设 APACHE_MAX_REQUEST_WORKERS=17 → 只有那一项变成 17，其余仍是默认
+      #   ③ 设成 abc → 退回默认 5，且日志里有警告
+      #   ④ APACHE_KEEP_ALIVE=On：不设两个可选变量 → 有 KeepAlive On、没有那两行；
+      #      设 timeout=2 + max=50 → 两行都出现且值正确；大小写不敏感（oN → On）
+      #   另外：渲染结果必须能被 Apache 接受（apache2ctl -t），并 dump 运行期取值供人工核对。
+      #   注意：容器复用同一个卷，第一次播种完，后面几次启动就很快。
+      # ------------------------------------------------------------------
+      - name: Verify Apache MPM defaults and overrides
+        env:
+          IMAGE_REF: ${{ env.IMAGE }}:sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          VOL=lsky-mpm-test
+          MPM=/etc/apache2/conf-enabled/mpm.conf
+          NAMES="lsky-mpm-a lsky-mpm-b lsky-mpm-c lsky-mpm-d lsky-mpm-e lsky-mpm-f"
+          trap 'echo "::group::诊断：MPM 容器日志"; for c in $NAMES; do echo "--- $c"; docker logs "$c" 2>&1 | tail -30 || true; done; echo "::endgroup::"' ERR
+          docker rm -f $NAMES >/dev/null 2>&1 || true
+          docker volume rm -f "$VOL" >/dev/null 2>&1 || true
+
+          # CMD 换成 sleep：入口脚本渲染完就停在那儿，方便读文件
+          start_mpm() { # $1=容器名，其余参数原样传给 docker run
+            local name="$1"
+            shift
+            docker run -d --name "$name" -v "$VOL":/var/www/html "$@" "$IMAGE_REF" sleep 300 >/dev/null
+            local i
+            for i in $(seq 1 60); do
+              if docker logs "$name" 2>&1 | grep -q 'Apache MPM'; then return 0; fi
+              sleep 2
+            done
+            echo "::error::$name 启动后没等到入口脚本的 MPM 摘要行"
+            return 1
+          }
+          assert_line() { # $1=容器 $2=必须存在的整行
+            if ! docker exec "$1" grep -qxF "$2" "$MPM"; then
+              echo "::error::$1 的 $MPM 里没有这一行：$2"
+              docker exec "$1" cat "$MPM" || true
+              exit 1
+            fi
+          }
+          assert_no_line() { # $1=容器 $2=不该匹配到的正则
+            if docker exec "$1" grep -qE "$2" "$MPM"; then
+              echo "::error::$1 的 $MPM 里不该出现匹配 $2 的行"
+              docker exec "$1" cat "$MPM" || true
+              exit 1
+            fi
+          }
+
+          echo "== 1) 不设任何 APACHE_*：mpm.conf 必须是内置默认的 6 行（逐字比对）=="
+          start_mpm lsky-mpm-a -e WEB_PORT=8089
+          printf '%s\n' \
+            'StartServers 2' \
+            'MinSpareServers 1' \
+            'MaxSpareServers 3' \
+            'MaxRequestWorkers 5' \
+            'MaxConnectionsPerChild 5' \
+            'KeepAlive Off' > /tmp/mpm-default.txt
+          docker exec lsky-mpm-a cat "$MPM" > /tmp/mpm-actual.txt
+          cat /tmp/mpm-actual.txt
+          if ! diff -u /tmp/mpm-default.txt /tmp/mpm-actual.txt; then
+            echo "::error::不设 APACHE_* 时 mpm.conf 不是内置默认的 6 行"
+            exit 1
+          fi
+          echo "1) 通过：默认 6 行逐字一致（行数 $(wc -l < /tmp/mpm-actual.txt)）"
+
+          echo "== 2) 单项覆盖：APACHE_MAX_REQUEST_WORKERS=17，其余项必须仍是默认 =="
+          start_mpm lsky-mpm-b -e WEB_PORT=8089 -e APACHE_MAX_REQUEST_WORKERS=17
+          docker exec lsky-mpm-b cat "$MPM"
+          for line in 'StartServers 2' 'MinSpareServers 1' 'MaxSpareServers 3' \
+                      'MaxRequestWorkers 17' 'MaxConnectionsPerChild 5' 'KeepAlive Off'; do
+            assert_line lsky-mpm-b "$line"
+          done
+          assert_no_line lsky-mpm-b '^KeepAliveTimeout'
+          assert_no_line lsky-mpm-b '^MaxKeepAliveRequests'
+          echo "2) 通过：只有 MaxRequestWorkers 变成 17，其余 5 项仍是默认"
+
+          echo "== 3) 脏值：APACHE_MAX_REQUEST_WORKERS=abc → 退回 5 + 日志警告 =="
+          start_mpm lsky-mpm-c -e WEB_PORT=8089 -e APACHE_MAX_REQUEST_WORKERS=abc
+          docker exec lsky-mpm-c cat "$MPM"
+          assert_line lsky-mpm-c 'MaxRequestWorkers 5'
+          # 用两段独立 grep（不写成一条带 .* 的正则）：日志是 UTF-8，避免正则/编码耦合
+          MPM_LOGS=$(docker logs lsky-mpm-c 2>&1)
+          if ! echo "$MPM_LOGS" | grep -q '警告'; then
+            echo "::error::脏值没有打警告（期望形如 [lsky] 警告：…）"
+            echo "$MPM_LOGS" | tail -20 || true
+            exit 1
+          fi
+          if ! echo "$MPM_LOGS" | grep -q 'APACHE_MAX_REQUEST_WORKERS'; then
+            echo "::error::警告里没点名是哪个变量（应在警告里出现 APACHE_MAX_REQUEST_WORKERS）"
+            echo "$MPM_LOGS" | tail -20 || true
+            exit 1
+          fi
+          echo "$MPM_LOGS" | grep '警告' || true
+          echo "3) 通过：脏值退回默认 5，且日志里有指名道姓的警告"
+
+          echo "== 4a) APACHE_KEEP_ALIVE=On 且不设两个可选变量：只有 KeepAlive On =="
+          start_mpm lsky-mpm-d -e WEB_PORT=8089 -e APACHE_KEEP_ALIVE=On
+          docker exec lsky-mpm-d cat "$MPM"
+          assert_line lsky-mpm-d 'KeepAlive On'
+          assert_no_line lsky-mpm-d '^KeepAliveTimeout'
+          assert_no_line lsky-mpm-d '^MaxKeepAliveRequests'
+          echo "4a) 通过：没写 KeepAliveTimeout / MaxKeepAliveRequests（即跟随 Apache 默认 5s / 100）"
+
+          echo "== 4b) APACHE_KEEP_ALIVE=On + timeout=2 + max=50：两行都出现且值正确 =="
+          start_mpm lsky-mpm-e -e WEB_PORT=8089 -e APACHE_KEEP_ALIVE=On \
+                    -e APACHE_KEEPALIVE_TIMEOUT=2 -e APACHE_MAX_KEEPALIVE_REQUESTS=50
+          docker exec lsky-mpm-e cat "$MPM" | tee /tmp/mpm-keepalive.txt
+          assert_line lsky-mpm-e 'KeepAlive On'
+          assert_line lsky-mpm-e 'KeepAliveTimeout 2'
+          assert_line lsky-mpm-e 'MaxKeepAliveRequests 50'
+          echo "4b) 通过：两行都出现且值正确"
+
+          echo "== 4c) 大小写不敏感：APACHE_KEEP_ALIVE=oN 也渲染成 KeepAlive On =="
+          start_mpm lsky-mpm-f -e WEB_PORT=8089 -e APACHE_KEEP_ALIVE=oN
+          assert_line lsky-mpm-f 'KeepAlive On'
+          echo "4c) 通过：oN 归一化成 On"
+
+          echo "== 渲染出的配置必须能被 Apache 接受（apache2ctl -t）+ 运行期取值 =="
+          CT=$(docker exec lsky-mpm-a apache2ctl -t 2>&1 || true)
+          echo "$CT"
+          if echo "$CT" | grep -qi 'syntax error'; then
+            echo "::error::渲染出的 mpm.conf 让 Apache 配置语法出错"
+            exit 1
+          fi
+          if ! echo "$CT" | grep -q 'Syntax OK'; then
+            echo "::warning::apache2ctl -t 没打印 Syntax OK（容器环境差异？以现有 smoke 的安装页 200 为准）"
+          fi
+          echo "-- Apache 运行期实际取到的值（DUMP_RUN_CFG，供人工核对）--"
+          docker exec lsky-mpm-a apache2ctl -D DUMP_RUN_CFG 2>&1 \
+            | grep -iE 'startservers|minspareservers|maxspareservers|maxrequestworkers|maxconnectionsperchild|keepalive' || true
+
+          docker rm -f $NAMES >/dev/null 2>&1 || true
+          docker volume rm -f "$VOL" >/dev/null 2>&1 || true
+
+          {
+            echo "## Apache MPM 自证"
+            echo ""
+            echo '```'
+            echo "== 默认（不设 APACHE_*）=="
+            cat /tmp/mpm-default.txt
+            echo "== APACHE_KEEP_ALIVE=On + timeout=2 / max=50 =="
+            cat /tmp/mpm-keepalive.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Apache MPM 自证通过：默认 6 行 / 单项覆盖 / 脏值兜底 / KeepAlive 条件渲染 / 大小写归一"
+
+      # ------------------------------------------------------------------
       # 代码同步自证（数据安全关键路径；按镜像版本标记条件触发）
       #   A) 空卷：必须播种；且绝不能把镜像里的 .env 带进空卷
       #      （实测踩过：带进去了 → Lsky 安装向导 500，全新建站直接挂）

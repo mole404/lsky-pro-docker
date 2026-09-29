@@ -8,6 +8,23 @@ services:
     container_name: lskypro
     environment:
       - WEB_PORT=8089
+      # ---- Apache MPM（并发/内存占用）：不写就用镜像内置的低配默认值 ----
+      # 逐项覆盖：写哪个改哪个，没写的保持默认。默认见 README「Apache MPM」一节：
+      #   StartServers 2 / MinSpareServers 1 / MaxSpareServers 3 /
+      #   MaxRequestWorkers 5 / MaxConnectionsPerChild 5 / KeepAlive Off
+      # 例：并发大一点、子进程处理 5000 个请求后回收（0 = 永不回收，合法但内存只涨不落）
+      # - APACHE_MAX_REQUEST_WORKERS=25
+      # - APACHE_MAX_CONNECTIONS_PER_CHILD=5000
+      # 例：开 KeepAlive。省内存建议把超时压到 2 秒；两个可选变量不设就跟随 Apache
+      #     发行版默认（5 秒 / 100）。别写 0 —— 那是「不限制」，不是「更省」。
+      # - APACHE_KEEP_ALIVE=On
+      # - APACHE_KEEPALIVE_TIMEOUT=2
+      # - APACHE_MAX_KEEPALIVE_REQUESTS=50
+      # 例：其余三个一般不用动
+      # - APACHE_START_SERVERS=2
+      # - APACHE_MIN_SPARE_SERVERS=1
+      # - APACHE_MAX_SPARE_SERVERS=3
+      # 写错值只会把那一项退回默认值 + 日志警告，不会让容器起不来。
     volumes:
       - $PWD/web:/var/www/html/
     ports:
