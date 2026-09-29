@@ -1,11 +1,101 @@
 #!/bin/bash
 set -eu
 
-WEB_PORT=${WEB_PORT:-8089}
-HTTPS_PORT=${HTTPS_PORT:-8088}
+# ---------------------------------------------------------------- 监听端口（WEB_PORT / HTTPS_PORT）
+# 这两行原来直接 envsubst 渲染 000-default.conf / ports.conf：既没有值校验，也没有 || 守卫。
+# compose 里写了空值或非数字，生成出来的就是 `Listen `（空）/ `<VirtualHost *:>` 这种废配置 →
+# Apache 起不来 → exec "$@" 非 0，配合 `restart: unless-stopped` 就变成无限重启。
+# 处理原则与下面的 MPM 段完全一致：只把「出问题的那一项」退回镜像默认值（与 Dockerfile 的 ENV 一致）
+# 并打一行警告，绝不让容器起不来；渲染本身失败也只警告（沿用镜像里已有的配置）。
+PORT_DEF_WEB=8089
+PORT_DEF_HTTPS=8088
 
-envsubst '${WEB_PORT} ${HTTPS_PORT}' < /etc/apache2/sites-enabled/000-default.conf.template > /etc/apache2/sites-enabled/000-default.conf
-envsubst '${WEB_PORT} ${HTTPS_PORT}' < /etc/apache2/ports.conf.template > /etc/apache2/ports.conf
+port_warn() { echo "[lsky] 警告：$*"; }
+
+# 端口项：必须是 1-65535 的十进制整数（去掉前导零后比大小），否则退回默认值（回显合法值）
+port_num() { # $1=变量名 $2=值 $3=默认值
+    case "$2" in
+        ''|*[!0-9]*)
+            port_warn "$1=\"$2\" 不是 1-65535 的十进制整数，已退回默认值 $3" >&2
+            printf '%s' "$3"
+            return 0
+            ;;
+    esac
+    # 位数先挡一道：超过 5 位必然越界，也避免 $((10#...)) 在超长数字上溢出算出一个「假的合法值」
+    if [ "${#2}" -gt 5 ]; then
+        port_warn "$1=$2 超出 1-65535 范围，已退回默认值 $3" >&2
+        printf '%s' "$3"
+        return 0
+    fi
+    local val=$((10#$2))
+    if [ "$val" -lt 1 ] || [ "$val" -gt 65535 ]; then
+        port_warn "$1=$2 超出 1-65535 范围，已退回默认值 $3" >&2
+        printf '%s' "$3"
+        return 0
+    fi
+    printf '%s' "$val"
+}
+
+# 注意用 `${VAR-DEF}`（不是 `:-`）：变量**未设**时才静默取默认值；显式设成空串是配置错误，
+# 交给 port_num 打警告并兜底（日志里能看出是"写了空值"而不是"没写"）。
+WEB_PORT=$(port_num WEB_PORT "${WEB_PORT-$PORT_DEF_WEB}" "$PORT_DEF_WEB")
+HTTPS_PORT=$(port_num HTTPS_PORT "${HTTPS_PORT-$PORT_DEF_HTTPS}" "$PORT_DEF_HTTPS")
+
+# 渲染 vhost / ports.conf。与 MPM 段的 mpm_render 同样先写临时文件再 mv：失败时上一条配置原样留着。
+# （直接 `> 目标` 在失败时会把目标截成空文件 —— 那本身就是一份废配置，等于把要防的事故换了个触发点。）
+# 注意 envsubst 只看得见**导出**的环境变量，校验后的值此刻只是 shell 变量，必须显式喂进去，
+# 否则"变量未设"时渲染出来的就是空的 `Listen`。
+render_conf() { # $1=模板 $2=目标
+    local tmp
+    # 目标被目录占住时 `mv` 会把文件搬进去、还返回 0（静默假成功）—— 先挡掉
+    if [ -d "$2" ]; then
+        return 1
+    fi
+    tmp=$(mktemp) || return 1
+    if ! WEB_PORT="$WEB_PORT" HTTPS_PORT="$HTTPS_PORT" \
+        envsubst '${WEB_PORT} ${HTTPS_PORT}' <"$1" >"$tmp" 2>/dev/null; then
+        rm -f "$tmp"
+        return 1
+    fi
+    mv "$tmp" "$2" || { rm -f "$tmp"; return 1; }
+    return 0
+}
+
+render_conf /etc/apache2/sites-enabled/000-default.conf.template /etc/apache2/sites-enabled/000-default.conf \
+    || port_warn "渲染 000-default.conf 失败，沿用镜像里已有的配置（Apache 可能起不来）"
+render_conf /etc/apache2/ports.conf.template /etc/apache2/ports.conf \
+    || port_warn "渲染 ports.conf 失败，沿用镜像里已有的配置（Apache 可能起不来）"
+
+# ---------------------------------------------------------------- 运行期自签 HTTPS 证书（F21）
+# 镜像里**不再发货**证书：原来 `COPY ./ssl /etc/ssl` 把一对 Debian snakeoil 证书（含私钥、
+# 在 GitHub 上人人可见）拷进镜像，模板的 HTTPS vhost 直接引用 —— 每个使用者共用同一份公开私钥。
+# 现在改成首次启动时用 openssl 自签一份，落到下面的固定路径（模板已指向这里），之后复用。
+# 与上面的端口 / MPM 段同样的原则：幂等（已存在就跳过）+ 失败只警告 + 绝不让入口脚本（set -eu）挂掉。
+SSL_DIR=/etc/apache2/ssl
+SSL_CRT=$SSL_DIR/lsky-selfsigned.crt
+SSL_KEY=$SSL_DIR/lsky-selfsigned.key
+
+ssl_warn() { echo "[lsky] 警告：$*" >&2; }
+
+# -s：文件存在且非空才算「已就绪」；空文件（上次生成中途死掉）会被当成不存在而重新生成。
+if [ -s "$SSL_CRT" ] && [ -s "$SSL_KEY" ]; then
+    echo "[lsky] HTTPS 自签证书已就绪（$SSL_CRT），跳过生成"
+elif ! command -v openssl > /dev/null 2>&1; then
+    # 正常构建出来的镜像一定带 openssl（Dockerfile 有构建期护栏）；走到这里说明镜像被人动过。
+    ssl_warn "找不到 openssl 且没有现成证书，无法自签 HTTPS 证书；HTTPS vhost（端口 ${HTTPS_PORT}）会因此起不来，其它功能不受影响"
+elif ! mkdir -p "$SSL_DIR" 2>/dev/null; then
+    # 真实失败路径：$SSL_DIR 被一个同名文件占住 → mkdir -p 失败。
+    ssl_warn "$SSL_DIR 无法创建（可能被同名文件占住），未生成自签证书；HTTPS vhost（端口 ${HTTPS_PORT}）会因此起不来，其它功能不受影响"
+elif openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj '/CN=lsky-pro' \
+        -keyout "$SSL_KEY" -out "$SSL_CRT" > /dev/null 2>&1; then
+    # 私钥权限收紧到 600（组/其他不可读）；chmod 失败不影响启动，只提示。
+    chmod 600 "$SSL_KEY" 2>/dev/null || ssl_warn "无法把 $SSL_KEY 权限设为 600（不影响启动）"
+    echo "[lsky] 已生成 HTTPS 自签证书：$SSL_CRT（RSA 2048 / 3650 天 / CN=lsky-pro）"
+else
+    # 生成中途失败：把可能留下的半个文件清掉，避免下次被 -s 误判为「已就绪」。
+    rm -f "$SSL_KEY" "$SSL_CRT" 2>/dev/null || true
+    ssl_warn "openssl 自签证书失败，未生成证书；HTTPS vhost（端口 ${HTTPS_PORT}）会因此起不来，其它功能不受影响"
+fi
 
 # ---------------------------------------------------------------- Apache MPM（低配单用户默认值 + APACHE_* 逐项覆盖）
 # 背景：Debian/php-apache 的出厂 MPM 是 prefork（StartServers 5 / MinSpareServers 5 /
@@ -187,6 +277,21 @@ fi
 IMAGE_MARKER=/var/www/lsky/.code-revision
 VOLUME_MARKER=/var/www/html/.code-revision
 
+# ---------------------------------------------------------------- 运行时缓存作废（两条分支共用）
+# 换镜像、或卷里缺 public/index.php 被重新播种之后，卷里这两类缓存都必须作废，否则：
+#   storage/framework/views/*.php             编译后的 blade：模板已换，不清的话浏览器拿到的还是旧 HTML；
+#   bootstrap/cache/packages.php|services.php 包发现清单：记录的是「旧镜像当时装着哪些包」的
+#     ServiceProvider 类名（含 debugbar / ignition 这类开发包）。镜像现在 composer install --no-dev，
+#     这些类已经不存在，Laravel 引导时加载这份清单会 Class not found → 整站 500。
+# 两者都是纯缓存：Laravel 会按当前 blade/vendor 按需重新生成，删掉没有副作用。
+# 刻意**不**动 bootstrap/cache/config.php —— 那是站点自己的配置缓存（CI 有断言必须保留）。
+# 播种分支原来漏了这一步：它在「卷里缺 public/index.php」时也会对**已有卷**触发，
+# 那条路径上旧 packages.php 的 Class not found 照样整站 500 —— 所以两条分支都必须调这个函数。
+invalidate_runtime_caches() {
+    rm -f /var/www/html/storage/framework/views/*.php
+    rm -f /var/www/html/bootstrap/cache/packages.php /var/www/html/bootstrap/cache/services.php
+}
+
 if [ ! -e '/var/www/html/public/index.php' ]; then
     # ---------------------------------------------------------------- 空卷：首次部署
     # 与上游逐字一致地全量播种。
@@ -199,6 +304,10 @@ if [ ! -e '/var/www/html/public/index.php' ]; then
     # 而 tar 会完整带上，行为也与下面的「同步分支」完全一致。
     # 只排除 .env：库里那份是构建期生成的空壳（APP_KEY 为空），带进空卷会让安装向导 500。
     ( cd /var/www/lsky && tar cf - --exclude=./.env --exclude=./.code-revision . ) | ( cd /var/www/html && tar xf - )
+    # 播种分支同样要作废运行时缓存：这条路径不只跑在空卷上 —— 「卷里缺 public/index.php」
+    # 也会走到这里，那种已有卷里可能正躺着一份引用了已删开发包的 packages.php。
+    invalidate_runtime_caches
+    echo "[lsky] 空卷首次部署：已作废卷里的编译视图缓存与包发现缓存"
     # 版本标记**最后**写：它同时是"播种完成"的信号（CI 就盯它），必须等其它文件都落盘之后再写
     cp -a "$IMAGE_MARKER" "$VOLUME_MARKER"
     echo "[lsky] 空卷首次部署：已把镜像应用播种到 /var/www/html"
@@ -215,8 +324,14 @@ elif [ ! -f "$VOLUME_MARKER" ] || [ "$(cat "$IMAGE_MARKER" 2>/dev/null)" != "$(c
     #   ./public/i        本地存储策略的软链/目录，属于部署产物
     #
     # 注意：只增改、不删除。新版镜像里删掉的旧文件不会从卷里消失（需要人工清理）。
+    #
+    # --exclude=./.code-revision 是必须的：版本标记既是「卷里的代码已同步到这一版」的标志，
+    # 就绝不能跟着 tar 流一起写进卷。tar 是流式的 —— 标记一被写进卷，归档还没解完（磁盘满 /
+    # OOM / 宿主重启）卷里就已经是「新标记 + 半套代码」；下次启动会判定同版本而永远跳过同步，
+    # 缺文件导致的 500 再也不会自愈。所以标记只在下面归档解完包之后由 cp 显式写一次。
     ( cd /var/www/lsky && tar cf - \
         --exclude=./.env \
+        --exclude=./.code-revision \
         --exclude=./storage \
         --exclude=./database \
         --exclude=./bootstrap/cache \
@@ -225,14 +340,17 @@ elif [ ! -f "$VOLUME_MARKER" ] || [ "$(cat "$IMAGE_MARKER" 2>/dev/null)" != "$(c
 
     # 模板可能刚被覆盖（例如 blade 里改了资源版本串），要清掉编译后的视图缓存，
     # 否则浏览器拿到的还是旧 HTML。Laravel 会按需重新编译，代价可忽略。
-    rm -f /var/www/html/storage/framework/views/*.php
-
     # 包发现缓存同样必须作废：卷里的 packages.php / services.php 记录的是"旧镜像当时装着
     # 哪些包"的 ServiceProvider 类名（含 debugbar / ignition 这类开发包）。镜像现在用
     # composer install --no-dev，这些类已经不存在 —— 不清掉的话 Laravel 引导时加载这份清单
     # 会 Class not found，整站 500。两个文件都是纯缓存：下次请求会按当前 vendor/ 重新生成，
     # 删掉没有副作用（权限已在上面的 chown 里归一化，www-data 可写）。
-    rm -f /var/www/html/bootstrap/cache/packages.php /var/www/html/bootstrap/cache/services.php
+    invalidate_runtime_caches
+    echo "[lsky] 代码已同步，已作废卷里的编译视图缓存与包发现缓存"
+
+    # 版本标记**必须等归档解包完成之后**才写 —— 它同时是「同步完成」的信号。
+    # 写早了（例如靠 tar 流带进去）会让卷在半套代码上自称已最新，之后就永远跳过同步。
+    cp -a "$IMAGE_MARKER" "$VOLUME_MARKER"
 
     echo "[lsky] 检测到镜像代码版本变化，已同步进卷：$(head -1 "$VOLUME_MARKER" 2>/dev/null || echo '标记缺失')"
 else
