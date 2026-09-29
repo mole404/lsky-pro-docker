@@ -206,7 +206,8 @@ window.context = window.context || (function () {
     let suppressClickUntil = 0;
     let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
     let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
-    let armedGestureId = 0;         // 二级菜单是在哪一次手势里被打开的     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
+    let armedGestureId = 0;         // 二级菜单是在哪一次手势里被打开的
+    let submenuArmingTimer = null;  // 「刚弹出、先别高亮」的收尾定时器     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
     let menuStylesInjected = false;
     let menuGuardInstalled = false;
 
@@ -240,6 +241,11 @@ window.context = window.context || (function () {
             + ' min-width: 0 !important; margin: 0 !important; padding: 0 !important;'
             + ' border: 0 !important; border-radius: 0 !important; box-shadow: none !important;'
             + ' background: transparent !important; }'
+            // 刚弹出的一瞬间：项不接受指针事件（浏览器就不会把它当成 hover 目标 → 不会高亮），
+            // 同时把 hover 底色压平做双保险；不改变任何尺寸/位置，面板本身照旧接收点击（由守卫吞掉）。
+            + '.dropdown-context.submenu-inplace.submenu-arming > li.submenu-active > .dropdown-menu > li > a,'
+            + ' .dropdown-context.submenu-inplace.submenu-arming > li.submenu-back > a {'
+            + ' pointer-events: none !important; background-color: transparent !important; }'
             + '.dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu:before,'
             + ' .dropdown-context.submenu-inplace > li.submenu-active > .dropdown-menu:after { display: none !important; }'
         );
@@ -339,6 +345,7 @@ window.context = window.context || (function () {
     // 只改定位，不碰显示/隐藏逻辑 —— 长按与点击防护依赖 CSS :hover 的真实可见性，动不得。
     const EDGE_MARGIN = 8;
     const SUBMENU_GUARD = 350;      // 二级菜单「就地替换」后这段毫秒内，触摸点击一律吞掉（防按住误选）
+    const SUBMENU_ARM_MS = 420;     // 二级菜单刚弹出的这段毫秒内，先别接受指针指向（防那一下高亮跳色）
 
     function viewportSize() {
         const de = document.documentElement;
@@ -476,6 +483,21 @@ window.context = window.context || (function () {
         return $li.closest('.dropdown-context:not(.dropdown-context-sub)');
     }
 
+    // 刚弹出的一瞬间先别让任何一项成为指针目标（否则浏览器会把手指底下那项判成 hover → 跳高亮）。
+    // 窗口从「本次按下」起算，并在抬手时续到抬手之后 —— 按住不动超过窗口也照样不跳色。
+    function armSubmenuHoverGuard(ms) {
+        $('.dropdown-context').addClass('submenu-arming');
+        clearTimeout(submenuArmingTimer);
+        submenuArmingTimer = setTimeout(function () {
+            $('.dropdown-context').removeClass('submenu-arming');
+        }, ms);
+    }
+
+    function clearSubmenuHoverGuard() {
+        clearTimeout(submenuArmingTimer);
+        $('.dropdown-context').removeClass('submenu-arming');
+    }
+
     // 打开某个父项的二级菜单：手机惯例是「按下就开」，这样抬手那发合成 click 也有东西可吞。
     function openSubmenuFor($li) {
         $li.siblings('.dropdown-submenu').removeClass('touch-open');
@@ -500,6 +522,12 @@ window.context = window.context || (function () {
                 '<i class="fas fa-chevron-left mr-1"></i>返回</a></li>'));
         }
 
+        // 刚弹出的一瞬间，手指还压在同一位置上：浏览器会把「手指底下那个元素」当成 hover 目标，
+        // 于是二级菜单里会有一项立刻跳成高亮 —— 功能上不误触，但观感很脏。
+        // 弹出后 SUBMENU_ARM_MS 内给面板挂 .submenu-arming：里面的项不接受指针事件、hover 底色也压平，
+        // 手指不动就不会有高亮；过了这段时间（或者手指动/再点）恢复如常。
+        armSubmenuHoverGuard(SUBMENU_ARM_MS);
+
         submenuInplaceAt = Date.now();
         clampMenu($menu);                               // 面板高度变了，重新夹一次视口
     }
@@ -510,6 +538,7 @@ window.context = window.context || (function () {
             return;
         }
 
+        clearSubmenuHoverGuard();
         $menu.removeClass('submenu-inplace').children('.submenu-back').remove();
         $menu.children('.submenu-active').removeClass('submenu-active touch-open')
             .find('.dropdown-context-sub:first').removeClass('drop-left')
@@ -654,6 +683,18 @@ window.context = window.context || (function () {
         // 手指一按到「带二级菜单的父项」上：立刻就地切换 + 武装防误触窗口。
         // 这一步必须在 touchstart 做 —— 真机的粘滞 :hover 会让二级菜单先出现，
         // 等抬手才处理就晚了（那时 click 已经落在菜单项上了）。
+        // 抬手：面板若还在「刚弹出」窗口内，把窗口续到抬手之后 —— 按住再久，那一刻也不跳高亮。
+        ['touchend', 'touchcancel'].forEach(function (evt) {
+            document.addEventListener(evt, function () {
+                // 判据是「这一发手指就是打开二级菜单的那一发」——不能看 .submenu-arming 还在不在：
+                // 按住超过 SUBMENU_ARM_MS 时，那个类早就被定时器摘掉了（踩过）。
+                if (armedGestureId && armedGestureId === touchGestureId
+                    && $('.dropdown-context.submenu-inplace').length) {
+                    armSubmenuHoverGuard(260);      // 抬手后再压 260ms，抬手那一刻也不会跳色
+                }
+            }, true);
+        });
+
         document.addEventListener('touchstart', function (e) {
             touchGestureId++;                       // 新手势：上一发的防误触自动失效
 
@@ -669,6 +710,8 @@ window.context = window.context || (function () {
                 }
                 submenuInplaceAt = Date.now();
                 armedGestureId = touchGestureId;    // 武装到本次手势：这根手指抬起来的那发 click 必吞
+            } else if ($('.dropdown-context.submenu-arming').length) {
+                clearSubmenuHoverGuard();           // 手指挪去点别的东西了：立刻恢复正常 hover/点击
             }
         }, true);
 
