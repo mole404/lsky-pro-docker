@@ -104,6 +104,17 @@
         </div>
     </div>
 
+    {{-- 图片「详细信息」与「移动到相册」改用居中卡片弹窗（复用 components/modal.blade.php，
+         手机上它就是「底部抽屉式」——弹窗容器在 <640px 时贴底、不依赖 hover）。
+         右侧抽屉 #drawer 保留它原来的本职：顶部工具栏的「相册列表」入口照旧走抽屉。 --}}
+    <x-modal id="image-detail-modal">
+        <div id="image-detail-content"></div>
+    </x-modal>
+
+    <x-modal id="image-movements-modal">
+        <div id="image-movements-content"></div>
+    </x-modal>
+
     <script type="text/html" id="images-item-tpl">
         <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
             <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
@@ -159,57 +170,91 @@
         </div>
     </script>
 
+    {{-- 图片「详细信息」：居中卡片弹窗（不再渲染进右侧抽屉）。
+         字段顺序按老师要求：**上传时间第一、图片名称紧跟其后**，其余字段一个没删、只换了位置
+         （相册名称 / 使用策略 / 图片原始名称 / 图片大小 / 图片类型 / 尺寸 / MD5 / SHA-128 / 权限 / 上传 IP）。
+         排版：标签在左、值在右（窄屏 flex-col 自动上下堆叠）；标签 13px、值 14px，行高 leading-6 宽松一些。
+         顶部一张小缩略图。这里不放任何快捷操作（复制链接/下载/删除都不进这个弹窗）。 --}}
     <script type="text/html" id="image-detail-tpl">
-        <div class="my-4 px-4 space-y-3">
-            <div>
-                <span class="text-sm font-semibold">相册名称</span>
-                <p class="my-2 break-words text-ink">__album_name__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">使用策略</div>
-                <p class="my-2 break-words text-ink-2">__strategy_name__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">图片名称</div>
-                <p class="my-2 break-words text-ink-2">__filename__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">图片原始名称</div>
-                <p class="my-2 break-words text-ink-2">__origin_name__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">图片大小</div>
-                <p class="my-2 break-words text-ink-2">__size__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">图片类型</div>
-                <p class="my-2 break-words text-ink-2">__mimetype__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">尺寸</div>
-                <p class="my-2 break-words text-ink-2">__width__ * __height__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">MD5</div>
-                <p class="my-2 break-words text-ink-2">__md5__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">SHA-128</div>
-                <p class="my-2 break-words text-ink-2">__sha1__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">权限</div>
-                <p class="my-2 break-words text-ink-2">__permission__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">上传 IP</div>
-                <p class="my-2 break-words text-ink-2">__uploaded_ip__</p>
-            </div>
-            <div>
-                <div class="text-sm font-semibold">上传时间</div>
-                <p class="my-2 break-words text-ink-2">__created_at__</p>
+        <div class="mx-auto w-full max-w-2xl">
+            <img src="__thumb_url__" alt="__filename__" class="mb-4 h-20 w-20 rounded-lg border border-line bg-surface-2 object-cover">
+            <dl class="space-y-3">
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">上传时间</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__created_at__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">图片名称</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__filename__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">相册名称</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__album_name__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">使用策略</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__strategy_name__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">图片原始名称</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__origin_name__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">图片大小</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__size__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">图片类型</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__mimetype__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">尺寸</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__width__ * __height__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">MD5</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__md5__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">SHA-128</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__sha1__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">权限</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__permission__</dd>
+                </div>
+                <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">上传 IP</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__uploaded_ip__</dd>
+                </div>
+            </dl>
+        </div>
+    </script>
+
+    {{-- 「移动到相册」弹窗：相册列表（单选）+ 底部「移动」「取消」。
+         列表数据与顶部工具栏的「相册列表」同一个接口；点一行只选中，底部「移动」才提交。
+         每行 min-h-[44px]（手机点击区 ≥44px），当前所在相册带「当前」标记（__current_badge__）。 --}}
+    <script type="text/html" id="movements-container-tpl">
+        <div class="mx-auto flex w-full max-w-xl flex-col">
+            <p class="text-[15px] font-semibold text-ink">移动到相册</p>
+            <p class="mt-0.5 mb-3 text-[13px] text-ink-3">已选择 __count__ 张图片</p>
+            <div id="movements-albums" class="flex max-h-[50vh] w-full flex-col space-y-1 overflow-y-auto pr-1"></div>
+            <div class="mt-4 flex justify-end gap-2 border-t border-line pt-3">
+                <button type="button" id="movements-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
+                <button type="button" id="movements-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>移动</button>
             </div>
         </div>
+    </script>
+
+    {{-- 相册列表行：整行是一个点击区（min-h-[44px]），不用 span（避免被无限加载的
+         "点 span 加载更多"委托命中）。选中态由 JS 切换 border-brand/bg-brand-soft/text-brand。 --}}
+    <script type="text/html" id="movements-album-item-tpl">
+        <a href="javascript:void(0)" data-id="__id__" data-selected="false" class="movements-album flex min-h-[44px] w-full items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-ink hover:bg-surface-3">
+            <i class="selected-mark fas fa-check-circle w-4 shrink-0 text-brand opacity-0" aria-hidden="true"></i>
+            <div class="min-w-0 flex-1 truncate text-[14px]">__name__</div>
+            __current_badge__
+            <div class="shrink-0 text-[13px] text-ink-3">__image_num__</div>
+        </a>
     </script>
 
     @push('scripts')
@@ -241,6 +286,11 @@
             const $photos = $(IMAGES_GRID);
             const $drawer = $("#drawer");
             const $drawerMask = $('#drawer-mask');
+            // 居中卡片弹窗（复用 components/modal.blade.php 的 Alpine store，用法同 admin 页）
+            const modal = Alpine.store('modal');
+            // 「移动到相册」弹窗里的相册列表容器 / 底部按钮
+            const MOVEMENTS_MODAL = 'image-movements-modal';
+            const DETAIL_MODAL = 'image-detail-modal';
             const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
             const drawer = {
                 open(title, content, callback) {
@@ -572,25 +622,94 @@
 
             const methods = {
                 movements() {
-                    getAlbums({title: '选择相册'}, e => {
-                        let selected = ds.getSelection().map(item => $(item).data('id'));
-                        $headerTitle.text(`移动 ${selected.length} 张图片至...`)
-                        $(e).off('click', '>a').on('click', '>a', function () {
-                            axios.put('{{ route('user.images.movement') }}', {
-                                selected: selected,
-                                id: $(this).data('id'),
-                                album_id: selectedAlbum.id || 0,
-                            }).then(response => {
-                                if (response.data.status) {
-                                    drawer.close();
-                                    resetImages();
-                                    toastr.success(response.data.message);
-                                } else {
-                                    toastr.warning(response.data.message);
-                                }
-                            })
+                    // 「移动到相册」改用居中卡片弹窗（不再渲染进右侧抽屉 ——
+                    // 抽屉只留给顶部工具栏的「相册列表」入口）。
+                    // 相册列表仍走同一个 user.albums 接口 + 同一个 utils.infiniteScroll；
+                    // 弹窗内是单选列表（当前所在相册带「当前」标记），底部「移动」「取消」。
+                    let selected = ds.getSelection().map(item => $(item).data('id'));
+                    if (! selected.length) {
+                        return false;
+                    }
+
+                    $('#image-movements-content').html(
+                        $('#movements-container-tpl').html().replace(/__count__/g, selected.length)
+                    );
+
+                    const $movementsAlbums = $('#movements-albums');
+                    const $movementsConfirm = $('#movements-confirm');
+                    let targetId = null; // 本次要移动到的相册（单选）
+
+                    // 单选：点一行只选中并高亮，不发请求；底部「移动」才提交
+                    const selectRow = ($row) => {
+                        targetId = $row.length ? $row.data('id') : null;
+                        $movementsAlbums.find('.movements-album').each(function () {
+                            let on = targetId !== null && $(this).data('id') === targetId;
+                            $(this)
+                                .toggleClass('border-brand bg-brand-soft text-brand', on)
+                                .toggleClass('border-line bg-surface-2 text-ink', ! on)
+                                .attr('data-selected', on ? 'true' : 'false')
+                                .find('.selected-mark').toggleClass('opacity-0', ! on);
                         });
+                        $movementsConfirm.prop('disabled', targetId === null);
+                    };
+
+                    utils.infiniteScroll('#movements-albums', {
+                        url: '{{ route('user.albums') }}',
+                        success: function (response) {
+                            if (! response.status) {
+                                return toastr.error(response.message);
+                            }
+
+                            let albums = response.data.albums.data;
+                            if (albums.length <= 0 || response.data.albums.current_page === response.data.albums.last_page) {
+                                this.finished = true;
+                            }
+
+                            let html = '';
+                            for (const i in albums) {
+                                html += $('#movements-album-item-tpl').html()
+                                    .replace(/__id__/g, albums[i].id)
+                                    .replace(/__name__/g, albums[i].name)
+                                    .replace(/__image_num__/g, albums[i].image_num)
+                                    // 当前所在相册标出来
+                                    .replace(/__current_badge__/g, albums[i].id === selectedAlbum.id
+                                        ? '<div class="ls-badge shrink-0 bg-brand-soft text-brand">当前</div>'
+                                        : '')
+                            }
+
+                            $movementsAlbums.append(html);
+                        }
                     });
+
+                    $movementsAlbums.off('click', '.movements-album').on('click', '.movements-album', function () {
+                        selectRow($(this));
+                    });
+
+                    $('#movements-cancel').off('click').on('click', _ => modal.close(MOVEMENTS_MODAL));
+
+                    // 移动请求沿用原实现（同一个 route、同一份 payload），
+                    // 唯一区别：原来「点哪行就移动哪行」，现在是「选中后点移动」
+                    $movementsConfirm.off('click').on('click', function () {
+                        if (targetId === null) {
+                            return false;
+                        }
+
+                        axios.put('{{ route('user.images.movement') }}', {
+                            selected: selected,
+                            id: targetId,
+                            album_id: selectedAlbum.id || 0,
+                        }).then(response => {
+                            if (response.data.status) {
+                                modal.close(MOVEMENTS_MODAL);
+                                resetImages();
+                                toastr.success(response.data.message);
+                            } else {
+                                toastr.warning(response.data.message);
+                            }
+                        })
+                    });
+
+                    modal.open(MOVEMENTS_MODAL);
                 },
                 remove() {
                     let selected = ds.getSelection().map(item => $(item).data('id'));
@@ -721,6 +840,7 @@
                         if (response.data.status) {
                             let image = response.data.data.image;
                             let content = $('#image-detail-tpl').html()
+                                .replace(/__thumb_url__/g, image.thumb_url)
                                 .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                 .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                 .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
@@ -734,7 +854,9 @@
                                 .replace(/__permission__/g, image.permission === 1 ? '公开' : '私有')
                                 .replace(/__uploaded_ip__/g, image.uploaded_ip)
                                 .replace(/__created_at__/g, image.created_at)
-                            drawer.open(item.filename, content);
+                            // 「详细信息」改成居中卡片弹窗（原来画进右侧抽屉）
+                            $('#image-detail-content').html(content);
+                            modal.open(DETAIL_MODAL);
                         } else {
                             toastr.error(response.data.message);
                         }
