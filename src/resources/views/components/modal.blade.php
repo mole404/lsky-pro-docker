@@ -1,12 +1,17 @@
 @props(['id' => 'modal'])
 
-{{-- 高度一律用动态视口单位 dvh：手机地址栏可见时 100vh 比"看得见的区域"高，
-     弹窗会伸出屏幕外（下滑就能看到底下一块空白）。100dvh 跟着地址栏收起/展开实时变，
-     两种情形都刚好铺满。--}}
-<div {{ $attributes->merge(['id' => $id, 'class' => "fixed z-10 inset-0 h-[100dvh] overflow-y-auto"]) }} role="dialog" aria-modal="true" x-data x-cloak x-show="$store.modal.isOpen('{{ $id }}')">
-    {{-- min-h-screen(100vh) 保留在前面当兜底：浏览器不认识 dvh 时整条声明作废，退回 100vh（旧行为）。
-         桌面上 100dvh === 100vh，所以这一行对桌面零影响。 --}}
-    <div class="flex min-h-screen min-h-[100dvh] text-center md:block md:px-2 lg:px-4" style="font-size: 0">
+{{-- 高度一律用动态视口单位 dvh：手机地址栏可见时 100vh 比"看得见的区域"高，越界那一截就是底部空带。
+     100dvh 跟着地址栏收起/展开实时变，两种情形都刚好铺满。--}}
+{{-- overscroll-contain（= overscroll-behavior:contain）加在弹窗自己的滚动容器上：弹窗里滚到尽头后
+     不再把滚动"接力"给背后的页面。安卓上滚动一旦传给页面，地址栏会跟着收起、可视视口变高，
+     弹窗底部就空出一块——这条"接力"才是那块空带的入口。
+     触发链：弹窗内滚到底 → 滚动接力到页面 → 地址栏收起/视口变高 → 弹窗底部露出空带（已实测复现）。--}}
+<div {{ $attributes->merge(['id' => $id, 'class' => "fixed z-10 inset-0 h-[100dvh] overflow-y-auto overscroll-contain"]) }} role="dialog" aria-modal="true" x-data x-cloak x-show="$store.modal.isOpen('{{ $id }}')">
+    {{-- 内层 min-height 用「vh 声明在前、dvh 声明在后」的内联写法：同一对大括号里后者胜，
+         与 Tailwind 的生成顺序无关（两个工具类同名属性谁赢取决于样式表顺序，不稳）。
+         支持 dvh 的浏览器用 dvh（= 真实可见视口）；不认识的旧浏览器整条 dvh 声明作废，
+         自动退回紧邻的 100vh（= 旧行为）。桌面上 100dvh === 100vh，函数等价。 --}}
+    <div class="flex text-center md:block md:px-2 lg:px-4" style="font-size: 0; min-height: 100vh; min-height: 100dvh">
         <div x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="transform opacity-0"
              x-transition:enter-end="transform opacity-100"
@@ -19,7 +24,8 @@
              aria-hidden="true"
         >
         </div>
-        <span class="hidden md:inline-block md:align-middle md:h-screen" aria-hidden="true">&#8203;</span>
+        {{-- 桌面端垂直居中的撑高符同样走「vh 在前、dvh 在后」，链路上不再留 md:h-screen(100vh)。 --}}
+        <span class="hidden md:inline-block md:align-middle" style="height: 100vh; height: 100dvh" aria-hidden="true">&#8203;</span>
 
         <div x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="transform opacity-0 translate-y-4 md:translate-y-0 md:scale-95"

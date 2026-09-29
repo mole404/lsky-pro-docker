@@ -208,6 +208,9 @@ window.context = window.context || (function () {
     let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
     let armedGestureId = 0;         // 二级菜单是在哪一次手势里被打开的
     let submenuArmingTimer = null;  // 「刚弹出、先别高亮」的收尾定时器     // 因"点了菜单外"而关菜单后，要吞掉的那一发 click
+    let armedMenuGestureId = 0;     // 主菜单是在哪一次手势里被打开的
+    let menuArmingTimer = null;     // 主菜单「刚弹出、先别高亮」的收尾定时器
+    let fingerOnScreen = false;     // 屏幕上还有没有手指按着（主菜单 arming 窗口据此跟手势续期，而不是死定时器）
     let menuStylesInjected = false;
     let menuGuardInstalled = false;
 
@@ -241,6 +244,15 @@ window.context = window.context || (function () {
             + ' min-width: 0 !important; margin: 0 !important; padding: 0 !important;'
             + ' border: 0 !important; border-radius: 0 !important; box-shadow: none !important;'
             + ' background: transparent !important; }'
+            // 主菜单版（与下面二级菜单那份同一套 arming 机制，见 armMenuHoverGuard）：
+            // 长按弹出的主菜单同样会顶在手指底下，真机触摸的粘滞 hover 会把手指底下那一项当成 hover 目标
+            // → 弹出瞬间那项就跳高亮（老师截图里的「复制图片」）。这里连 li 一起关指针事件：
+            // 只关 a 的话，主题里的 `.dropdown-submenu:hover > a` 仍会因为 li 被 hover 而给「复制链接」上色。
+            // 另外 hover 那套是「底色 + 文字变白」两件一起上（见 context-js.less 的 li>a:hover），
+            // 所以文字色也一并还原 —— 万一 :hover/:focus 还是粘住了，那一项也保持原样，不会变成白底白字。
+            + '.dropdown-context.menu-arming > li,'
+            + ' .dropdown-context.menu-arming > li > a {'
+            + ' pointer-events: none !important; background-color: transparent !important; color: inherit !important; }'
             // 刚弹出的一瞬间：项不接受指针事件（浏览器就不会把它当成 hover 目标 → 不会高亮），
             // 同时把 hover 底色压平做双保险；不改变任何尺寸/位置，面板本身照旧接收点击（由守卫吞掉）。
             + '.dropdown-context.submenu-inplace.submenu-arming > li.submenu-active > .dropdown-menu > li > a,'
@@ -346,6 +358,9 @@ window.context = window.context || (function () {
     const EDGE_MARGIN = 8;
     const SUBMENU_GUARD = 350;      // 二级菜单「就地替换」后这段毫秒内，触摸点击一律吞掉（防按住误选）
     const SUBMENU_ARM_MS = 420;     // 二级菜单刚弹出的这段毫秒内，先别接受指针指向（防那一下高亮跳色）
+    const MENU_ARM_MS = 420;        // 主菜单（长按弹出）同理：弹出后这段时间内的项不接受指针指向
+    const MENU_ARM_TAIL_MS = 260;   // 抬手之后再压这么多毫秒 —— 老师原话「手抬起来的那一瞬间留冗余」，
+                                    // 与二级菜单那份抬手冗余同一个数（见 armMenuHoverGuard / touchend）
 
     function viewportSize() {
         const de = document.documentElement;
@@ -496,6 +511,50 @@ window.context = window.context || (function () {
     function clearSubmenuHoverGuard() {
         clearTimeout(submenuArmingTimer);
         $('.dropdown-context').removeClass('submenu-arming');
+    }
+
+    // 主菜单版（同一套机制，老师要求「复用到长按弹出的主菜单」）：
+    // 主菜单弹在手指底下时，那一项会被浏览器判成 hover 目标 → 弹出瞬间跳高亮，功能和以前一样、就是看着脏。
+    // 做法与二级菜单那份一致：挂 .menu-arming（里面的项不接受指针事件 + hover 底色压平），
+    // 抬手后由 touchend 再续 MENU_ARM_TAIL_MS —— 窗口跟着手势走，不是弹出时定死的一个定时器。
+    // 只在「这一发菜单确实是紧随一次触摸打开」时才挂（判据见 openMenu）：桌面右键路径因此一行都不动。
+    function armMenuHoverGuard(ms) {
+        $('.dropdown-context:not(.dropdown-context-sub)').addClass('menu-arming');
+        clearTimeout(menuArmingTimer);
+        menuArmingTimer = setTimeout(function () {
+            // 手指还按着（而且就是按出这个菜单的那次手势）→ 续期：按住多久都不跳色；
+            // 抬手那条路径会再压 MENU_ARM_TAIL_MS 收尾。
+            if (fingerOnScreen && armedMenuGestureId && armedMenuGestureId === touchGestureId) {
+                armMenuHoverGuard(MENU_ARM_MS);
+                return;
+            }
+            $('.dropdown-context').removeClass('menu-arming');
+        }, ms);
+    }
+
+    function clearMenuHoverGuard() {
+        clearTimeout(menuArmingTimer);
+        $('.dropdown-context').removeClass('menu-arming');
+    }
+
+    // arming 生效时面板里的项不接受指针事件（这正是"不跳高亮"的关键），于是手指按在菜单项上时
+    // e.target 拿到的是面板本身 —— 「按一下就展开二级菜单」这条触摸路径会被吃掉。
+    // 这里按触摸坐标把手指底下那一行找回来，只给这一个分支用，保证窗口内的第一次点按与平时一致。
+    function rowUnderTouch(e) {
+        if (! e || ! e.touches || ! e.touches.length) {
+            return null;
+        }
+
+        const t = e.touches[0], x = t.clientX, y = t.clientY;
+        const rows = document.querySelectorAll('.dropdown-context:not(.dropdown-context-sub) > li');
+        for (let i = 0; i < rows.length; i++) {
+            const r = rows[i].getBoundingClientRect();
+            if (r.width && r.height && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+                return rows[i];
+            }
+        }
+
+        return null;
     }
 
     // 打开某个父项的二级菜单：手机惯例是「按下就开」，这样抬手那发合成 click 也有东西可吞。
@@ -685,12 +744,22 @@ window.context = window.context || (function () {
         // 等抬手才处理就晚了（那时 click 已经落在菜单项上了）。
         // 抬手：面板若还在「刚弹出」窗口内，把窗口续到抬手之后 —— 按住再久，那一刻也不跳高亮。
         ['touchend', 'touchcancel'].forEach(function (evt) {
-            document.addEventListener(evt, function () {
+            document.addEventListener(evt, function (e) {
+                // 屏幕上还有手指按着吗（多指时抬手一根不算）——主菜单 arming 窗口据此决定要不要续期
+                fingerOnScreen = !! (e && e.touches && e.touches.length);
+
                 // 判据是「这一发手指就是打开二级菜单的那一发」——不能看 .submenu-arming 还在不在：
                 // 按住超过 SUBMENU_ARM_MS 时，那个类早就被定时器摘掉了（踩过）。
                 if (armedGestureId && armedGestureId === touchGestureId
                     && $('.dropdown-context.submenu-inplace').length) {
                     armSubmenuHoverGuard(260);      // 抬手后再压 260ms，抬手那一刻也不会跳色
+                }
+
+                // 主菜单同理（老师原话：「只要给我手抬起来的那一瞬间留冗余就够」）——
+                // 判据同样是「这一发手指就是打开主菜单的那一发」，按住再久也不会在抬手那一刻跳色。
+                if (armedMenuGestureId && armedMenuGestureId === touchGestureId
+                    && $('.dropdown-context:not(.dropdown-context-sub)').length) {
+                    armMenuHoverGuard(MENU_ARM_TAIL_MS);
                 }
             }, true);
         });
@@ -700,7 +769,17 @@ window.context = window.context || (function () {
 
             // 只看「手指底下这个 a 的直接父级」—— 二级菜单的项嵌在父 li 里面，
             // 用 closest('li.dropdown-submenu') 会把二级菜单里的项也误判成父行。
-            const $a = $(e.target).closest('a');
+            let $a = $(e.target).closest('a');
+            // 主菜单 arming 窗口里，项不接受指针事件 → 手指按在「复制链接」上时 e.target 只是面板，
+            // 这一发就按不到那个 a。按坐标把行找回来，只补「按一下就展开二级菜单」这一条路
+            // （叶子项靠抬手补发的那发 click，本来就不受影响；就地替换态不兜底，那时的行高/内容都变了）。
+            if (! $a.length && $('.dropdown-context.menu-arming').length) {
+                const row = rowUnderTouch(e);
+                if (row && row.classList.contains('dropdown-submenu')
+                    && ! row.classList.contains('submenu-active')) {
+                    $a = $(row).children('a');
+                }
+            }
             const $row = $a.parent();
             if ($row.hasClass('dropdown-submenu') && $row.closest('.dropdown-context').length) {
                 if ($row.hasClass('submenu-active')) {
@@ -710,13 +789,17 @@ window.context = window.context || (function () {
                 }
                 submenuInplaceAt = Date.now();
                 armedGestureId = touchGestureId;    // 武装到本次手势：这根手指抬起来的那发 click 必吞
-            } else if ($('.dropdown-context.submenu-arming').length) {
-                clearSubmenuHoverGuard();           // 手指挪去点别的东西了：立刻恢复正常 hover/点击
+            } else {
+                // 手指挪去点别的东西了（包括点菜单项、滑菜单）：立刻恢复正常 hover/点击。
+                // 两套 arming 都清 —— 它们各自只对「按出它来的那一次手势」负责，新手势一律失效。
+                clearSubmenuHoverGuard();
+                clearMenuHoverGuard();
             }
         }, true);
 
         document.addEventListener('touchstart', function (e) {
             lastTouchAt = Date.now();
+            fingerOnScreen = true;                  // 手指按下：主菜单 arming 窗口可以跟手势续期
 
             if (! menuOnScreen() || isInsideMenu(e.target)) {
                 return;
@@ -936,6 +1019,15 @@ window.context = window.context || (function () {
             menuVisible = true;
             menuOpenedAt = Date.now();
             menuClosingUntil = 0;
+
+            // 刚弹出的主菜单会顶在手指底下：那一项马上会被当成 hover 目标 → 弹出瞬间就跳高亮。
+            // 复用二级菜单那套 arming：挂 .menu-arming（项不接受指针事件 + hover 底色压平），抬手后再续 260ms。
+            // **只在「这一发菜单确实紧随一次触摸」时才挂**：鼠标右键路径（lastTouchAt 是 0 或很久以前）
+            // 与上游完全一致 —— 桌面本来没有粘滞 hover，不该为此改动付出任何代价。
+            if ((Date.now() - lastTouchAt) < MENU_OPEN_GRACE) {
+                armedMenuGestureId = touchGestureId;
+                armMenuHoverGuard(MENU_ARM_MS);
+            }
 
             logMenuEvent('open    trigger=' + (evt ? 'contextmenu' : 'longpress')
                 + ' item=' + describeNode(item)

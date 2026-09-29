@@ -469,6 +469,12 @@
                     $albums.off('click', '.delete').on('click', '.delete', function (e) {
                         e.stopPropagation();
                         Swal.fire({
+                            // 与新弹窗（x-modal）一套：不动背景页面。
+                            // heightAuto 关掉 html/body 上的 swal2-height-auto；scrollbarPadding 关掉
+                            // sweetalert2 往 body 写 padding-right 的那一步（它按「滚动条宽度」补内边距，
+                            // 手机上明明没有占位滚动条，补 8px 却真的会把内容挤窄 → 工具栏换行、整页下移）。
+                            heightAuto: false,
+                            scrollbarPadding: false,
                             title: '确认删除该相册?',
                             text: "删除后相册中的图片将会被移出。",
                             icon: 'warning',
@@ -746,6 +752,10 @@
                 },
                 permission() {
                     Swal.fire({
+                        // 与新弹窗（x-modal）一套：不动背景页面（heightAuto 去 swal2-height-auto，
+                        // scrollbarPadding 去 body 的 padding-right 注入 —— 否则整页会有细微位移）
+                        heightAuto: false,
+                        scrollbarPadding: false,
                         title: '选择一个权限',
                         text: '选择公开后所有用户都能看到这张图片',
                         input: 'select',
@@ -785,6 +795,10 @@
                 rename(e) {
                     let item = $(e).data('json');
                     Swal.fire({
+                        // 与新弹窗（x-modal）一套：不动背景页面（heightAuto 去 swal2-height-auto，
+                        // scrollbarPadding 去 body 的 padding-right 注入 —— 否则整页会有细微位移）
+                        heightAuto: false,
+                        scrollbarPadding: false,
                         title: '请输入图片名称',
                         input: 'text',
                         inputValue: item.filename,
@@ -821,6 +835,10 @@
                 },
                 delete() {
                     Swal.fire({
+                        // 与新弹窗（x-modal）一套：不动背景页面（heightAuto 去 swal2-height-auto，
+                        // scrollbarPadding 去 body 的 padding-right 注入 —— 否则整页会有细微位移）
+                        heightAuto: false,
+                        scrollbarPadding: false,
                         title: '确认要删除选中的图片？',
                         text: "删除后不可恢复，记录和文件同时删除",
                         icon: 'warning',
