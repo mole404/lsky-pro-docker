@@ -8,9 +8,11 @@
  *   3. 点「移动」才发请求，且 payload 与原来完全一致（selected / id / album_id）
  *   4. 「取消」只关弹窗
  *   5. methods.detail() → 内容渲染进 #image-detail-content，字段顺序 上传时间 → 图片名称
- *   6. getAlbums()（顶部工具栏「相册」）→ 打开 #album-switch-modal：外壳/列表渲染、本地搜索、
- *      点行立即切换并关弹窗、空状态、创建（POST /user/albums + 报错展示）、重命名（PUT）、
- *      删除（原地重拉列表，不关弹窗）、「完成」只关弹窗
+ *   6. getAlbums()（顶部工具栏「相册」）→ 打开 #album-switch-modal：外壳/列表渲染（底部已无
+ *      「完成」按钮）、本地搜索、点切换区立即切换并关弹窗、空状态、创建（POST /user/albums +
+ *      报错展示）、重命名（PUT）、删除（原地重拉列表，不关弹窗）；
+ *      行内分区：切换区是 <a class="albums-item">、编辑/删除是 <a> 外面的两个常显按钮
+ *      （点它们不改相册、不关弹窗 —— 这正是原来「点不中就跳进相册」的修法）
  *   7. 右侧抽屉已经从页面里连根删除（测试 DOM 里也没有 #drawer / #drawer-content）
  *
  * 运行：node images-modal-dom.test.mjs
@@ -280,9 +282,9 @@ console.log('\n[相册弹窗] 顶部工具栏的「相册」入口：渲染、�
 
     check('打开的是相册弹窗（modal.open("album-switch-modal")）',
         calls.modalOpen.length === 1 && calls.modalOpen[0] === 'album-switch-modal', JSON.stringify(calls.modalOpen));
-    check('外壳渲染进 #album-switch-content（标题「相册」+ 搜索框 + 列表容器 + 「完成」）',
+    check('外壳渲染进 #album-switch-content（标题「相册」+ 搜索框 + 列表容器，底部「完成」已删）',
         $('#album-switch-content p').first().text() === '相册' && $('#album-switch-search').length === 1
-        && $('#album-switch-scroll').length === 1 && $('#album-switch-done').length === 1);
+        && $('#album-switch-scroll').length === 1 && $('#album-switch-done').length === 0);
     check('列表挂在 #album-switch-scroll > #albums-container，无限加载容器就是它',
         $('#album-switch-scroll #albums-container').length === 1
         && calls.infiniteScroll.at(-1)?.selector === '#album-switch-scroll', String(calls.infiniteScroll.at(-1)?.selector));
@@ -297,17 +299,26 @@ console.log('\n[相册弹窗] 顶部工具栏的「相册」入口：渲染、�
     });
     albumScroll.options.complete.call({ finished: false });
 
-    const rows = $('#albums-container > a.albums-item');
-    check('渲染两行相册（.albums-item 旧标记没变），data-id 正确',
-        rows.length === 2 && rows.eq(0).data('id') === 1 && rows.eq(1).data('id') === 9, `${rows.length} 行`);
+    const rows = $('#albums-container > .albums-row');
+    check('渲染两行相册（外层 .albums-row，data-id 与行内 <a> 各一份）',
+        rows.length === 2 && rows.eq(0).data('id') === 1 && rows.eq(1).data('id') === 9
+        && rows.eq(0).find('a.albums-item').data('id') === 1, `${rows.length} 行`);
     check('每行点击区 ≥44px（min-h-[44px]）', rows.eq(0).attr('class').includes('min-h-[44px]'));
-    check('左侧相册名（第一个直接子 span）、右侧图片数',
-        rows.eq(0).find('>span').first().text() === '三亚' && rows.eq(0).find('.albums-count').text() === '2 张',
+    check('左侧相册名（<a> 里第一个直接子 span）、右侧图片数（div，常显不被按钮顶掉）',
+        rows.eq(0).find('a.albums-item > span').first().text() === '三亚'
+        && rows.eq(0).find('a.albums-item > .albums-count').first().is('div')
+        && rows.eq(0).find('.albums-count').text() === '2 张',
         rows.eq(0).text().trim());
-    check('当前相册（id=9）高亮 + 「当前」徽标，别的行没有',
+    check('编辑/删除按钮在 <a> 外面（兄弟节点 .albums-actions 里），且常显（class 里没有 hidden）',
+        rows.eq(0).find('a.albums-item').find('button').length === 0
+        && rows.eq(0).children('.albums-actions').find('button.update').length === 1
+        && rows.eq(0).children('.albums-actions').find('button.delete').length === 1
+        && String(rows.eq(0).find('.albums-actions').attr('class')).indexOf('hidden') === -1,
+        String(rows.eq(0).find('.albums-actions').attr('class')));
+    check('当前相册（id=9）高亮 + 「当前」徽标（高亮打在行容器上），别的行没有',
         rows.eq(1).find('.ls-badge').text() === '当前' && rows.eq(1).attr('class').includes('bg-brand-soft')
-        && ! rows.eq(1).attr('class').includes('bg-surface-2')
-        && rows.eq(0).find('.ls-badge').length === 0 && rows.eq(0).attr('class').includes('bg-surface-2'));
+        && ! rows.eq(1).attr('class').includes('bg-surface')
+        && rows.eq(0).find('.ls-badge').length === 0 && rows.eq(0).attr('class').includes('bg-surface'));
     check('加载完收起「加载中...」，有行时不显示空状态',
         $('#album-switch-loading').hasClass('hidden') && $('#album-switch-empty').hasClass('hidden'));
 
@@ -326,7 +337,8 @@ console.log('\n[相册弹窗] 顶部工具栏的「相册」入口：渲染、�
 
     // 点一行 = 立即切换（沿用旧的那一套：selectedAlbum + resetImages → 关弹窗）
     calls.refreshes.length = 0;
-    rows.eq(0).trigger('click');
+    // 真正可点的是行内的切换区 <a class="albums-item">（右边的操作区不算切换区）
+    rows.eq(0).find('a.albums-item').trigger('click');
     check('点一行：按该相册筛选图片（imagesInfinite.refresh 带 album_id=1）',
         calls.refreshes.length === 1 && calls.refreshes[0].album_id === 1, JSON.stringify(calls.refreshes));
     check('点一行：相册弹窗关掉 + 相册列表的无限加载被销毁（= 旧的 drawer.close）',
@@ -334,8 +346,8 @@ console.log('\n[相册弹窗] 顶部工具栏的「相册」入口：渲染、�
         `modalClose=${JSON.stringify(calls.modalClose)} destroyed=${albumScroll.destroyed}`);
 }
 
-// ================================================================ 相册弹窗：空状态 / 创建 / 重命名 / 删除 / 完成
-console.log('\n[相册弹窗] 空状态、创建相册（同一表单/接口/报错）、重命名、删除、完成');
+// ================================================================ 相册弹窗：空状态 / 创建 / 重命名 / 删除
+console.log('\n[相册弹窗] 空状态、创建相册（同一表单/接口/报错）、重命名、删除（底部「完成」已删）');
 {
     // ---- 空状态 + 创建（接口失败路径：报错展示在表单里）
     const { $, calls, t } = boot();
@@ -377,7 +389,10 @@ console.log('\n[相册弹窗] 空状态、创建相册（同一表单/接口/报
     });
     s2.options.complete.call({ finished: false });
 
-    second.$('#albums-container > a.albums-item .update').trigger('click');
+    second.$('#albums-container > .albums-row .update').trigger('click');
+    check('点编辑按钮：不改相册、不关弹窗（按钮在 <a> 外面，点它冒泡不到切换区）',
+        second.calls.refreshes.length === 0 && ! second.calls.modalClose.includes('album-switch-modal'),
+        `refreshes=${JSON.stringify(second.calls.refreshes)} modalClose=${JSON.stringify(second.calls.modalClose)}`);
     check('点编辑：插入 #album-edit 表单，名称/简介预填（沿用 #album-update-tpl）',
         second.$('#album-edit').length === 1 && second.$('#album-edit input[name=name]').val() === '旅行'
         && second.$('#album-edit textarea[name=intro]').val() === '海边');
@@ -388,7 +403,7 @@ console.log('\n[相册弹窗] 空状态、创建相册（同一表单/接口/报
         second.calls.puts.length === 1 && second.calls.puts[0].url === '/user/albums/3',
         JSON.stringify(second.calls.puts[0] || null));
     check('重命名成功后行内名称更新、编辑表单收起',
-        second.$('#albums-container > a.albums-item .name').text() === '新名字' && second.$('#album-edit').length === 0);
+        second.$('#albums-container > .albums-row .name').text() === '新名字' && second.$('#album-edit').length === 0);
 
     // ---- 删除相册：原地重拉列表，不关弹窗（旧抽屉是 300ms 后整个收起来）
     const third = boot({ swalConfirmed: true });
@@ -399,7 +414,7 @@ console.log('\n[相册弹窗] 空状态、创建相册（同一表单/接口/报
         data: { albums: { data: [{ id: 5, name: '待删', image_num: 1, intro: '' }], current_page: 1, last_page: 1 } },
     });
     s3.options.complete.call({ finished: false });
-    third.$('#albums-container > a.albums-item .delete').trigger('click');
+    third.$('#albums-container > .albums-row .delete').trigger('click');
     await sleep(20);
 
     check('删除相册：DELETE /user/albums/5', third.calls.deletes[0] === '/user/albums/5', JSON.stringify(third.calls.deletes));
@@ -408,15 +423,6 @@ console.log('\n[相册弹窗] 空状态、创建相册（同一表单/接口/报
         && s3.refreshes.some((params) => params && params.page === 1)
         && JSON.stringify(third.t.getSelectedAlbum()) === '{}',
         `modalClose=${JSON.stringify(third.calls.modalClose)} refreshes=${JSON.stringify(s3.refreshes)}`);
-
-    // ---- 底部「完成」只关弹窗（顺手收掉相册列表的无限加载）
-    const fourth = boot();
-    fourth.t.getAlbums();
-    const s4 = fourth.calls.infiniteScroll.at(-1);
-    fourth.$('#album-switch-done').trigger('click');
-    check('点「完成」：关弹窗 + 收掉相册列表的无限加载',
-        fourth.calls.modalClose.includes('album-switch-modal') && s4.destroyed === 1,
-        `modalClose=${JSON.stringify(fourth.calls.modalClose)} destroyed=${s4.destroyed}`);
 
     // ---- 「移出当前相册」的收尾：等价于旧的 drawer.close()
     const fifth = boot();
