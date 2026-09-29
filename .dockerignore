@@ -1,4 +1,4 @@
-# 构建上下文里只需要这些：Dockerfile、src/、ssl/、*.template、entrypoint.sh
+# 构建上下文里只需要这些：Dockerfile、src/、*.template、entrypoint.sh
 # 其余都是仓库自己的东西，进上下文只会拖慢构建（尤其 test/node_modules）
 .git
 .github
@@ -8,3 +8,40 @@ tools
 docker-compose.yaml
 README.md
 *.md
+
+# ---------------------------------------------------------------------------
+# fork 追加（F12）：别把开发机的东西烤进构建上下文 / 镜像
+# ---------------------------------------------------------------------------
+
+# 依赖目录：镜像里的 composer install 会自己装 vendor（且是 --no-dev）；
+# 本地 vendor/（131M）与 node_modules/（237M）进上下文只会拖慢构建，还可能把开发包带进去。
+#
+# vendor 只排 composer 那一份（src/vendor）——**不能用 `**/vendor`**：
+# 那会连 src/public/fonts/vendor/@fortawesome/fontawesome-free/webfa-*.{woff2,woff,ttf,eot,svg}
+# 一起排掉，而那是 public/css/fontawesome.css 真正 @font-face 引的字体，必须随镜像发货，
+# 排掉前端图标就全空了（本机用 moby patternmatcher 的等价实现跑真实文件树验证过）。
+src/vendor
+**/node_modules
+
+# 开发机的 .env（里面有本机的 DB / APP_KEY）。镜像构建期是 Dockerfile 自己
+# `copy('.env.example', '.env')`，运行期由卷 + entrypoint 管，绝不该从开发机带进来。
+**/.env
+
+# 开发机的编译产物：Blade 编译视图 / 缓存 / 会话、bootstrap 的编译清单（packages.php、
+# services.php、config.php）。这些在开发机上是「当时装过哪些包、缓存了哪些配置」的快照，
+# 带进镜像会让 Laravel 按错误的清单引导（Dockerfile 里那段 --no-dev 的注释踩过这个坑）。
+#
+# 注意写法：故意**只排文件、不排目录** —— 不用 `src/storage/framework/*` 那种整目录通配，
+# 因为那样会连 storage/framework/{views,sessions,cache/data} 与 bootstrap/cache 这些**目录本身**
+# 一起从上下文里删掉（.dockerignore 的 `*` 连目录里的 .gitignore 占位一起排掉，
+# 目录没有任何条目就不会进构建上下文），而 Laravel 运行期必须能往这些目录写
+# （Blade 编译视图、session、包清单）—— 目录不存在 = 整站 500。
+# 下面 `dir/*` 后面紧跟的 `!.../.gitignore` 就是为了把目录占位文件留下，保证目录存在。
+src/storage/framework/cache/data/*
+!src/storage/framework/cache/data/.gitignore
+src/storage/framework/sessions/*
+!src/storage/framework/sessions/.gitignore
+src/storage/framework/testing/*
+!src/storage/framework/testing/.gitignore
+src/storage/framework/views/*.php
+src/bootstrap/cache/*.php
