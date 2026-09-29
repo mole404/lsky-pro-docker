@@ -16,19 +16,20 @@
 1. **应用源码 vendored 在 `src/`**（= 上游 `38d52c46…`，2025-11-24 的 master 完整树，304 个文件、约 8MB），
    构建直接 `COPY src/`，**不再联网拉 GitHub archive**。上游 README 已写明「开源版本已停止维护」，
    所以「跟不上上游」这个风险基本为零；这么做的收益是：上游仓库哪天被删/归档/改名，你照样能重建镜像，
-   而且之后要改 PHP 代码，直接改 `src/` 下的文件、提交即可（不用再维护 overlay 叠加）。
+   而且之后要改 PHP 代码，直接改 `src/` 下的文件、提交即可。
    为什么钉在 2025-11-24 这个 commit：它是上游最后一个提交，比原先钉的 `911275c`（2023-05-16）
    多吃了三个真实修复 —— 图片格式转换时**不同图片共用同一个临时文件、会变成同一张图**、
-   加水印后丢质量参数、SVG 支持 —— 外加 laravel / phpseclib / commonmark 等一串安全升级。
+   加水印后丢质量参数、SVG 支持（**本 fork 已移除 SVG 上传，见下「与上游的差异」第 7 条**） —— 外加 laravel / phpseclib / commonmark 等一串安全升级。
 2. **前端补丁就地落在 `src/` 里**：`resources/js/context-js.js` 与 `public/js/context-js/context-js.js`
    （同一份内容的两处拷贝，必须一致）+ `resources/views/user/images.blade.php`（脚本版本串）。
    「我们相对上游改了什么」见 `patches/ios-longpress.patch`（存档，不参与构建），可用
    `bash tools/diff-vs-upstream.sh` 随时重新生成与核对。
 3. 基础镜像显式写成 Debian **bookworm** 变体（与 2024-04 那版镜像同一 Debian 大版本），
    `install-php-extensions` 钉到具体版本（不再用 `latest`）。
-4. **构建期自证**：① 我们从不修改的上游文件（`ImageService.php` / `convention.php` / `public/index.php` /
-   `routes/web.php` / `composer.lock`）按上游 md5 校验 —— 保证 vendored 快照没被动过；
-   ② 补丁产物按预期 md5 校验 —— 改了就构建失败（见 Dockerfile「自证 1/2」）。
+4. **构建期自证**：① 「**从不修改**的上游文件」（`public/index.php`）按上游 md5 校验 —— 保证 vendored
+   快照没被动过；② 「**有意偏离**上游」的文件（`config/convention.php` / `routes/web.php` /
+   `app/Services/ImageService.php` / `composer.lock`）按预期 md5 校验 —— 改了就构建失败；
+   ③ 补丁产物按预期 md5 校验（见 Dockerfile「自证 1 / 1b / 2」）。
 5. CI 推到 GHCR（用仓库自带 `GITHUB_TOKEN`，不需要任何 secret）。**构建前**先跑 `test/` 里的 jsdom
    行为测试（补丁的每条分支），构建后把镜像拉回来做真机自证：核 md5 + 断言补丁标记 + 记录
    PHP/扩展/Debian 版本 + 真起容器 curl 安装页 + 核 Apache 实际吐出的 JS md5。
@@ -38,6 +39,31 @@
    一致就跳过（不换镜像重启零开销）。站点数据（`.env` / `database/` / `storage/` /
    `bootstrap/cache/` / `public/i`）任何情况下都不碰。
    于是「升级 = 换镜像」，不需要人工 cp 文件、也不需要手动清视图缓存。
+7. **移除 SVG 上传支持**（F3，老师不用 SVG，也确认**不需要为「万一 svg 回来」写任何防御代码**）：
+   SVG 不再被当作「可上传 / 可存储 / 可内联展示的图片格式」。
+   - `config/convention.php` 的 `AcceptedFileSuffixes` 后缀白名单去掉 `svg`
+     （`app/Http/Requests/Admin/GroupRequest.php` 里那份 `in:` 校验同步去掉）。
+   - **读取侧硬过滤**：`app/Models/Group.php` 在读取组配置时对 `AcceptedFileSuffixes` 做白名单清洗，
+     所以**升级后即使不去后台重新保存组配置**（数据库里仍存着带 svg 的旧值），也不会再接受 SVG 上传。
+   - **防御性代码已全部撤除**（老师确认不必兜底）：
+     - `Controller::output()` 里那段「`svg`/`svgz` 改成 `Content-Disposition: attachment` +
+       `X-Content-Type-Options: nosniff`」的守卫（连同 `$headers` 变量与 fork 注释）已删掉，
+       `output()` 恢复成改动前的原样（`headers: ['Content-type' => $mimetype]`）。
+     - `000-default.conf.template` 里两个 vhost 的 `<LocationMatch "(?i)^/(i|thumbnails)/.*\.svgz?$">`
+       加固段（以及它上面那段 fork 注释）已删掉。
+     - `Dockerfile` 里为上述两段服务的 `RUN a2enmod headers` 与对应的四条构建期断言
+       （`ForceType text/plain` / `Header set Content-Disposition` / `Header set Content-Security-Policy` /
+       `Header set X-Content-Type-Options` 各 `= 2`）一并删掉；健康检查要用的 `command -v curl` 断言保留。
+   - 静态图标 SVG（`public/fonts/vendor/@fortawesome/**` 的字体、`public/static/default-avatar.svg`、
+     blade 里内联的图标）**不受影响**，正常保留。
+   - **死代码清理**：移除 SVG 后，几条「只可能因为 svg 数据而命中」的分支永远不可达，已连同判据一起删掉：
+     `app/Services/ImageService.php` 的上传跳过图片处理 / 跳过违规扫描的 `in_array(..., 'svg')`、
+     `makeThumbnail()` 里 `extension === 'svg'` 直接拷原文件的特例；`app/Http/Controllers/Controller.php`
+     里 `output()` 的两处 svg 例外（动态水印跳过名单、ico/svg 直出名单）；`app/Models/Image.php`
+     的 `getThumbnailPathname()` 由 `extension === 'svg' ? 'svg' : 'png'` 简化为常量 `png`。
+     据此 `app/Services/ImageService.php` 也成了 **fork 有意修改**的文件（它原本在「从不修改的上游文件」
+     名单里），md5 `9fb843806abd6b778d8acd3366e2f0f1` → `e7edc0fc9dc8c654c4debca0e1d2eac4`；
+     Dockerfile 的构建期自证已把它从「自证 1（从不修改）」移到「自证 1b（有意偏离上游）」并同步期望值。
 
 ## 代码在仓库的哪里、怎么改
 
@@ -56,9 +82,9 @@ patches/ tools/ test/                   ← 补丁存档、维护脚本、jsdom 
 
 1. 直接编辑 `src/` 下对应文件（改 PHP 也一样，改完就是普通 commit）
 2. 若动了那三个补丁文件中的任何一个 → 同步更新 Dockerfile「自证 2」的 md5、`.code-revision`
-   里对应的行、workflow 的 `CONTEXT_JS_MD5` / `BLADE_MD5`，并把 blade 里的 `?v=ios-longpressN`
-   递增一位（击穿 Safari 的启发式缓存）
-3. `cd test && npm ci && npm test` 跑补丁的行为测试
+   里对应的行、workflow 的 `CONTEXT_JS_MD5` / `BLADE_MD5`
+   （静态资源的版本串不用手动递增：blade 里走 `\App\Utils::assetVersion()`，按文件时间自动算）
+3. `cd test && npm ci && npm test` 跑补丁的行为测试（要 Node ≥ 22.22，见 `test/README.md`）
 4. 提交 → 推 master → CI 跑测试 + 构建 + 真容器三场景自证；全绿才会 promote `latest`
 5. 服务器上 `docker compose pull && docker compose up -d --force-recreate`：入口脚本靠版本标记
    自动把新代码同步进卷，站点数据一律不碰
@@ -96,8 +122,10 @@ patches/ tools/ test/                   ← 补丁存档、维护脚本、jsdom 
   （上游 `webpack.mix.js` 里本来也是 `mix.copy('resources/js/context-js.js', 'public/js/context-js')`，
   但仓库里 `public/` 下那份是旧工具链留下的压缩产物，一直没跟着源码更新，所以两个位置都要覆盖）
 - `src/resources/views/user/images.blade.php`，只改一行（加资源版本串）：
-  给脚本加 `?v=ios-longpress4`，避免 iOS/Safari 的启发式缓存把旧版 JS 一直喂给老用户（每次改补丁就递增这个串）
-- 完整 diff 见 `patches/ios-longpress.patch`（存档用，构建实际走 `overlay/`）
+  `{{ asset('js/context-js/context-js.js') }}?v={{ \App\Utils::assetVersion('js/context-js/context-js.js') }}`
+  —— 版本号取自该文件的修改时间（镜像构建、卷同步都会刷新它），补丁一改浏览器就拿新版 JS，
+  不需要手动递增任何版本号
+- 完整 diff 见 `patches/ios-longpress.patch`（存档用，不参与构建）
 
 ## 第二个补丁：菜单收放与触摸端二级菜单（2026-09-28 追加）
 
@@ -172,6 +200,11 @@ GHCR 的包**默认私有**，匿名拉取会 401。到 GitHub → 右侧头像 
 
 ### 如果要使用Nginx反向代理配置HTTPS，则使用HTTPS访问容器
 
+容器内的 `8088`（`HTTPS_PORT`）是 Apache 的 **HTTPS vhost**，证书是容器**首次启动时用 openssl 自签**的
+（`/etc/apache2/ssl/lsky-selfsigned.crt`，CN=lsky-pro，RSA 2048 / 3650 天）—— 浏览器一定会报「不受信任」，
+**仅供本机 / 内网调试**。对外提供服务请走下面的 Nginx 反向代理（由 Nginx 持有真正的证书），
+或者干脆只映射 `8089` 的 HTTP 端口、由 Nginx 来终结 TLS。
+
 ```docker
 docker run -d \
     --name lsky-pro \
@@ -183,6 +216,10 @@ docker run -d \
     -e WEB_PORT=8089 \
     ghcr.io/mole404/lsky-pro-docker:latest
 ```
+
+> 自签证书**不随镜像发货、也不进数据卷**（镜像里没有任何证书/私钥文件）：每个容器首次启动时自己生成一份，
+> 重建容器会重新生成。想用自己的证书，把 `.crt` / `.key` 挂到上面那两个路径覆盖掉自签的那份即可
+> —— 入口脚本看到文件已存在就跳过生成（幂等）。
 
 Nginx配置文件示例：
 
@@ -218,19 +255,20 @@ location ^~ /
   `storage/`（上传文件、日志、会话）、`bootstrap/cache/`（Laravel 运行时缓存）、`public/i`（本地存储软链）。
 
 ```bash
-# 1) 备份（老习惯，SQLite 用户先停容器再打包最稳）
-docker stop lsky-pro
-tar czf ~/lsky-pro-backup-$(date +%F-%H%M).tar.gz -C /root lsky-pro
-docker start lsky-pro
+# 1) 备份（下面是最短路径，完整说明见「备份与恢复」一节）
+docker compose stop lskypro
+tar -C web -czf ~/lsky-pro-backup-$(date +%F-%H%M).tar.gz .
+docker compose start lskypro
 
 # 2) compose 里 image 改成 ghcr.io/mole404/lsky-pro-docker:latest，然后
 docker compose pull
 docker compose up -d --force-recreate
 
 # 3) 验证（核「Apache 实际吐给浏览器」的那份，比看磁盘文件更硬）
+#    端口/容器名按你的映射改：compose 默认 9080:8089、容器名 lskypro；上面的 docker run 例子是 8089:8089、lsky-pro
 curl -s http://127.0.0.1:8089/js/context-js/context-js.js | md5sum
-# 期望：e114c840101d021aa416239196925624
-docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.image.source"}}'
+# 期望：b13fc1e4fede8c55c25862eb13cfcfcf
+docker inspect lskypro --format '{{index .Config.Labels "org.opencontainers.image.source"}}'
 # 期望：https://github.com/mole404/lsky-pro-docker
 ```
 
@@ -262,12 +300,14 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 
 镜像里这些文件的 md5（补丁之外的每个文件都应当与线上那份旧镜像一致）：
 
-- `public/js/context-js/context-js.js`：原始 `bab81ff5e43b50a760935c7b3ae6475c` → 补丁后 `e114c840101d021aa416239196925624`
-- `resources/js/context-js.js`：原始 `c8e57f6232848ca8277341ddf1a3a7a6` → 补丁后 `e114c840101d021aa416239196925624`（两份必须一致）
-- `resources/views/user/images.blade.php`：原始 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `f4e100c87d4becdcce163800db535775`
-- `app/Services/ImageService.php`：`a7bcd8549c656501a057214637f10b45`（旧 pin）→ `9fb843806abd6b778d8acd3366e2f0f1`（新 pin，含上游三个修复）
-- `config/convention.php`：`674975e4e5561cc15c27626cb1ce5233`（旧 pin）→ `c1adde95924944e07bd72e87bd5db2f7`（新 pin，默认允许 svg）
-- 除这三个补丁文件外，`src/` 里其他文件都应等于上游 `38d52c46…` 的原值（CI「自证 1」每次构建都会验）
+- `public/js/context-js/context-js.js`：原始 `bab81ff5e43b50a760935c7b3ae6475c` → 补丁后 `b13fc1e4fede8c55c25862eb13cfcfcf`
+- `resources/js/context-js.js`：原始 `c8e57f6232848ca8277341ddf1a3a7a6` → 补丁后 `b13fc1e4fede8c55c25862eb13cfcfcf`（两份必须一致）
+- `resources/views/user/images.blade.php`：原始 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `cab1ae9abf815ae3ca30a63608dbf004`
+- `app/Services/ImageService.php`：`a7bcd8549c656501a057214637f10b45`（旧 pin）→ `9fb843806abd6b778d8acd3366e2f0f1`（上游 `38d52c46…` 的值）→ `e7edc0fc9dc8c654c4debca0e1d2eac4`（F3：移除 SVG 支持时删掉 svg 分支）
+- `config/convention.php`：`674975e4e5561cc15c27626cb1ce5233`（旧 pin）→ `ee439977cfcb2e4d3545b25689198c71`（允许 svg 那版）→ `8136e73b50315d783f105dd4ac9971bb`（F3：后缀白名单去掉 svg）
+- 除补丁产物（`context-js.js` 两份 + `images.blade.php`）外，**有意偏离上游**的还有 4 个文件：
+  `config/convention.php`、`routes/web.php`、`app/Services/ImageService.php`（上一条，F3 移除 SVG 支持时删了 svg 分支）、
+  `composer.lock`（安全升级）。`src/` 里**其他**文件都应等于上游 `38d52c46…` 的原值（CI「自证 1 / 1b」每次构建都会验）
 
 功能上要过的用例：
 
@@ -279,8 +319,10 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 - Windows 右键、Android Chrome 长按 → 菜单照旧
 - 单击看大图、拖拽多选、复制链接、重命名、删除、上传、原图与缩略图访问、登录、API
 
-`test/` 下有一个 node + jsdom 的行为测试（`cd test && npm install && npm test`），
-可以在没有 iPhone 的情况下先把每条分支跑一遍；真机行为（原生 callout 是否被压掉）仍需真机确认。
+`test/` 下有一个 node + jsdom 的行为测试（`cd test && npm install && npm test`，会依次跑全量
+`*.test.mjs`，任一个失败就非 0 退出），可以在没有 iPhone 的情况下先把每条分支跑一遍；
+**Node 需要 ≥ 22.22**（jsdom 30 的 `engines` 要求；Node 18 会在加载 jsdom 时报 `ERR_REQUIRE_ESM`，不是测试失败而是跑不起来）；
+真机行为（原生 callout 是否被压掉）仍需真机确认。
 出问题时页面控制台执行 `copy(context.debugDump())` 可导出菜单事件的诊断转储（含每次关闭的原因），
 `test/repro-clickthrough.mjs <某版 context-js.js>` 是最小复现脚本，用来核对"旧版点穿、新版不点穿"。
 
@@ -294,7 +336,7 @@ docker inspect lsky-pro --format '{{index .Config.Labels "org.opencontainers.ima
 2. 更新 `Dockerfile` 的 `ARG LSKY_COMMIT` 与「自证 1/2」的 md5 期望值
 3. `bash tools/diff-vs-upstream.sh` 生成 diff 存进 `patches/ios-longpress.patch`；它还会做白名单校验，
    告诉你 `src/` 相对上游是不是只动了预期那三个文件
-4. 同步 `workflow` 的 `CONTEXT_JS_MD5` / `BLADE_MD5`；动了补丁就把 blade 的 `?v=ios-longpressN` 递增一位
+4. 同步 `workflow` 的 `CONTEXT_JS_MD5` / `BLADE_MD5`（资源版本串走 `Utils::assetVersion()`，不用手改）
 5. `cd test && npm test`，然后推 master 等 CI 全绿
 
 ### 界面（2026-09-28 换新）
@@ -350,12 +392,12 @@ by mole404
 
 ### 动过 `user/images.blade.php` 的注意
 该文件是 fork 补丁的一部分，md5 被 Dockerfile / CI 核对 —— 当前期望值
-`298b1164e827f973707b3b2b78bfbbb9`。改它就要同步 `Dockerfile` 里那两处（CI 会拦）。
+`cab1ae9abf815ae3ca30a63608dbf004`（实测 `md5sum src/resources/views/user/images.blade.php`）。改它就要同步 `Dockerfile` 里那两处（CI 会拦）。
 
 ## 运行时版本与依赖（2026-09-28 复核）
 
 - **PHP：8.3**（`Dockerfile` 的 `ARG PHP_VERSION`）。理由：8.1 已 EOL（2025-12-31），8.2 的 EOL 是
-  2026-12-31，8.3 支持到 2027-12-31。配套把依赖升到同线最新：`laravel/framework` **9.52.21**
+  2026-12-31，8.3 支持到 2027-12-31。配套把依赖升到同线最新：`laravel/framework` **9.52.22**
   （9.x 最后一个补丁）+ `symfony/*` **6.4 LTS**（Laravel 9 的 `^6.0` 正好允许，6.4 是 LTS，支持到 2027-11）。
 - **已知且无法在本仓库内修复的**：Laravel 9 框架自身的安全公告（9.x 线没有修复版本）。
   Composer 2.10 起默认会**拒绝**安装任何带未修公告的版本，而整条 Laravel 9 线都被覆盖 ——
@@ -383,7 +425,8 @@ by mole404
 跟上游一致：
 
 - `WEB_PORT`：容器内 `Apache` 监听端口，默认 `8089`（`-e WEB_PORT=8089` 可改）
-- `HTTPS_PORT`：HTTPS 端口，默认 `8088`（用 Nginx 反代 HTTPS 时才需要）
+- `HTTPS_PORT`：容器内 HTTPS 端口，默认 `8088`。证书是启动时**自签**的（见上面「Nginx 反向代理」一节），
+  仅供本机 / 内网调试；对外请用 Nginx 反代，或直接用 `WEB_PORT` 走 HTTP
 
 本 fork 另有一组 `APACHE_*`（Apache MPM 并发/内存相关），默认值面向低配单用户、可逐项覆盖，
 见下面「[Apache MPM（并发与内存占用）](#apache-mpm并发与内存占用2026-09-30)」一节。
@@ -495,9 +538,54 @@ docker buildx create --use
 docker buildx build --platform linux/amd64 -t lsky-pro-docker .
 ```
 
-## 手动备份/升级
+## 备份与恢复
 
-如果需要迁移数据库/手动升级`Lsky-Pro`，可以参考官方文档：[升级｜Lsky Pro](https://docs.lsky.pro/docs/free/v2/quick-start/upgrade.html)，来备份主要文件以进行恢复/升级
+备份只关心**一个东西**：映射到容器 `/var/www/html` 的那个数据卷
+（`docker-compose.yaml` 里是 `$PWD/web:/var/www/html/`；上面 `docker run` 例子里是 `$PWD/lsky:/var/www/html`）。
+卷里的应用代码丢了无所谓 —— 重新 pull 镜像就有、入口脚本会自己同步回去；下面这些才是**站点数据，丢了不可再生**：
+
+| 卷内路径 | 是什么 |
+| --- | --- |
+| `.env` | 站点配置：`APP_KEY`、数据库连接、云存储密钥（**丢了 = 登录态失效 / 读不出数据**） |
+| `database/` | SQLite 单文件数据库，默认 `<卷>/database/database.sqlite` |
+| `storage/` | 上传的图片、日志、会话、编译视图缓存 |
+| `installed.lock` | 「已安装」标记；缺失会被当成没装过，跳回安装向导 |
+| `public/thumbnails/` | 生成的缩略图 |
+| `public/i` | 本地存储策略的软链/目录（部署产物） |
+| `bootstrap/cache/` | 站点自己的运行时缓存（`config.php` 等站内配置缓存；`packages.php` / `services.php` 启动时按当前镜像重建） |
+
+其余路径（`app/` `resources/` `public/js/` `vendor/` …）都是镜像里那份代码，属于**可重建**的部分：
+换镜像时入口脚本会按版本标记把它们覆盖回卷里（见上面「已有部署升级」）。
+
+### 备份
+
+```bash
+cd <docker-compose.yaml 所在目录>
+docker compose stop lskypro     # 先停：SQLite 是单文件，运行中直拷可能拿到「事务进行到一半」的状态
+tar -C web -czf ~/lsky-backup-$(date +%F-%H%M).tar.gz .   # 卷目录按你自己的映射改（compose 默认 web，docker run 例子里是 lsky）
+docker compose start lskypro
+```
+
+不停容器也能打包（Linux 上正在被写的文件照样拷得下来），但那样别指望 `database/` 里那份 SQLite
+快照是干净的 —— 单文件数据库先停容器再拷，这一点最容易翻车。
+
+### 恢复
+
+```bash
+docker compose stop lskypro
+mkdir -p web && tar -C web -xzf ~/lsky-backup-2026-10-01-1200.tar.gz   # 卷目录同上；先清空再解更稳
+docker compose up -d --force-recreate
+```
+
+- **属主不用管**：入口脚本每次启动都会对整卷 `chown -R www-data` + `chmod -R 755`
+  （只有你在容器**外**手工改文件时才需要自己 `chown -R www-data <卷目录>`；属主不对的表现是上传/改设置失败）。
+- 归档里带着 `.code-revision`：它和当前镜像的标记一致就跳过代码同步（原样跑）；不一致（归档来自旧镜像）
+  就会把镜像版本同步进卷 —— 两种都是预期行为，不用手动干预。
+- 换机器迁移 = 把归档解开到新机器的卷目录 + 同一份 `docker-compose.yaml` 起容器，不需要改任何代码。
+
+> 上游有一份自己的备份/升级说明（[升级｜Lsky Pro](https://docs.lsky.pro/docs/free/v2/quick-start/upgrade.html)，
+> 上游文档、可能变动；上游已停止维护，链接随时可能失效）。它讲的是**上游应用本身**，跟本镜像的卷布局、
+> 入口脚本行为都对不上 —— 以本节为准；本节是按本仓库 `entrypoint.sh` 与 `docker-compose.yaml` 的实际行为写的。
 
 ## 致谢与许可
 
