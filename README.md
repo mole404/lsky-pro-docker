@@ -24,6 +24,10 @@
    （同一份内容的两处拷贝，必须一致）+ `resources/views/user/images.blade.php`（脚本版本串）。
    「我们相对上游改了什么」见 `patches/ios-longpress.patch`（存档，不参与构建），可用
    `bash tools/diff-vs-upstream.sh` 随时重新生成与核对。
+   该脚本内置一份**已知偏离清单**（`KNOWN_DEVIATIONS`，当前 92 个文件，按「为什么偏离」分组：
+   补丁产物 / 移除画廊与系统升级 / 移除 SVG / 依赖安全升级 / 前端换新与迭代 / 前端构建产物 /
+   sqlite 并发参数）：src/ 相对上游的「内容不同」清单必须**恰好**落在清单内 ——
+   出现清单之外的改动就 exit 1 报警（要么登记进清单并写一句理由，要么就是手滑）。
 3. 基础镜像显式写成 Debian **bookworm** 变体（与 2024-04 那版镜像同一 Debian 大版本），
    `install-php-extensions` 钉到具体版本（不再用 `latest`）。
 4. **构建期自证**：① 「**从不修改**的上游文件」（`public/index.php`）按上游 md5 校验 —— 保证 vendored
@@ -338,6 +342,35 @@ docker inspect lskypro --format '{{index .Config.Labels "org.opencontainers.imag
    告诉你 `src/` 相对上游是不是只动了预期那三个文件
 4. 同步 `workflow` 的 `CONTEXT_JS_MD5` / `BLADE_MD5`（资源版本串走 `Utils::assetVersion()`，不用手改）
 5. `cd test && npm test`，然后推 master 等 CI 全绿
+
+### 基镜像 digest 与「试构建」路径（2026-09-30）
+
+Dockerfile 两个 `FROM` 都写成 `php:${PHP_VERSION}-cli|apache-${DEBIAN_RELEASE}@${PHP_*_IMAGE_DIGEST}`，
+digest 走 `ARG`（默认值 = 当前 PHP 8.3 对应的 index digest）。
+
+**关键坑**：带 `@digest` 时 **digest 优先、tag 只是装饰**。所以只把 `PHP_VERSION` 改成 8.2、
+不同时换 digest，拉到的仍是 8.3 那份内容 —— 构建不会报错，但镜像里是 8.3，随后会被 CI 的
+「PHP 版本校验」判红（等于白等一次构建）。这就是 CI「试构建」以前必然失败的根因。
+
+- **试构建怎么用**：Actions → `Build and push image to GHCR` → Run workflow，填 `php_version`
+  （如 `8.2`）。CI 的 Resolve 步骤会**自动**按该版本从 Docker Hub 解析出 cli / apache 两个 index digest
+  并覆盖 Dockerfile 的 `ARG`。自动解析不可用时，可另填 `php_cli_digest` / `php_apache_digest` 手工指定。
+  试构建只推不可变 `sha-<commit>` tag，**不会**动 `latest`。
+- **怎么手工更新 digest**（例如上游发了安全修复、或本地/离线构建）：见 `Dockerfile` 顶部
+  「F15：基镜像钉 digest」那段注释（Registry API 取 `Docker-Content-Digest` 的两步命令），
+  把新值填进 `ARG PHP_CLI_IMAGE_DIGEST` / `ARG PHP_APACHE_IMAGE_DIGEST`。
+
+### 依赖漏洞门禁（OSV，2026-09-30）
+
+CI 在构建前跑一个 `deps-scan` job（`build` 依赖它，门禁不过不构建、更不会推进 `latest`）：
+
+- 工具：官方 `google/osv-scanner` 容器镜像，**钉到版本 + image digest**（可复现，与基镜像同理）。
+  更新方式：`docker buildx imagetools inspect ghcr.io/google/osv-scanner:<新版本>` 取顶层 digest，
+  改 `.github/workflows/build-image.yaml` 里 `SCANNER=` **那一行**（只有这一处）。
+- 扫描对象：`src/composer.lock` 与 `test/package-lock.json`。
+- **白名单**：仓库根的 `osv-scanner.toml`（`[[IgnoredVulns]]`）。只有写进去的告警会被过滤
+  （日志会打印 `…filtered out because: <reason>`）；**没写进去的新漏洞会让 CI 失败**。
+  每条都要有 `reason` 与 `ignoreUntil`（到期自动失效、逼你复审），别当永久豁免。
 
 ### 界面（2026-09-28 换新）
 
