@@ -85,12 +85,26 @@ jobs:
             exit 1
           fi
 
+      # ⚠ 必须自带 Node：ubuntu-latest 预装的是 Node 18/20，而 test/ 的 jsdom 30 在 engines 里
+      #   要求 ^22.22.2 || ^24.15.0 || >=26。版本不够时 `npm test` 不是「用例失败」，是直接
+      #   ERR_REQUIRE_ESM 跑不起来（整条流水线红得毫无信息量）。这里显式装 Node 22 线
+      #   （22 的最新补丁版已 ≥ 22.22；下面再打一行 node --version 留证）。
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: test/package-lock.json
+
       # 补丁的行为测试（jsdom + jQuery）。镜像里那份 context-js.js 就是 src/ 里的补丁版本，
       # 所以这里跑绿 = iOS 长按 / 菜单收放 / 触摸端二级菜单的每条分支都过了一遍。
       # 放在构建之前：补丁写错了就早点红，不用白等十几分钟构建。
+      # 依赖全部在 test/package.json 里声明（含 sweetalert2 / less —— swal-theme 那条用例要用），
+      # 所以新拉的 checkout 里 `npm ci` 之后就能跑，不依赖 src/node_modules。
       - name: Behavior tests (jsdom)
         run: |
           set -euo pipefail
+          node --version          # 留证：jsdom 30 要求 ≥ 22.22
           cd test
           npm ci --no-audit --no-fund
           npm test
