@@ -137,6 +137,22 @@ window.utils = {
             const useWindowScroll = options.root === 'window';
             const onScroll = function () {
                 if (useWindowScroll) {
+                    // 用哨兵（本方法自己插在列表末尾的 .infinite-scroll）相对「可视视口」的位置判断。
+                    // 不能再用 scrollTop + innerHeight >= document.height() - offset：移动浏览器
+                    // （安卓/Edge）的可滚动高度是按「地址栏收起后的大视口」算的，而 innerHeight 报的
+                    // 是「地址栏可见时的小视口」，两者差 50~60px > offset 默认那 30px 余量 —— 真滑到
+                    // 底那一发条件仍不成立（第一次不加载），得再拖一下让地址栏收起才刚好成立。
+                    // getBoundingClientRect().top 是对当前可视视口量的，天然免疫这个不一致。
+                    // 回归测试：infinite-scroll-bottom-mobile.test.mjs
+                    const $sentinel = $(selector).find('.infinite-scroll').last();
+                    if ($sentinel.length > 0) {
+                        if ($sentinel[0].getBoundingClientRect().top <= window.innerHeight + offset) {
+                            load();
+                        }
+                        return;
+                    }
+                    // 兜底：哨兵是本方法自己插的，理论上不会找不到；真找不到也别把自己搞死，
+                    // 退回原来的公式（桌面端这套是准的）。
                     if ($(window).scrollTop() + $(window).height() >= $(document).height() - offset) {
                         load();
                     }
