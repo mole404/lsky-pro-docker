@@ -150,7 +150,22 @@ class Image extends Model
                     break;
             }
         })->when($request->query('keyword'), function (Builder $builder, $keyword) {
-            $builder->where('origin_name', 'like', "%{$keyword}%")->orWhere('alias_name', 'like', "%{$keyword}%");
+            // fork 有意修复（已偏离上游）：两个 like 必须包进闭包，不能让 orWhere 平铺进整条查询。
+            // 不加括号时这两个条件是「平铺的 OR」：
+            //   user_id = X AND album_id IS NULL AND origin_name LIKE … OR alias_name LIKE …
+            // alias 那一支因此不受 user_id / album_id / permission 约束 —— 能搜出他人（含 private）图片。
+            // 实测（scratch/f1_verify.php + Laravel 9.52.21）：Eloquent\Builder::callScope() 会在
+            // 「命名作用域」调用路径（$user->images()->filter($request)）自动把这批 where 收成一个
+            // Nested 组，所以这条线上跨用户越权被框架挡住了；但同一个 scope 只要被直接调用
+            // （$model->scopeFilter($builder, $request)）就真会跨用户拿到 private 图，而且
+            // album_id / permission 过滤在**两条路径**上都会被 OR 逃逸（别的相册的图混进来、
+            // permission=private 时公开图混进来）。包闭包后：
+            //   user_id = X AND album_id IS NULL AND (origin_name LIKE … OR alias_name LIKE …)
+            // 不再依赖框架内部的自动分组行为；未命中越权分支时结果集与改前完全一致。
+            $builder->where(function (Builder $query) use ($keyword) {
+                $query->where('origin_name', 'like', "%{$keyword}%")
+                    ->orWhere('alias_name', 'like', "%{$keyword}%");
+            });
         })->when((int) $request->query('album_id'), function (Builder $builder, $albumId) {
             $builder->where('album_id', $albumId);
         }, function (Builder $builder) {
@@ -240,7 +255,7 @@ class Image extends Model
 
     public function getThumbnailPathname(): string
     {
-        return trim(config('app.thumbnail_path'), '/')."/{$this->md5}.". ($this->extension === 'svg' ? 'svg' : "png");
+        return trim(config('app.thumbnail_path'), '/')."/{$this->md5}.png";
     }
 
     private function generateKey($length = 6): string

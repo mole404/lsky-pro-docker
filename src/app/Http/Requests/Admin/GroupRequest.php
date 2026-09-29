@@ -38,7 +38,8 @@ class GroupRequest extends FormRequest
             'configs.image_save_format' => '',
             'configs.path_naming_rule' => 'max:400',
             'configs.file_naming_rule' => 'max:400',
-            'configs.accepted_file_suffixes' => 'required|array|in:jpeg,jpg,png,gif,tif,bmp,ico,psd,webp,svg',
+            // fork（F3）：与 config/convention.php 的后缀白名单一致 —— 去掉 svg，任何请求都不能再把 SVG 加回可上传后缀
+            'configs.accepted_file_suffixes' => 'required|array|in:jpeg,jpg,png,gif,tif,bmp,ico,psd,webp',
 
             'configs.is_enable_scan' => 'boolean',
             'configs.scanned_action' => [

@@ -165,7 +165,7 @@ class Controller extends BaseController
                 if (
                     $image->group?->configs->get(GroupConfigKey::IsEnableWatermark) &&
                     $configs->get('mode', Mode::Overlay) == Mode::Dynamic &&
-                    ! in_array($image->extension, ['ico', 'gif', 'svg'])
+                    ! in_array($image->extension, ['ico', 'gif'])
                 ) {
                     $quality = $image->group?->configs->get(GroupConfigKey::ImageSaveQuality, 75);
                     $contents = $service->stickWatermark($contents, $configs)->encode($image->extension, $quality)->getEncoded();
@@ -185,8 +185,8 @@ class Controller extends BaseController
 
         $mimetype = $image->mimetype;
 
-        // ico svg 图片直接输出，不经过 InterventionImage 处理
-        if (in_array($image->extension, ['ico', 'svg'])) {
+        // ico 图片直接输出，不经过 InterventionImage 处理
+        if (in_array($image->extension, ['ico'])) {
             goto out;
         }
 
