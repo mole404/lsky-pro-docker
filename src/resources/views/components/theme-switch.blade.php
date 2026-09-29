@@ -4,7 +4,7 @@
 --}}
 <div class="relative" x-data="{ open: false }" x-cloak @click.outside="open = false">
     <button type="button" @click="open = !open"
-            class="ls-btn ls-btn-sm px-0 w-9 border-line"
+            class="ls-btn ls-btn-sm px-0 w-10 h-10 rounded-full border-line"
             :title="'外观：' + ($store.theme.mode === 'system' ? '跟随系统' : ($store.theme.mode === 'dark' ? '暗色' : '亮色'))">
         <span class="sr-only">切换外观</span>
         {{-- 跟随系统 --}}

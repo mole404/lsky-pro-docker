@@ -77,7 +77,8 @@
             @endif
         </div>
 
-        <div id="capacity-progress" class="flex flex-col space-y-2 mb-5 px-2 w-full mt-10">
+        {{-- 底部留出空间：原来 mb-5 时容量文字会被浏览器左下角的链接预览挡住（老师反馈）--}}
+        <div id="capacity-progress" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10">
             <p class="text-ink-2 text-[13.5px]">容量使用</p>
             <progress class="w-full h-1.5" value="{{ Auth::user()->use_capacity }}" max="{{ Auth::user()->capacity }}"></progress>
             <p class="text-ink-3 text-[13.5px] truncate">

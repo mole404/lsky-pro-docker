@@ -10,7 +10,8 @@
         </p>
         <div class="mt-3 rounded-xl border-2 border-dotted border-line-2 w-full h-full" id="picker-dnd" onclick="$('#picker').click()">
             <div id="upload-container" class="relative group flex flex-col justify-center items-center gap-4 p-6 w-full h-full min-h-[200px] sm:min-h-[320px] text-ink-3 cursor-pointer">
-                <i id="clear" class="fas fa-times absolute top-2 right-2 w-8 h-8 hidden group-hover:flex justify-center items-center rounded-lg cursor-pointer text-ink-3 hover:text-danger hover:bg-surface-3"></i>
+                {{-- 原来 hidden group-hover:flex：触屏没有 hover，手机上根本点不到；改成常显半透明 --}}
+                <i id="clear" class="fas fa-times absolute top-2 right-2 w-8 h-8 flex justify-center items-center rounded-lg cursor-pointer text-ink-2 opacity-40 hover:opacity-100 hover:text-danger hover:bg-surface-3"></i>
                 <div class="flex flex-col sm:flex-row items-center gap-4 sm:gap-5 text-center sm:text-left">
                     <span class="w-14 h-14 rounded-2xl bg-brand-soft text-brand flex justify-center items-center shrink-0 text-[22px]">
                         <i class="fas fa-cloud-upload-alt"></i>
@@ -22,7 +23,7 @@
                             <button type="button" class="ls-btn ls-btn-primary px-4">
                                 <i class="fas fa-folder-open"></i>选择文件
                             </button>
-                            <button type="button" id="upload-all" title="上传队列中的全部文件" class="ls-btn ls-btn-primary px-4">
+                            <button type="button" id="upload-all" title="上传队列中的全部文件" class="ls-btn ls-btn-primary px-4 hidden">
                                 <i class="fas fa-cloud-upload-alt"></i>上传全部
                             </button>
                         </div>
@@ -80,13 +81,13 @@
         </div>
         <div class="flex flex-col justify-center min-w-0 flex-1 gap-0.5">
             <p class="text-[13.5px] text-ink font-medium truncate">__name__</p>
-            <p class="text-[12.5px] text-ink-3 truncate">
+            <p class="text-[13px] text-ink-2 truncate">
                 <span>__info__</span>, <span class="upload-info">等待上传</span>
             </p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
-            <a href="javascript:void(0)" data-operate="remove" class="flex justify-center items-center w-[28px] h-[28px] rounded-lg cursor-pointer text-ink-2 bg-surface-3 hover:bg-surface hover:text-danger"><i class="fas fa-times text-[12.5px]"></i></a>
-            <a href="javascript:void(0)" data-operate="upload" class="flex justify-center items-center w-[28px] h-[28px] rounded-lg cursor-pointer text-ink-2 bg-surface-3 hover:bg-surface hover:text-brand"><i class="fas fa-upload text-[12.5px]"></i></a>
+            <a href="javascript:void(0)" data-operate="remove" class="flex justify-center items-center w-[28px] h-[28px] rounded-lg cursor-pointer text-ink-2 bg-surface-3 hover:bg-surface hover:text-danger"><i class="fas fa-times text-[13px]"></i></a>
+            <a href="javascript:void(0)" data-operate="upload" class="flex justify-center items-center w-[28px] h-[28px] rounded-lg cursor-pointer text-ink-2 bg-surface-3 hover:bg-surface hover:text-brand"><i class="fas fa-upload text-[13px]"></i></a>
         </div>
     </div>
 </script>
@@ -135,6 +136,12 @@
         let $links = $('#links-container');
         let $picker = $('#picker');
         let queue = []; // 文件队列
+
+        // 「上传全部」只在队列里还有待上传文件时才出现（老师要求：空队列时别显示这个按钮）
+        const syncQueueActions = () => {
+            const hasPending = Object.values(queue).some((item) => item.status !== UPLOAD_SUCCESS);
+            $('#upload-all').toggleClass('hidden', !hasPending);
+        };
         let excludes = ['psd', 'tif']; // 排除支持预览的格式
         /**
          * 设置状态
@@ -144,6 +151,7 @@
          */
         const setStatus = (data, status, message) => {
             queue[data.guid].status = data.status = status;
+            syncQueueActions();
             let $info = data.$preview.find('.upload-info');
             $info.removeClass('text-green-500 text-danger')
             let msg = '';
@@ -212,6 +220,7 @@
                         .replace(/__info__/g, utils.formatSize(file.size));
                     data.$preview = $previews.append(html).show().find(`[data-id="${guid}"]`);
                     queue[guid] = data;
+                    syncQueueActions();
                     setStatus(data, UPLOAD_WAITING);
 
                     // 如果来源是否为粘贴，判断是否需要直接上传
@@ -256,6 +265,7 @@
                     // 如果开启了自动清除缩略图功能
                     if ({{ (Auth::check() && Auth::user()->configs->get(\App\Enums\UserConfigKey::IsAutoClearPreview)) ? 1 : 0 }}) {
                         delete queue[data.$preview.data('id')];
+                        syncQueueActions();
                         data.$preview.remove();
                     } else {
                         setStatus(data, UPLOAD_SUCCESS)
@@ -345,6 +355,7 @@
             e.stopPropagation();
             queue = [];
             $previews.html('');
+            syncQueueActions();
         });
 
         $('[data-tab-name]').click(function () {
