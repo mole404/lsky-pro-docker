@@ -4,6 +4,35 @@
     <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
+    {{-- fork：相册弹窗（#album-switch-modal）自己的样式。本仓库这个补丁只改这一个文件
+         （common.less 不动，所以写在页面里）：
+         1) 哨兵文案：与 common.less 里「只在这个弹窗里藏掉 .infinite-scroll」那条同一思路
+            —— utils.infiniteScroll 往列表末尾插的那行（「加载中.../加载更多/我也是有底线的~」）
+            在相册弹窗里藏掉。列表容器仍 overflow-y-auto，「滚到底继续加载下一页」靠容器自己的
+            scroll 监听，能力没丢（代价同「移动到相册」弹窗：那三种文案在这个弹窗里不再显示，
+            接口 status=false 时仍有 toastr.error）。
+         2) 桌面宽度：x-modal 的卡片宽度是给「详细信息」那类宽内容定的（md:max-w-2xl / lg:max-w-4xl），
+            相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 420px。手机上 x-modal 是底部抽屉
+            （<640px 贴底），这条 media query 不生效，抽屉行为不受影响。
+         3) 触摸设备没有真正的 hover：编辑/删除不能只靠 hover 才出现，否则手机上改不了相册名。
+            （Tailwind 3.0.23 生成的 hover 变体不过滤设备，全站都是这个行为，这里只补这一处。）--}}
+    <style>
+        #album-switch-modal .infinite-scroll {
+            display: none;
+        }
+
+        @media (min-width: 768px) {
+            #album-switch-modal [class*="md:max-w-2xl"] {
+                max-width: 420px;
+            }
+        }
+
+        @media (hover: none) {
+            #album-switch-modal .albums-item .albums-actions {
+                display: flex;
+            }
+        }
+    </style>
 @endpush
 
 <x-app-layout>
@@ -85,7 +114,7 @@
          改成 flex-1（容器是 flex flex-col + min-h-screen），自己吃掉除工具栏外的剩余高度。--}}
     {{-- 图片墙改成随内容长高、由整页滚动承载（手机地址栏才能收起）。
          -mb-14 抵消布局容器的 pb-14（56px）：不留底栏、图片直接铺到页面底。
-         注意：这里不能再有 overflow-hidden —— 抽屉/遮罩已改 fixed，不需要它裁切。--}}
+         注意：这里不能再有 overflow-hidden —— 弹窗/遮罩已是 fixed，不需要它裁切。--}}
     <div class="relative -mb-14">
         <!-- content -->
         {{-- 原来是 absolute inset-0 + overflow-y-scroll 的自滚容器；改成普通块随内容长高，
@@ -93,26 +122,23 @@
         <div id="images-scroll" class="relative dragselect select-none">
             <div id="images-grid" class="dragselect"></div>
         </div>
-        <!-- right drawer -->
-        <div id="drawer-mask" class="fixed hidden inset-0 bg-surface-2 bg-opacity-50 z-[2]" onclick="drawer.close()"></div>
-        <div id="drawer" class="fixed bg-surface w-64 md:w-72 top-14 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
-            <div class="flex justify-between items-center text-md px-3 py-1 border-b">
-                <span class="text-ink-2 truncate" id="drawer-title"></span>
-                <a href="javascript:drawer.close()" class="p-2"><i class="fas fa-times text-brand"></i></a>
-            </div>
-            <div id="drawer-content" class="overflow-y-auto"></div>
-        </div>
     </div>
 
-    {{-- 图片「详细信息」与「移动到相册」改用居中卡片弹窗（复用 components/modal.blade.php，
+    {{-- fork：图片「详细信息」「移动到相册」「相册列表」全部走居中卡片弹窗（复用 components/modal.blade.php，
          手机上它就是「底部抽屉式」——弹窗容器在 <640px 时贴底、不依赖 hover）。
-         右侧抽屉 #drawer 保留它原来的本职：顶部工具栏的「相册列表」入口照旧走抽屉。 --}}
+         旧的右侧抽屉 #drawer / #drawer-mask（markup、JS 状态、无限加载容器）已整块删除：
+         顶部工具栏的「相册」入口现在打开 #album-switch-modal。 --}}
     <x-modal id="image-detail-modal">
         <div id="image-detail-content"></div>
     </x-modal>
 
     <x-modal id="image-movements-modal">
         <div id="image-movements-content"></div>
+    </x-modal>
+
+    {{-- fork：相册弹窗 —— 相册列表从右侧抽屉搬进来，用的是同一个 x-modal 机制 --}}
+    <x-modal id="album-switch-modal">
+        <div id="album-switch-content"></div>
     </x-modal>
 
     <script type="text/html" id="images-item-tpl">
@@ -135,8 +161,40 @@
         </a>
     </script>
 
+    {{-- fork：「相册」弹窗的外壳（内容在 getAlbums() 里渲染进 #album-switch-content）。
+         标题 16px/600；搜索框按相册名**本地**即时过滤已加载的行（不打接口）；
+         #album-switch-scroll 是无限加载容器（每页 40 条、滚到底自动加载下一页），
+         里面放的是 #albums-container-tpl（创建表单 + 相册行 + 加载中/空状态）；
+         底部「完成」只负责关弹窗。桌面约 420px 宽见文件顶部 @push('styles') 里那条规则。 --}}
+    <script type="text/html" id="album-switch-tpl">
+        <div class="mx-auto flex w-full flex-col">
+            <p class="text-[16px] font-semibold leading-6 text-ink">__title__</p>
+            <input type="text" id="album-switch-search" class="ls-input mt-3" placeholder="搜索相册">
+            <div id="album-switch-scroll" class="mt-3 flex max-h-[50vh] w-full flex-col overflow-y-auto pr-1"></div>
+            <div class="mt-4 flex justify-end">
+                <button type="button" id="album-switch-done" class="ls-btn h-11 px-4 sm:h-9">完成</button>
+            </div>
+        </div>
+    </script>
+
     <script type="text/html" id="albums-container-tpl">
         <div id="albums-container" class="flex flex-col justify-center items-center w-full p-3 space-y-2">
+            {{-- fork：加载中（转圈）——第一页回来之前显示，无限加载的 complete 里收起来 --}}
+            <div id="album-switch-loading" class="flex w-full items-center justify-center py-4">
+                <x-loading-spin />
+                <div class="text-[13px] text-ink-3">加载中...</div>
+            </div>
+            {{-- fork：空状态——一个相册都没有时「还没有相册」+ 创建按钮；
+                 有相册但被搜索过滤光了换成「没有匹配的相册」 --}}
+            <div id="album-switch-empty" class="hidden flex w-full flex-col items-center justify-center gap-3 py-4">
+                <p id="album-switch-empty-text" class="text-[14px] text-ink-3">还没有相册</p>
+                <button type="button" class="ls-btn h-11 px-4 sm:h-9" onclick="$('#album-add').toggleClass('hidden')">创建相册</button>
+            </div>
+            {{-- fork：创建相册入口（原抽屉标题上的 + 号，机制一字未改：切换 #album-add 的显示） --}}
+            <button type="button" id="album-switch-create" class="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-left text-[14px] text-brand hover:bg-surface-3" onclick="$('#album-add').toggleClass('hidden')">
+                <i class="fas fa-plus w-4 shrink-0 text-center" aria-hidden="true"></i>
+                <div class="min-w-0 flex-1 truncate">创建相册</div>
+            </button>
             <div id="album-add" class="flex flex-col w-full hidden border rounded p-2">
                 <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
                 <form class="w-full space-y-2" action="/user/albums">
@@ -148,14 +206,22 @@
         </div>
     </script>
 
+    {{-- fork：相册行（列表从抽屉搬进弹窗后重做）：整行是一个点击区（min-h-[44px]，手机也够点），
+         左侧相册名、右侧图片数；当前相册由 getAlbums() 用同一套令牌高亮
+         （border-brand / bg-brand-soft / text-brand）并插入「当前」徽标。
+         编辑/删除沿用原来的 .update / .delete 委托（桌面 hover 才出现，触摸设备靠文件顶部那条规则常显）；
+         基础态必须留着 border-line bg-surface-2 text-ink，toggleClass 才有东西可换。
+         名称保持「第一个直接子 span」：编辑面板里 $item.find('>span').html() 读的就是它。
+         行内除名称外不再放 span（避免被无限加载的「点 span 加载更多」委托命中）。 --}}
     <script type="text/html" id="albums-item-tpl">
-        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item flex justify-between items-center group px-2 h-7 rounded-lg w-full bg-surface-2 text-ink hover:bg-surface-3 hover:text-ink">
-            <span class="text-sm truncate w-[80%] name">__name__</span>
-            <div class="flex items-center justify-center space-x-1 hidden group-hover:block">
+        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item group flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-ink transition-colors duration-150 hover:bg-surface-3">
+            <span class="min-w-0 flex-1 truncate text-[14px] name">__name__</span>
+            __current_badge__
+            <div class="albums-actions flex items-center justify-center space-x-1 hidden group-hover:flex">
                 <span class="update"><i class="fas fa-edit text-[13.5px]"></i></span>
                 <span class="delete"><i class="fas fa-trash-alt text-[13.5px] text-danger"></i></span>
             </div>
-            <span class="group-hover:hidden text-[13.5px]">__image_num__</span>
+            <div class="albums-count shrink-0 text-[13px] text-ink-3 group-hover:hidden">__image_num__ 张</div>
         </a>
     </script>
 
@@ -247,7 +313,7 @@
          按钮沿用全局 ls-btn / ls-btn-primary（与弹窗、页面其它按钮同一套）。
          ⚠ 列表底部那条「我也是有底线的~」是 utils.infiniteScroll 自动插进 #movements-albums 的哨兵，
          在这个弹窗里用 CSS 隐藏（见 common.less：#image-movements-modal .infinite-scroll { display: none }），
-         抽屉里的相册列表照旧显示、不受影响；列表容器仍 overflow-y-auto，
+         别的列表（图片墙那个哨兵）照旧显示、不受影响；列表容器仍 overflow-y-auto，
          「滚到底继续加载下一页相册」的能力没丢（每页 40 条，列表实际总是可滚动的）。 --}}
     <script type="text/html" id="movements-container-tpl">
         <div class="mx-auto flex w-full max-w-xl flex-col">
@@ -300,40 +366,30 @@
 
             const $headerTitle = $(HEADER_TITLE);
             const $photos = $(IMAGES_GRID);
-            const $drawer = $("#drawer");
-            const $drawerMask = $('#drawer-mask');
             // 居中卡片弹窗（复用 components/modal.blade.php 的 Alpine store，用法同 admin 页）
             const modal = Alpine.store('modal');
             // 「移动到相册」弹窗里的相册列表容器 / 底部按钮
             const MOVEMENTS_MODAL = 'image-movements-modal';
             const DETAIL_MODAL = 'image-detail-modal';
+            const ALBUM_MODAL = 'album-switch-modal';
             const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
-            const drawer = {
-                open(title, content, callback) {
-                    $drawerMask.fadeIn();
-                    $drawer.css('right', 0);
-                    $drawer.find('#drawer-title').html(title);
-                    $drawer.find('#drawer-content').html(content);
-                    callback && callback();
-                },
-                close(callback) {
-                    $drawerMask.fadeOut();
-                    $drawer.css('right', '-1000px');
-                    albumsInfinite && albumsInfinite.destroy();
-                    callback && callback();
-                },
-                toggle(title, content, callback) {
-                    if ($drawerMask.is(':hidden')) {
-                        this.open(title, content, callback);
-                    } else {
-                        this.close(callback);
-                    }
-                }
-            }
 
             $photos.justifiedGallery(gridConfigs);
 
             let albumsInfinite = null;
+            // 相册弹窗：渲染内容（外壳 + 列表）→ 跑初始化回调 → 打开弹窗。
+            // 职责与旧的 drawer.open(title, content, callback) 一一对应，只是换成 Alpine 的 modal store。
+            const openAlbums = (content, callback) => {
+                $('#album-switch-content').html(content);
+                $('#album-switch-scroll').html($('#albums-container-tpl').html());
+                callback && callback();
+                modal.open(ALBUM_MODAL);
+            };
+            // 相册弹窗的「收起来」= 旧的 drawer.close()：先收掉相册列表的无限加载，再关弹窗
+            const closeAlbums = () => {
+                albumsInfinite && albumsInfinite.destroy();
+                modal.close(ALBUM_MODAL);
+            };
             const imagesInfinite = utils.infiniteScroll(IMAGES_SCROLL, {
                 url: '{{ route('user.images') }}',
                 classes: ['dragselect'],
@@ -391,14 +447,42 @@
             }
 
             const getAlbums = (options, callback) => {
-                let title = '__title__ <i class="cursor-pointer fas fa-plus text-brand" onclick="$(\'#album-add\').toggleClass(\'hidden\')"></i>'.replace(/__title__/g, (options || {}).title || '我的相册');
-                let content = $('#albums-container-tpl').html();
-                drawer.toggle(title, content, function () {
+                // 相册列表从右侧抽屉搬进居中卡片弹窗（与「移动到相册」同一套 x-modal）：
+                // 外壳（标题 + 本地搜索框 + 列表容器 + 底部「完成」）进 #album-switch-content，
+                // 列表内容（#albums-container：创建/重命名表单 + 相册行）进无限加载容器 #album-switch-scroll。
+                // 创建入口也从抽屉标题的 + 号搬进了列表里（见 #albums-container-tpl）。
+                let content = $('#album-switch-tpl').html().replace(/__title__/g, (options || {}).title || '相册');
+                openAlbums(content, function () {
                     let $albums = $('#albums-container');
                     const CREATE_ID = '#album-add';
                     const UPDATE_ID = '#album-edit';
-                    albumsInfinite = utils.infiniteScroll('#drawer-content', {
+
+                    // 空状态：一行都没有 → 「还没有相册」；有相册但被搜索过滤光了 → 「没有匹配的相册」
+                    const updateEmpty = () => {
+                        let total = $albums.find('>a').length;
+                        let visible = $albums.find('>a:not(.hidden)').length;
+                        $('#album-switch-empty').toggleClass('hidden', visible > 0);
+                        $('#album-switch-empty-text').text(total === 0 ? '还没有相册' : '没有匹配的相册');
+                    };
+
+                    // 搜索框：只在已加载的相册里按名称即时过滤（本地过滤，不打接口）
+                    const applyFilter = () => {
+                        let keyword = ($('#album-switch-search').val() || '').trim().toLowerCase();
+                        $albums.find('>a.albums-item').each(function () {
+                            $(this).toggleClass('hidden', keyword !== '' && $(this).find('.name').text().toLowerCase().indexOf(keyword) === -1);
+                        });
+                        updateEmpty();
+                    };
+
+                    // 上一轮打开留下的无限加载实例先收掉（旧实现是在 drawer.close() 里做的）
+                    albumsInfinite && albumsInfinite.destroy();
+                    albumsInfinite = utils.infiniteScroll('#album-switch-scroll', {
                         url: '{{ route('user.albums') }}',
+                        complete: function () {
+                            // 首屏「加载中...」收起（接口报错也收起，不留一个转不完的圈）
+                            $('#album-switch-loading').addClass('hidden');
+                            updateEmpty();
+                        },
                         success: function (response) {
                             if (!response.status) {
                                 return toastr.error(response.message);
@@ -411,23 +495,30 @@
 
                             let html = '';
                             for (const i in albums) {
-                                let item = $('#albums-item-tpl').html()
+                                html += $('#albums-item-tpl').html()
                                     .replace(/__id__/g, albums[i].id)
                                     .replace(/__name__/g, albums[i].name)
                                     .replace(/__intro__/g, albums[i].intro)
                                     .replace(/__image_num__/g, albums[i].image_num)
+                                    // 当前所在相册标出来（与「移动到相册」弹窗同一个徽标）
+                                    .replace(/__current_badge__/g, albums[i].id === selectedAlbum.id
+                                        ? '<div class="ls-badge shrink-0 bg-brand-soft text-brand">当前</div>'
+                                        : '')
                                     .replace(/__json__/g, JSON.stringify(albums[i]))
-                                if (albums[i].id === selectedAlbum.id) {
-                                    // 选中的相册高亮
-                                    item = item
-                                        .replace(/bg-surface-2/g, 'bg-brand')
-                                        .replace(/text-ink/g, 'text-white')
-                                }
-
-                                html += item;
                             }
 
                             $albums.append(html);
+
+                            // 当前相册高亮：与「移动到相册」弹窗同一套令牌切换
+                            $albums.find('>a').each(function () {
+                                let on = $(this).data('id') === selectedAlbum.id;
+                                $(this)
+                                    .toggleClass('border-brand bg-brand-soft text-brand', on)
+                                    .toggleClass('border-line bg-surface-2 text-ink', ! on);
+                            });
+
+                            // 新追加的页也要跟上当前的搜索词
+                            applyFilter();
 
                             callback && callback.call(this, $albums.get(0));
                         }
@@ -441,7 +532,8 @@
                             selectedAlbum = $(this).data('json');
                         }
                         resetImages({page: 1, album_id: selectedAlbum.id || null});
-                        drawer.close();
+                        // 选中即切换：与旧抽屉一样，切换后把相册弹窗收起来
+                        closeAlbums();
                         ds.clearSelection();
                     });
 
@@ -489,7 +581,9 @@
                                     if (response.data.status) {
                                         selectedAlbum = {};
                                         resetImages();
-                                        setTimeout(_ => drawer.close(), 300)
+                                        // 旧实现是 300ms 后把抽屉整个收掉；弹窗里改成原地刷新列表
+                                        // —— 删掉的那一行立刻消失、图片数跟着重算，用户还能接着挑别的相册
+                                        resetAlbums();
                                     } else {
                                         toastr.error(response.data.message);
                                     }
@@ -530,6 +624,12 @@
                             }
                         });
                     });
+
+                    // 搜索框：输入即过滤（本地，不打接口）
+                    $('#album-switch-search').off('input').on('input', _ => applyFilter());
+
+                    // 底部「完成」：只关弹窗
+                    $('#album-switch-done').off('click').on('click', _ => closeAlbums());
                 });
             }
 
@@ -644,8 +744,8 @@
 
             const methods = {
                 movements() {
-                    // 「移动到相册」改用居中卡片弹窗（不再渲染进右侧抽屉 ——
-                    // 抽屉只留给顶部工具栏的「相册列表」入口）。
+                    // 「移动到相册」走居中卡片弹窗（相册列表也在 #album-switch-modal 里，
+                    // 页面里已经没有右侧抽屉了）。
                     // 相册列表仍走同一个 user.albums 接口 + 同一个 utils.infiniteScroll；
                     // 弹窗内是单选列表（当前所在相册带「当前」标记），底部「移动」「取消」。
                     let selected = ds.getSelection().map(item => $(item).data('id'));
@@ -742,7 +842,9 @@
                         id: null,
                     }).then(response => {
                         if (response.data.status) {
-                            drawer.close();
+                            // 旧实现顺手把右侧抽屉收掉；语义照旧 —— 相册面板这时是脏的（图片数变了），
+                            // 收起来（弹窗开着时点不到工具栏上的操作，这里是防御性关闭）
+                            closeAlbums();
                             resetImages();
                             toastr.success(response.data.message);
                         } else {
