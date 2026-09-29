@@ -12,7 +12,8 @@
             scroll 监听，能力没丢（代价同「移动到相册」弹窗：那三种文案在这个弹窗里不再显示，
             接口 status=false 时仍有 toastr.error）。
          2) 桌面宽度：x-modal 的卡片宽度是给「详细信息」那类宽内容定的（md:max-w-2xl / lg:max-w-4xl），
-            相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 420px。手机上 x-modal 是底部抽屉
+            相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 520px（原来 420px，用户反馈
+            「稍微加宽一些」）。手机上 x-modal 是底部抽屉
             （<640px 贴底），这条 media query 不生效，抽屉行为不受影响。
          3) 相册行的编辑/删除是**行内常显的 44×44 按钮**（不再靠 hover 才出现），所以这里
             不再需要 @media (hover: none) 那条「给触摸设备常显操作按钮」的补丁 —— 已删掉，
@@ -24,7 +25,7 @@
 
         @media (min-width: 768px) {
             #album-switch-modal [class*="md:max-w-2xl"] {
-                max-width: 420px;
+                max-width: 520px;
             }
         }
     </style>
@@ -162,7 +163,7 @@
          里面放的是 #albums-container-tpl（创建表单 + 相册行 + 加载中/空状态）。
          列表是弹窗里**唯一的主体**：底部那个「完成」按钮已删掉（右上角 ✕ 关弹窗就够），
          所以 max-h-[50vh] + overflow-y-auto 这条限高/滚动规则仍然只归列表自己，别再往底部加东西。
-         桌面约 420px 宽见文件顶部 @push('styles') 里那条规则。 --}}
+         桌面约 520px 宽见文件顶部 @push('styles') 里那条规则。 --}}
     <script type="text/html" id="album-switch-tpl">
         <div class="mx-auto flex w-full flex-col">
             <p class="text-[16px] font-semibold leading-6 text-ink">__title__</p>
@@ -207,14 +208,18 @@
          为什么按钮要移出 <a>：它们原来长在行链接里，图标可点区只有十几像素，点不中就落到
          <a> 上直接跳进相册 —— 移出来 + 给足 44px 才点得中（顺带不用 group-hover 切换，
          张数也不再被按钮顶掉，行内容不再抽动）。
-         名称保持 <a> 里「第一个直接子 span」（class 带 name）：编辑面板读的就是它；
-         张数保持 <div class="albums-count">（行内除名称外不放别的 span —— 免得被无限加载
-         「点 span 加载更多」的委托命中；按钮/图标本身不带 span）。
-         基础态必须留着 border-line bg-surface，toggleClass 才有东西可换。 --}}
+         名称是 <a> 里的 <div class="name">（**原来这里是 <span>**：utils.infiniteScroll 对列表
+         容器挂的是「点里面的 span 就加载更多」的委托，相册名是 span 时点一下名字就顺手多拉
+         一页相册 —— 现在行内除哨兵外一个 span 都没有；编辑面板按 class 找的 .name 照旧）。
+         张数保持 <div class="albums-count">。
+         基础态必须留着 border-line bg-surface，toggleClass 才有东西可换。
+
+         ⚠ 列表末尾那条「我也是有底线的~」哨兵是 utils.infiniteScroll 自己插进去的
+         `.infinite-scroll > span`，那才是**有意的**触发器，必须保持 span、不要动。 --}}
     <script type="text/html" id="albums-item-tpl">
         <div class="albums-row flex items-stretch min-h-[44px] w-full rounded-lg border border-line bg-surface" data-id="__id__" data-json='__json__'>
             <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item group flex min-w-0 flex-1 items-center gap-2.5 rounded-l-lg px-3 py-1">
-                <span class="min-w-0 flex-1 truncate text-[14px] name">__name__</span>
+                <div class="min-w-0 flex-1 truncate text-[14px] name">__name__</div>
                 __current_badge__
                 <div class="albums-count shrink-0 text-[13px] text-ink-3">__image_num__ 张</div>
             </a>
@@ -327,8 +332,10 @@
         </div>
     </script>
 
-    {{-- 相册列表行：整行是一个点击区（min-h-[44px]），不用 span（避免被无限加载的
-         "点 span 加载更多"委托命中）。选中态由 JS 切换 border-brand/bg-brand-soft/text-brand
+    {{-- 相册列表行：整行是一个点击区（min-h-[44px]），**行内一个 span 都不用** —— 名称是 <div>、
+         「当前」徽标（JS 拼的 .ls-badge）也是 <div>，免得被无限加载「点 span 加载更多」的委托命中
+         （点一下相册名就多拉一页相册）。列表末尾那条哨兵是 utils.infiniteScroll 插的
+         `.infinite-scroll > span`，那个必须保持 span。选中态由 JS 切换 border-brand/bg-brand-soft/text-brand
          （所以基础态必须留着 border-line bg-surface-2 text-ink，toggleClass 才有东西可换）。 --}}
     <script type="text/html" id="movements-album-item-tpl">
         <a href="javascript:void(0)" data-id="__id__" data-selected="false" class="movements-album flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-ink transition-colors duration-150 hover:bg-surface-3">

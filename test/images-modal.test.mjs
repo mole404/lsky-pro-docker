@@ -144,10 +144,14 @@ console.log('\n[相册弹窗] 标题/搜索/行内分区（44px 切换区 + 常�
         && blade.includes("$('#album-switch-search').off('input').on('input', _ => applyFilter());"));
     check('列表容器 max-h-[50vh] + overflow-y-auto（滚到底自动加载下一页）',
         /id="album-switch-scroll"[^>]*class="[^"]*overflow-y-auto[^"]*"/.test(shellTpl) && shellTpl.includes('max-h-[50vh]'));
-    check('每行点击区 ≥44px、左名右数（名称仍是 <a> 里第一个直接子 span，张数仍是 <div>）',
+    // 名称从 <span> 改成 <div>（保留 class name）：app.js 的无限加载对列表容器挂的是
+    // 「点里面的 span 就加载更多」的委托，相册名是 span 时点一下名字会顺手多拉一页相册。
+    // 行内除哨兵（utils.infiniteScroll 自己插的 .infinite-scroll > span）外不能有 span。
+    check('每行点击区 ≥44px、左名右数（名称是 <div class="name">、张数 <div>，行内除哨兵外没有 span）',
         itemTpl.includes('min-h-[44px]')
-        && itemTpl.includes('class="min-w-0 flex-1 truncate text-[14px] name"')
-        && /<div class="albums-count shrink-0 text-\[13px\] text-ink-3">__image_num__ 张<\/div>/.test(itemTpl));
+        && /<div class="min-w-0 flex-1 truncate text-\[14px\] name">__name__<\/div>/.test(itemTpl)
+        && /<div class="albums-count shrink-0 text-\[13px\] text-ink-3">__image_num__ 张<\/div>/.test(itemTpl)
+        && ! /<span/.test(itemTpl));
 
     const linkPart = itemTpl.slice(itemTpl.indexOf('<a '), itemTpl.indexOf('</a>') + 4);
     const actionsPart = itemTpl.slice(itemTpl.indexOf('albums-actions'));
@@ -195,6 +199,10 @@ console.log('\n[相册弹窗] 标题/搜索/行内分区（44px 切换区 + 常�
     check('哨兵在相册弹窗里藏掉（同思路写了新的一条，common.less 那条没动）',
         /#album-switch-modal \.infinite-scroll \{\s*display: none;\s*\}/.test(blade)
         && /#image-movements-modal\s*\{\s*\.infinite-scroll\s*\{\s*display:\s*none;?\s*\}\s*\}/.test(read('resources', 'css', 'common.less')));
+    // 桌面宽度：420px → 520px（保持「只按弹窗 id 收窄 md:max-w-2xl 那档」这个思路，别的档不动）
+    check('桌面宽度从 420px 加宽到 520px（仍然是 @media min-width:768px + 按弹窗 id 收窄 md:max-w-2xl）',
+        /@media \(min-width: 768px\)\s*\{\s*#album-switch-modal \[class\*="md:max-w-2xl"\] \{\s*max-width: 520px;\s*\}\s*\}/.test(blade)
+        && ! blade.includes('max-width: 420px'));
 }
 
 
@@ -238,6 +246,12 @@ console.log('\n[移动到相册] 单选 + 当前相册标记 + 手机点击区 �
     check('当前所在相册标出来（__current_badge__ + selectedAlbum.id 比较）',
         movementsItemTpl.includes('__current_badge__') && blade.includes('albums[i].id === selectedAlbum.id'));
     check('每行点击区 ≥44px（min-h-[44px]）', movementsItemTpl.includes('min-h-[44px]'));
+    // 同一个原因：行里别放 span（名称/「当前」徽标都是 <div>），否则点相册名会被
+    // app.js 那条「点 span 加载更多」的委托命中、顺手多拉一页相册。
+    check('行内一个 span 都没有（名称 <div>、「当前」徽标也是 <div class="ls-badge">）',
+        ! /<span/.test(movementsItemTpl)
+        && movementsItemTpl.includes('<div class="min-w-0 flex-1 truncate text-[14px]">__name__</div>')
+        && /\? '<div class="ls-badge shrink-0 bg-brand-soft text-brand">当前<\/div>'/.test(blade));
     check('底部「移动」「取消」都在，移动默认禁用（没选相册不许提交）',
         /id="movements-confirm"[^>]*disabled/.test(movementsContainerTpl) && movementsContainerTpl.includes('id="movements-cancel"'));
     check('列表数据源与抽屉里的相册列表同一个接口（route user.albums）',
