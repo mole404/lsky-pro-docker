@@ -36,7 +36,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   b916555ab122d2b3db99153d9316a887  src/resources/js/context-js.js
 #   b916555ab122d2b3db99153d9316a887  src/public/js/context-js/context-js.js
-#   91839d2fdbe34face7ab07065b4d72b2  src/resources/views/user/images.blade.php
+#   5da6f22c67fc824d5af88a7de32ad7f6  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
@@ -2008,12 +2008,13 @@
 +})();
 --- a/resources/views/user/images.blade.php
 +++ b/resources/views/user/images.blade.php
-@@ -7,21 +7,22 @@
+@@ -7,21 +7,23 @@
  @endpush
  
  <x-app-layout>
 -    <div class="relative flex justify-between items-center px-2 py-2 z-[3] top-0 left-0 right-0 bg-white border-solid border-b">
-+    <div class="relative flex justify-between items-center px-2 py-2 z-[3] top-0 left-0 right-0 bg-surface border-solid border-b">
++    {{-- 整页滚动后工具栏要吸在固定顶栏下面（top-14 = 56px），否则一滚就没了 --}}
++    <div class="sticky top-14 flex justify-between items-center px-2 py-2 z-[3] left-0 right-0 bg-surface border-solid border-b">
          <div class="space-x-2 flex justify-between items-center">
 -            <a class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:getAlbums()"><i class="fas fa-bars text-blue-500"></i> 相册</a>
 +            <a class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:getAlbums()"><i class="fas fa-bars text-brand"></i> 相册</a>
@@ -2040,7 +2041,7 @@
                      </x-slot>
  
                      <x-slot name="content">
-@@ -32,17 +33,18 @@
+@@ -32,17 +34,18 @@
                          <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
                          <x-dropdown-link data-operate="rename" class="hidden" href="javascript:void(0)" @click="open = false">重命名</x-dropdown-link>
                          <x-dropdown-link data-operate="delete" class="hidden" href="javascript:void(0)" @click="open = false">删除</x-dropdown-link>
@@ -2062,7 +2063,7 @@
                      </a>
                  </x-slot>
  
-@@ -59,9 +61,9 @@
+@@ -59,9 +62,9 @@
              </x-dropdown>
              <x-dropdown direction="left">
                  <x-slot name="trigger">
@@ -2074,7 +2075,7 @@
                      </a>
                  </x-slot>
  
-@@ -76,17 +78,23 @@
+@@ -76,17 +79,26 @@
              </x-dropdown>
          </div>
      </div>
@@ -2083,18 +2084,22 @@
 +         所以这里不能再靠祖先的高度：h-full 的百分比会解析成 auto，里面的
 +         #images-scroll（absolute inset-0）就跟着算成 0 高 —— 图片墙整片消失。
 +         改成 flex-1（容器是 flex flex-col + min-h-screen），自己吃掉除工具栏外的剩余高度。--}}
-+    {{-- -mb-14 抵消布局容器的 pb-14（56px）：不留底栏，图片墙直接铺到视口底，
-+         否则最下面会空出一条 56px 的白带。容器没有固定底栏要吃这个内边距。--}}
-+    <div class="relative overflow-hidden flex-1 -mb-14">
++    {{-- 图片墙改成随内容长高、由整页滚动承载（手机地址栏才能收起）。
++         -mb-14 抵消布局容器的 pb-14（56px）：不留底栏、图片直接铺到页面底。
++         注意：这里不能再有 overflow-hidden —— 抽屉/遮罩已改 fixed，不需要它裁切。--}}
++    <div class="relative -mb-14">
          <!-- content -->
-         <div id="images-scroll" class="absolute inset-0 overflow-y-scroll dragselect select-none">
+-        <div id="images-scroll" class="absolute inset-0 overflow-y-scroll dragselect select-none">
++        {{-- 原来是 absolute inset-0 + overflow-y-scroll 的自滚容器；改成普通块随内容长高，
++             无限加载由 utils.infiniteScroll(..., {root:'window'}) 跟随整页滚动 --}}
++        <div id="images-scroll" class="relative dragselect select-none">
              <div id="images-grid" class="dragselect"></div>
          </div>
          <!-- right drawer -->
 -        <div id="drawer-mask" class="absolute hidden inset-0 bg-gray-500 bg-opacity-50 z-[2]" onclick="drawer.close()"></div>
 -        <div id="drawer" class="absolute bg-white w-64 md:w-72 top-0 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
-+        <div id="drawer-mask" class="absolute hidden inset-0 bg-surface-2 bg-opacity-50 z-[2]" onclick="drawer.close()"></div>
-+        <div id="drawer" class="absolute bg-surface w-64 md:w-72 top-0 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
++        <div id="drawer-mask" class="fixed hidden inset-0 bg-surface-2 bg-opacity-50 z-[2]" onclick="drawer.close()"></div>
++        <div id="drawer" class="fixed bg-surface w-64 md:w-72 top-14 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
              <div class="flex justify-between items-center text-md px-3 py-1 border-b">
 -                <span class="text-gray-600 truncate" id="drawer-title"></span>
 -                <a href="javascript:drawer.close()" class="p-2"><i class="fas fa-times text-blue-500"></i></a>
@@ -2103,7 +2108,7 @@
              </div>
              <div id="drawer-content" class="overflow-y-auto"></div>
          </div>
-@@ -96,13 +104,16 @@
+@@ -96,13 +108,16 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -2123,7 +2128,7 @@
                  </div>
              </div>
              <img alt="__name__" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
-@@ -114,22 +125,22 @@
+@@ -114,22 +129,22 @@
              <div id="album-add" class="flex flex-col w-full hidden border rounded p-2">
                  <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
                  <form class="w-full space-y-2" action="/user/albums">
@@ -2153,7 +2158,7 @@
          </a>
      </script>
  
-@@ -137,9 +148,9 @@
+@@ -137,9 +152,9 @@
          <div id="album-edit" data-id="__id__" class="flex flex-col w-full border rounded p-2">
              <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
              <form class="w-full space-y-2" action="/user/albums/__id__">
@@ -2166,7 +2171,7 @@
              </form>
          </div>
      </script>
-@@ -148,51 +159,51 @@
+@@ -148,51 +163,51 @@
          <div class="my-4 px-4 space-y-3">
              <div>
                  <span class="text-sm font-semibold">相册名称</span>
@@ -2230,7 +2235,7 @@
              </div>
          </div>
      </script>
-@@ -201,7 +212,8 @@
+@@ -201,7 +216,8 @@
          <script src="{{ asset('js/justified-gallery/jquery.justifiedGallery.min.js') }}"></script>
          <script src="{{ asset('js/viewer-js/viewer.min.js') }}"></script>
          <script src="{{ asset('js/dragselect/ds.min.js') }}"></script>
@@ -2240,7 +2245,15 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -308,7 +320,7 @@
+@@ -255,6 +271,7 @@
+             const imagesInfinite = utils.infiniteScroll(IMAGES_SCROLL, {
+                 url: '{{ route('user.images') }}',
+                 classes: ['dragselect'],
++                root: 'window',                     // 图片墙已是整页滚动（见上面的容器注释）
+                 success: function (response) {
+                     if (!response.status) {
+                         return toastr.error(response.message);
+@@ -308,7 +325,7 @@
              }
  
              const getAlbums = (options, callback) => {
@@ -2249,7 +2262,7 @@
                  let content = $('#albums-container-tpl').html();
                  drawer.toggle(title, content, function () {
                      let $albums = $('#albums-container');
-@@ -337,8 +349,8 @@
+@@ -337,8 +354,8 @@
                                  if (albums[i].id === selectedAlbum.id) {
                                      // 选中的相册高亮
                                      item = item
@@ -2260,7 +2273,7 @@
                                  }
  
                                  html += item;
-@@ -486,10 +498,10 @@
+@@ -486,10 +503,10 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -2273,7 +2286,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -509,6 +521,26 @@
+@@ -509,6 +526,26 @@
              ds.subscribe('elementselect', _ => bindOperates());
              ds.subscribe('elementunselect', _ => bindOperates());
  
@@ -2300,7 +2313,7 @@
              $photos.on('click', '.image-selector', function () {
                  ds.toggleSelection($(this).closest('a'));
                  bindOperates();
-@@ -575,7 +607,7 @@
+@@ -575,7 +612,7 @@
                  permission() {
                      Swal.fire({
                          title: '选择一个权限',
@@ -2309,7 +2322,7 @@
                          input: 'select',
                          inputOptions: {
                              public: '公开',
-@@ -853,6 +885,10 @@
+@@ -853,6 +890,10 @@
                      case 'delete': // 删除
                          methods.delete();
                          break;

@@ -7,7 +7,8 @@
 @endpush
 
 <x-app-layout>
-    <div class="relative flex justify-between items-center px-2 py-2 z-[3] top-0 left-0 right-0 bg-surface border-solid border-b">
+    {{-- 整页滚动后工具栏要吸在固定顶栏下面（top-14 = 56px），否则一滚就没了 --}}
+    <div class="sticky top-14 flex justify-between items-center px-2 py-2 z-[3] left-0 right-0 bg-surface border-solid border-b">
         <div class="space-x-2 flex justify-between items-center">
             <a class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:getAlbums()"><i class="fas fa-bars text-brand"></i> 相册</a>
             <div class="flex-row hidden lg:flex">
@@ -82,16 +83,19 @@
          所以这里不能再靠祖先的高度：h-full 的百分比会解析成 auto，里面的
          #images-scroll（absolute inset-0）就跟着算成 0 高 —— 图片墙整片消失。
          改成 flex-1（容器是 flex flex-col + min-h-screen），自己吃掉除工具栏外的剩余高度。--}}
-    {{-- -mb-14 抵消布局容器的 pb-14（56px）：不留底栏，图片墙直接铺到视口底，
-         否则最下面会空出一条 56px 的白带。容器没有固定底栏要吃这个内边距。--}}
-    <div class="relative overflow-hidden flex-1 -mb-14">
+    {{-- 图片墙改成随内容长高、由整页滚动承载（手机地址栏才能收起）。
+         -mb-14 抵消布局容器的 pb-14（56px）：不留底栏、图片直接铺到页面底。
+         注意：这里不能再有 overflow-hidden —— 抽屉/遮罩已改 fixed，不需要它裁切。--}}
+    <div class="relative -mb-14">
         <!-- content -->
-        <div id="images-scroll" class="absolute inset-0 overflow-y-scroll dragselect select-none">
+        {{-- 原来是 absolute inset-0 + overflow-y-scroll 的自滚容器；改成普通块随内容长高，
+             无限加载由 utils.infiniteScroll(..., {root:'window'}) 跟随整页滚动 --}}
+        <div id="images-scroll" class="relative dragselect select-none">
             <div id="images-grid" class="dragselect"></div>
         </div>
         <!-- right drawer -->
-        <div id="drawer-mask" class="absolute hidden inset-0 bg-surface-2 bg-opacity-50 z-[2]" onclick="drawer.close()"></div>
-        <div id="drawer" class="absolute bg-surface w-64 md:w-72 top-0 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
+        <div id="drawer-mask" class="fixed hidden inset-0 bg-surface-2 bg-opacity-50 z-[2]" onclick="drawer.close()"></div>
+        <div id="drawer" class="fixed bg-surface w-64 md:w-72 top-14 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
             <div class="flex justify-between items-center text-md px-3 py-1 border-b">
                 <span class="text-ink-2 truncate" id="drawer-title"></span>
                 <a href="javascript:drawer.close()" class="p-2"><i class="fas fa-times text-brand"></i></a>
@@ -267,6 +271,7 @@
             const imagesInfinite = utils.infiniteScroll(IMAGES_SCROLL, {
                 url: '{{ route('user.images') }}',
                 classes: ['dragselect'],
+                root: 'window',                     // 图片墙已是整页滚动（见上面的容器注释）
                 success: function (response) {
                     if (!response.status) {
                         return toastr.error(response.message);
