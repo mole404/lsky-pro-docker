@@ -217,6 +217,20 @@ RUN curl -fsSL -o /usr/local/bin/install-php-extensions \
 # 开启SSL
 RUN a2enmod ssl && a2ensite default-ssl
 
+# F21 修正（CI 实撞，2026-09-30）：Debian 自带的 /etc/apache2/sites-available/default-ssl.conf
+# 由上面的 a2ensite 启用，而它**仍指向被删掉的那对 snakeoil 证书文件** → Apache 启动时配置校验报
+#   AH00526: SSLCertificateFile: file '/etc/ssl/certs/ssl-cert-snakeoil.pem' does not exist or is empty
+# 整个 Apache 起不来（症状很难认：容器进程在、安装页返回 000）。
+# 把它也指到入口脚本运行期生成的那对证书（路径固定，与 000-default.conf.template 的 HTTPS vhost 一致）。
+# 护栏按**文件路径**判而不是按 "snakeoil" 这个词判 —— 该文件里有一句提到 snakeoil 的注释是正常的。
+# （本地在真容器里模拟过：改完 + 证书就位 → apache2ctl -t 输出 Syntax OK）
+RUN sed -i \
+        -e 's#/etc/ssl/certs/ssl-cert-snakeoil.pem#/etc/apache2/ssl/lsky-selfsigned.crt#' \
+        -e 's#/etc/ssl/private/ssl-cert-snakeoil.key#/etc/apache2/ssl/lsky-selfsigned.key#' \
+        /etc/apache2/sites-available/default-ssl.conf \
+    && ! grep -rn '/etc/ssl/certs/ssl-cert-snakeoil\|/etc/ssl/private/ssl-cert-snakeoil' /etc/apache2/ \
+    && grep -q 'lsky-selfsigned.crt' /etc/apache2/sites-available/default-ssl.conf
+
 # ftp 必须**显式**装进运行时镜像：官方 php:8.1 镜像自带 ftp，php:8.3 的没有
 # （2026-09-28 换 8.3 时 CI 实测：builder 阶段 composer install 直接失败，
 #  报 league/flysystem-ftp requires ext-ftp）。它是 Lsky 的 FTP 存储驱动要用的扩展，
@@ -298,8 +312,8 @@ RUN command -v curl > /dev/null
 RUN command -v openssl > /dev/null
 WORKDIR /var/www/html/
 VOLUME /var/www/html
-ENV WEB_PORT 8089
-ENV HTTPS_PORT 8088
+ENV WEB_PORT=8089
+ENV HTTPS_PORT=8088
 EXPOSE ${WEB_PORT}
 EXPOSE ${HTTPS_PORT}
 
