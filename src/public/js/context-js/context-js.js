@@ -250,8 +250,16 @@ window.context = window.context || (function () {
             // 只关 a 的话，主题里的 `.dropdown-submenu:hover > a` 仍会因为 li 被 hover 而给「复制链接」上色。
             // 另外 hover 那套是「底色 + 文字变白」两件一起上（见 context-js.less 的 li>a:hover），
             // 所以文字色也一并还原 —— 万一 :hover/:focus 还是粘住了，那一项也保持原样，不会变成白底白字。
-            + '.dropdown-context.menu-arming > li,'
-            + ' .dropdown-context.menu-arming > li > a {'
+            //
+            // ⚠ color / background-color 这两条强制覆盖只准落在「真正的菜单项」(`> li > a`) 上，不能落在 li 层：
+            //   标题是 `> li.nav-header`，自带灰色（.nav-header{color:var(--lsky-text-3)}），
+            //   被 `color:inherit` 压成面板继承来的近黑（--lsky-text）→ 守卫窗口内「图片操作」黑一下、
+            //   窗口一过又弹回灰色 = 老师看到的闪烁；
+            //   同理分隔线 `> li.divider` 有自己的底色，也会被 `background-color:transparent` 打掉又弹回来。
+            // 防误触真正的关键是 li 上的 pointer-events:none（配合 a 上那份），把强制换色的声明收窄到 a
+            // 不会削弱任何一层守卫：li 层原本也不需要靠换色来防误触。
+            + '.dropdown-context.menu-arming > li { pointer-events: none !important; }'
+            + '.dropdown-context.menu-arming > li > a {'
             + ' pointer-events: none !important; background-color: transparent !important; color: inherit !important; }'
             // 刚弹出的一瞬间：项不接受指针事件（浏览器就不会把它当成 hover 目标 → 不会高亮），
             // 同时把 hover 底色压平做双保险；不改变任何尺寸/位置，面板本身照旧接收点击（由守卫吞掉）。

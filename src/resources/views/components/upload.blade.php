@@ -35,21 +35,27 @@
     </div>
 
     <div id="links-container" class="hidden mb-4 bg-surface rounded-md shadow-card">
-        {{-- 标签栏与「复制全部 / 清除」并排：标签栏自己横向滚动，按钮固定在右侧，
-             不会再压在 Markdown with link / Thumbnail url 上面（原来按钮是绝对定位盖上去的）。
-             按钮改成常显：手机上根本没有 hover，原来那种 hover 才出现等于点不到。 --}}
-        <div class="flex flex-wrap items-end gap-x-3 gap-y-1 px-4 pt-2 border-b border-line">
-            {{-- 标签多了之后不用横向滚动（老师反馈：滚动方案看不出还有一项、标题栏也被挤）。
-                 改成换行：6 个标签永远全部可见，窄屏自动折成两行。 --}}
-            <div id="link-tabs" class="flex flex-wrap text-sm flex-1 min-w-0">
-                <a href="javascript:void(0)" data-tab-name="url" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-brand active">URL</a>
-                <a href="javascript:void(0)" data-tab-name="html" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent">HTML</a>
-                <a href="javascript:void(0)" data-tab-name="bbcode" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent">BBCode</a>
-                <a href="javascript:void(0)" data-tab-name="markdown" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent">Markdown</a>
-                <a href="javascript:void(0)" data-tab-name="markdown_with_link" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent whitespace-nowrap">Markdown with link</a>
-                <a href="javascript:void(0)" data-tab-name="thumbnail_url" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent whitespace-nowrap">Thumbnail url</a>
+        {{-- 结果区顶栏：手机上下两行，桌面（sm 起）一行。
+             之前三项挤在同一行 + flex-wrap：窄屏时按钮（shrink-0）先占掉约 130px，
+             标签栏只剩 192px → 6 个标签折成 4 行、参差不齐，「复制全部/清除」
+             还把最后一行 Thumbnail url 挤在右边。现在：
+               · 手机：#link-tabs 独占整行（= 卡片内宽），flex-nowrap + overflow-x-auto
+                 横向滑动，每个标签 whitespace-nowrap + shrink-0 保证不被压掉；
+                 按钮另起一行、靠右（column 下子项默认拉满，justify-end 即可右对齐）。
+               · 桌面：sm:flex-wrap 恢复常规铺开；标签栏 flex-1 撑开剩余宽度，
+                 按钮自然落在右侧同一行（不需要 ml-auto）。
+             scrollbar-none 来自 common.less（已有的滚动条隐藏类）。 --}}
+        <div class="flex flex-col sm:flex-row sm:items-end gap-y-1 px-4 pt-2 border-b border-line">
+            <div id="link-tabs" class="flex flex-nowrap sm:flex-wrap overflow-x-auto scrollbar-none text-sm flex-1 min-w-0">
+                <a href="javascript:void(0)" data-tab-name="url" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-brand active whitespace-nowrap shrink-0">URL</a>
+                <a href="javascript:void(0)" data-tab-name="html" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent whitespace-nowrap shrink-0">HTML</a>
+                <a href="javascript:void(0)" data-tab-name="bbcode" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent whitespace-nowrap shrink-0">BBCode</a>
+                <a href="javascript:void(0)" data-tab-name="markdown" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent whitespace-nowrap shrink-0">Markdown</a>
+                <a href="javascript:void(0)" data-tab-name="markdown_with_link" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent whitespace-nowrap shrink-0">Markdown with link</a>
+                <a href="javascript:void(0)" data-tab-name="thumbnail_url" class="hover:bg-surface-2 flex justify-center items-center px-4 py-2 border-b-2 border-transparent whitespace-nowrap shrink-0">Thumbnail url</a>
             </div>
-            <div class="flex items-center gap-1 shrink-0 pb-2 ml-auto">
+            {{-- 手机：column 下这一行拉满宽度，justify-end 右对齐；桌面：标签栏 flex-1 撑开，这里自然靠右。 --}}
+            <div class="flex items-center justify-end gap-1 shrink-0 pb-2">
                 <span id="copy-all" class="px-2 py-1 rounded-md text-[13.5px] text-ink-2 bg-surface-3 hover:bg-surface-2 cursor-pointer">复制全部</span>
                 <span id="clear-all" class="px-2 py-1 rounded-md text-[13.5px] text-ink-2 bg-surface-3 hover:bg-surface-2 cursor-pointer">清除</span>
             </div>
@@ -278,11 +284,14 @@
                     // 缩略图地址接口本来就返回了（thumbnail_url）；非图片文件没有该字段就不显示预览。
                     let thumb = links.thumbnail_url ? links.thumbnail_url.toString() : '';
                     for (let key in links) {
-                        let row = '<div class="flex items-start gap-2 mt-1">';
+                        // 行：缩略图固定 40x40 不压缩；文本 min-w-0 + truncate 单行省略，
+                        // 不再让长 URL 顶到卡片右边缘溢出（原来是 overflow-scroll 横向滚动条）。
+                        // select-all / cursor-pointer 原样保留，点行选中的复制行为不变。
+                        let row = '<div class="flex items-center gap-2 mt-1 min-w-0">';
                         if (thumb) {
                             row += '<img src="' + thumb + '" alt="缩略图" class="w-10 h-10 rounded object-cover bg-surface-2 shrink-0" onerror="this.style.display=\'none\'">';
                         }
-                        row += '<p class="whitespace-nowrap select-all bg-surface-2 hover:bg-surface-3 text-ink-2 rounded px-2 py-1 cursor-pointer overflow-scroll scrollbar-none">' + links[key].toString() + '</p>';
+                        row += '<p class="min-w-0 flex-1 truncate select-all bg-surface-2 hover:bg-surface-3 text-ink-2 rounded px-2 py-1 cursor-pointer">' + links[key].toString() + '</p>';
                         row += '</div>';
                         $('#links [data-tab="' + key + '"]').append(row);
                     }

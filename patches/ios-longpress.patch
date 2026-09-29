@@ -34,8 +34,8 @@
 #      桌面端不受影响：仍是 hover 侧开 + fitSubmenu 钳制。
 #
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
-#   3614ec17912e56dd6439b7acfccffd2c  src/resources/js/context-js.js
-#   3614ec17912e56dd6439b7acfccffd2c  src/public/js/context-js/context-js.js
+#   b13fc1e4fede8c55c25862eb13cfcfcf  src/resources/js/context-js.js
+#   b13fc1e4fede8c55c25862eb13cfcfcf  src/public/js/context-js/context-js.js
 #   09ba35f39ace53533513f168c739e0ab  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
@@ -95,7 +95,7 @@
      let options = {
          fadeSpeed: 100,
          filter: function ($obj) {
-@@ -15,14 +55,819 @@
+@@ -15,14 +55,827 @@
          compress: false
      };
  
@@ -294,8 +294,16 @@
 +            // 只关 a 的话，主题里的 `.dropdown-submenu:hover > a` 仍会因为 li 被 hover 而给「复制链接」上色。
 +            // 另外 hover 那套是「底色 + 文字变白」两件一起上（见 context-js.less 的 li>a:hover），
 +            // 所以文字色也一并还原 —— 万一 :hover/:focus 还是粘住了，那一项也保持原样，不会变成白底白字。
-+            + '.dropdown-context.menu-arming > li,'
-+            + ' .dropdown-context.menu-arming > li > a {'
++            //
++            // ⚠ color / background-color 这两条强制覆盖只准落在「真正的菜单项」(`> li > a`) 上，不能落在 li 层：
++            //   标题是 `> li.nav-header`，自带灰色（.nav-header{color:var(--lsky-text-3)}），
++            //   被 `color:inherit` 压成面板继承来的近黑（--lsky-text）→ 守卫窗口内「图片操作」黑一下、
++            //   窗口一过又弹回灰色 = 老师看到的闪烁；
++            //   同理分隔线 `> li.divider` 有自己的底色，也会被 `background-color:transparent` 打掉又弹回来。
++            // 防误触真正的关键是 li 上的 pointer-events:none（配合 a 上那份），把强制换色的声明收窄到 a
++            // 不会削弱任何一层守卫：li 层原本也不需要靠换色来防误触。
++            + '.dropdown-context.menu-arming > li { pointer-events: none !important; }'
++            + '.dropdown-context.menu-arming > li > a {'
 +            + ' pointer-events: none !important; background-color: transparent !important; color: inherit !important; }'
 +            // 刚弹出的一瞬间：项不接受指针事件（浏览器就不会把它当成 hover 目标 → 不会高亮），
 +            // 同时把 hover 底色压平做双保险；不改变任何尺寸/位置，面板本身照旧接收点击（由守卫吞掉）。
@@ -918,7 +926,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +875,8 @@
+@@ -30,13 +883,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -934,7 +942,7 @@
          });
  
      }
-@@ -130,12 +970,15 @@
+@@ -130,12 +978,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -955,7 +963,7 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -144,42 +987,117 @@
+@@ -144,42 +995,117 @@
              $('body').append($menu);
  
              $('.dropdown-context:not(.dropdown-context-sub)').hide();
@@ -1085,7 +1093,7 @@
  })();
 --- a/public/js/context-js/context-js.js
 +++ b/public/js/context-js/context-js.js
-@@ -1 +1,1103 @@
+@@ -1 +1,1111 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1339,8 +1347,16 @@
 +            // 只关 a 的话，主题里的 `.dropdown-submenu:hover > a` 仍会因为 li 被 hover 而给「复制链接」上色。
 +            // 另外 hover 那套是「底色 + 文字变白」两件一起上（见 context-js.less 的 li>a:hover），
 +            // 所以文字色也一并还原 —— 万一 :hover/:focus 还是粘住了，那一项也保持原样，不会变成白底白字。
-+            + '.dropdown-context.menu-arming > li,'
-+            + ' .dropdown-context.menu-arming > li > a {'
++            //
++            // ⚠ color / background-color 这两条强制覆盖只准落在「真正的菜单项」(`> li > a`) 上，不能落在 li 层：
++            //   标题是 `> li.nav-header`，自带灰色（.nav-header{color:var(--lsky-text-3)}），
++            //   被 `color:inherit` 压成面板继承来的近黑（--lsky-text）→ 守卫窗口内「图片操作」黑一下、
++            //   窗口一过又弹回灰色 = 老师看到的闪烁；
++            //   同理分隔线 `> li.divider` 有自己的底色，也会被 `background-color:transparent` 打掉又弹回来。
++            // 防误触真正的关键是 li 上的 pointer-events:none（配合 a 上那份），把强制换色的声明收窄到 a
++            // 不会削弱任何一层守卫：li 层原本也不需要靠换色来防误触。
++            + '.dropdown-context.menu-arming > li { pointer-events: none !important; }'
++            + '.dropdown-context.menu-arming > li > a {'
 +            + ' pointer-events: none !important; background-color: transparent !important; color: inherit !important; }'
 +            // 刚弹出的一瞬间：项不接受指针事件（浏览器就不会把它当成 hover 目标 → 不会高亮），
 +            // 同时把 hover 底色压平做双保险；不改变任何尺寸/位置，面板本身照旧接收点击（由守卫吞掉）。
