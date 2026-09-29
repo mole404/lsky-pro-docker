@@ -125,8 +125,13 @@ console.log('\n[详细信息] 字段顺序与一个都不能少');
     check('标签 13px / 值 14px，行高宽松（leading-6）',
         (detailTpl.match(/text-\[13px\] leading-6 text-ink-3/g) || []).length === 12
         && (detailTpl.match(/text-\[14px\] leading-6 text-ink/g) || []).length === 12);
-    check('标签在左、值在右，窄屏可堆叠（sm:flex-row + flex-col）',
-        detailTpl.includes('flex flex-col gap-0.5 sm:flex-row sm:gap-4'));
+    check('标签在左、值在右，窄屏可堆叠（12 行都是 flex-col → sm:flex-row + sm:gap-4，行内等距 py-3）',
+        // 原来的断言钉的是 class 串一字不差：`flex flex-col gap-0.5 sm:flex-row sm:gap-4`。
+        // 二次验收加了行内竖直内边距（py-3，让分区间距一致），class 串里多了这一段，
+        // 所以改成按顺序匹配（12 行都要命中），验证的仍然是「窄屏上下堆叠、sm 起左右并排」这个行为。
+        (detailTpl.match(/class="flex flex-col gap-0\.5[^"]*sm:flex-row[^"]*sm:gap-4[^"]*"/g) || []).length === 12
+        && (detailTpl.match(/class="flex flex-col gap-0\.5 py-3 sm:flex-row sm:gap-4"/g) || []).length === 12
+        && detailTpl.includes('<dt class="shrink-0') && detailTpl.includes('<dd class="min-w-0'));
     check('弹窗里没有「复制链接/下载/删除」这类快捷操作',
         !/copy|Clipboard|download|delete|删除|复制链接/.test(detailTpl));
 }

@@ -169,8 +169,13 @@
 }
 
 /* 手机端二级菜单「就地展开」时，顶部那行「＜ 返回」里的箭头与文字贴在一起很难看：
-   箭头是图标（fas fa-chevron-left，标记里自带 mr-1 ≈ 4px），这里统一补到 7px 间距。
-   三条类选择器的权重高于工具类 .mr-1，所以不依赖 CSS 打包顺序；其余样式一个字没动。 */
+   箭头是图标（fas fa-chevron-left），标记里虽然写了 mr-1，但那个工具类**根本没被 Tailwind 生成**
+   （tailwind.config.js 的 content 只扫 resources/views 下的 blade，扫不到 resources/js 里的类名字符串），
+   所以图标的实际 margin-right 是 0px —— 这才是「紧挨着」的真正原因。
+   这里按真实 DOM（li.submenu-back > a > i，由 context-js.js 生成）补 7px；
+   权重（3 个类 + 2 个元素 = 0,3,2）高于工具类 .mr-1（0,1,0），不依赖 CSS 打包顺序。
+   ⚠ 同一条规则在 common.less 里还有一份兜底，原因见那边的注释（本文件编译出的
+   public/css/context-js/context-js.css 在 images.blade.php 里没有版本串 → 会被浏览器缓存喂旧的）。 */
 .dropdown-context .submenu-back > a > i {
     margin-right: 7px;
 }

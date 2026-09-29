@@ -103,6 +103,20 @@ progress::-webkit-progress-value {
     }
 }
 
+// 「移动到相册」弹窗里的相册列表：把 utils.infiniteScroll 自动插到容器末尾的哨兵
+// （「加载中... / 加载更多 / 我也是有底线的~」那一行 div.infinite-scroll）藏掉 ——
+// 老师看到的就是短列表时那行「我也是有底线的~」，很碍眼。
+// 只作用于这个弹窗：右侧抽屉里的相册列表照旧显示（不受影响）。
+// 藏掉的只是那行文字，不是滚动能力：列表容器 #movements-albums 仍 overflow-y-auto，
+// 触底自动加载走的是容器自己的 scroll 监听（不是这行文字），所以滚到底继续加载下一页的能力没变。
+// 代价（明确写下来）：那一行同时承载「加载中.../加载更多/加载失败」三种文案，藏掉后这个弹窗里
+// 就不再显示它们（接口报 status=false 时仍有 toastr.error 提示）。要恢复显示，删掉下面这条规则即可。
+#image-movements-modal {
+    .infinite-scroll {
+        display: none;
+    }
+}
+
 // 我的图片
 #images-grid {
     a:hover, a.ds-selected {
@@ -177,10 +191,213 @@ input:checked + .slider:before {
 }
 
 /* ---------------------------------------------------------------------------
+ * sweetalert2 主题（右键 / 长按菜单里的「删除」「重命名」「设置权限」三个确认框）
+ * ---------------------------------------------------------------------------
+ * 目标：与新弹窗（components/modal.blade.php 那套居中卡片）同一套观感 ——
+ *   12px 圆角、13/14px 字号、16px semibold 标题、令牌色（亮/暗自动正确）、
+ *   按钮 = 全局 ls-btn / ls-btn-primary、输入框 = ls-input。
+ * 注意：sweetalert2 的样式是运行时由 JS 注入到 <head> 末尾的（排在 common.css 之后），
+ * 所以这里统一加 `html ` 前缀把权重提到 (0,2,1) 压过它的 (0,2,0)，不写 !important。
+ * 颜色全部走设计令牌，亮/暗两套自动生效 —— 所以下面不再需要单独的暗色覆盖。
+ * ------------------------------------------------------------------------- */
+html {
+    // 遮罩：与 x-modal 的 bg-black/50 + backdrop-blur-[2px] 对齐
+    .swal2-container.swal2-backdrop-show,
+    .swal2-container.swal2-noanimation {
+        background: rgba(0, 0, 0, .5);
+        -webkit-backdrop-filter: blur(2px);
+        backdrop-filter: blur(2px);
+    }
+
+    // 卡片本体：圆角 / 边框 / 内边距 / 阴影对齐 x-modal 的卡片
+    .swal2-popup {
+        width: 32em;
+        max-width: calc(100% - 2rem);
+        padding: 20px;
+        border-width: 1px;
+        border-style: solid;
+        border-color: var(--lsky-border);
+        border-radius: 12px;
+        background: var(--lsky-surface);
+        color: var(--lsky-text);
+        box-shadow: var(--lsky-shadow-modal);
+        font-family: inherit;
+        text-align: left;
+    }
+
+    // 标题 16px semibold（默认是 30px，比新弹窗的标题大一倍）
+    .swal2-title {
+        margin: 0;
+        padding: 0;
+        color: var(--lsky-text);
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1.5;
+        text-align: left;
+    }
+
+    // 说明文字：14px / 行高宽松 / 次级灰
+    .swal2-html-container {
+        margin: 8px 0 0;
+        padding: 0;
+        color: var(--lsky-text-2);
+        font-size: 14px;
+        line-height: 1.6;
+        text-align: left;
+    }
+
+    // 图标：整组按 em 缩放（默认 80px 太大），配色改走 danger 令牌
+    .swal2-icon {
+        margin: 2px 0 14px;
+        font-size: 11px;
+        border-color: var(--lsky-border-2);
+        color: var(--lsky-border-2);
+    }
+
+    .swal2-icon.swal2-warning,
+    .swal2-icon.swal2-error {
+        border-color: var(--lsky-danger);
+        color: var(--lsky-danger);
+    }
+
+    // 按钮区：右对齐（新弹窗的按钮就是 justify-end），间距 8px
+    .swal2-actions {
+        margin: 20px 0 0;
+        gap: 8px;
+        justify-content: flex-end;
+    }
+
+    // 按钮：照抄 .ls-btn（h-9 / rounded-lg / 13.5px / font-medium）
+    .swal2-styled,
+    .swal2-styled.swal2-confirm,
+    .swal2-styled.swal2-cancel,
+    .swal2-styled.swal2-deny {
+        height: 36px;
+        margin: 0;
+        padding: 0 14px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background-image: none;
+        box-shadow: none;
+        font-size: 13.5px;
+        font-weight: 500;
+    }
+
+    // 主按钮 = .ls-btn-primary
+    .swal2-styled.swal2-confirm {
+        border-color: var(--lsky-accent);
+        background-color: var(--lsky-accent);
+        color: #fff;
+    }
+
+    .swal2-styled.swal2-confirm:hover {
+        border-color: var(--lsky-accent-hover);
+        background-color: var(--lsky-accent-hover);
+    }
+
+    .swal2-styled.swal2-confirm:focus {
+        box-shadow: 0 0 0 3px var(--lsky-accent-soft);
+    }
+
+    // 取消 = .ls-btn（底 surface、边 line-2、字 ink，hover surface-2）
+    .swal2-styled.swal2-cancel {
+        border-color: var(--lsky-border-2);
+        background-color: var(--lsky-surface);
+        color: var(--lsky-text);
+    }
+
+    .swal2-styled.swal2-cancel:hover {
+        background-color: var(--lsky-surface-2);
+    }
+
+    .swal2-styled.swal2-cancel:focus {
+        box-shadow: 0 0 0 3px var(--lsky-accent-soft);
+    }
+
+    // 危险按钮 = .ls-btn-danger（当前三个确认框没用到，一并统一）
+    .swal2-styled.swal2-deny {
+        background-color: var(--lsky-danger-soft);
+        color: var(--lsky-danger);
+    }
+
+    // sweetalert2 默认在 hover/active 时叠一层黑渐变，会盖掉上面的悬停色。
+    // 权重 (0,4,1) > 它那条 `.swal2-actions:not(...) .swal2-styled:hover` 的 (0,4,0)。
+    .swal2-popup .swal2-actions .swal2-styled:hover,
+    .swal2-popup .swal2-actions .swal2-styled:active {
+        background-image: none;
+    }
+
+    // 输入框 / 下拉框（「重命名」「设置权限」用得到）：照抄 .ls-input
+    .swal2-input,
+    .swal2-textarea,
+    .swal2-select {
+        width: 100%;
+        height: 38px;
+        margin: 12px 0 0;
+        padding: 0 12px;
+        border-width: 1px;
+        border-style: solid;
+        border-color: var(--lsky-border-2);
+        border-radius: 8px;
+        background-color: var(--lsky-surface-2);
+        color: var(--lsky-text);
+        font-size: 14px;
+        box-shadow: none;
+    }
+
+    .swal2-input:focus,
+    .swal2-textarea:focus,
+    .swal2-select:focus {
+        border-color: var(--lsky-accent);
+        box-shadow: 0 0 0 3px var(--lsky-accent-soft);
+    }
+
+    .swal2-input::placeholder,
+    .swal2-textarea::placeholder {
+        color: var(--lsky-text-3);
+    }
+
+    // 下拉框保留自带的箭头背景图，只把文字让开一点
+    .swal2-select {
+        padding-right: 28px;
+        background-position: right 10px center;
+    }
+
+    // 校验提示（「请选择正确的权限」）与「服务异常，请稍后重试。」都走这里
+    .swal2-validation-message {
+        margin: 12px 0 0;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background-color: var(--lsky-danger-soft);
+        color: var(--lsky-danger);
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.5;
+    }
+
+    // 重命名确认时的加载圈
+    .swal2-loader {
+        border-color: var(--lsky-accent) transparent var(--lsky-accent) transparent;
+    }
+
+    // 关闭按钮（这一套确认框没开 showCloseButton，统一放这里备用）
+    .swal2-close {
+        width: 1.2em;
+        height: 1.2em;
+        color: var(--lsky-text-3);
+        font-size: 20px;
+    }
+
+    .swal2-close:hover {
+        color: var(--lsky-text);
+    }
+}
+
+/* ---------------------------------------------------------------------------
  * 暗色下给第三方组件的补丁
- * toastr 的样式在 common.css 里（@import '~toastr'），能直接覆盖；
- * sweetalert2 的样式是运行时由 JS 注入到 <head> 末尾的，所以这里统一用
- * html.dark 提高优先级（比 .swal2-popup 多一层），避免用 !important。
+ * toastr 的样式在 common.css 里（@import '~toastr'），能直接覆盖，所以在这里单独给暗色。
+ * （sweetalert2 原来也是在这里做暗色适配的；现在已升级成上面那套亮/暗共用的令牌主题，
+ *   这里不再重复覆盖，免得两处打架。）
  * ------------------------------------------------------------------------- */
 html.dark {
     #toast-container > div {
@@ -199,36 +416,24 @@ html.dark {
         background-color: var(--lsky-accent);
     }
 
-    .swal2-popup {
-        background: var(--lsky-surface);
-        color: var(--lsky-text);
-        border: 1px solid var(--lsky-border);
-    }
-
-    .swal2-title,
-    .swal2-html-container {
-        color: var(--lsky-text);
-    }
-
-    .swal2-input,
-    .swal2-textarea,
-    .swal2-select {
-        background-color: var(--lsky-surface-2);
-        border-color: var(--lsky-border-2);
-        color: var(--lsky-text);
-    }
-
-    .swal2-styled.swal2-confirm {
-        background-color: var(--lsky-accent);
-    }
-
-    .swal2-styled.swal2-cancel {
-        background-color: var(--lsky-surface-3);
-        color: var(--lsky-text-2);
-    }
-
     /* viewer.js 工具栏在暗色下用半透明深色即可，背景本来就是暗的 */
     .viewer-toolbar > ul > li {
         background-color: rgba(255, 255, 255, .12);
     }
+}
+
+/* ---------------------------------------------------------------------------
+ * 手机端右键/长按菜单二级菜单顶部「＜ 返回」的箭头与文字间距
+ * ---------------------------------------------------------------------------
+ * 规则本体在 resources/css/context-js.less（跟着 public/css/context-js/context-js.css 走），
+ * 这里再放一份**兜底**，原因是「改了却不生效」的那类事故：
+ *   images.blade.php 里 css/context-js/context-js.css 是 `<link>` 静态引入、**没有版本串**，
+ *   老师手机上（尤其 iOS Safari 的启发式缓存）会一直吃旧的那份 → 上一轮 less 改了、编译产物里也有，
+ *   现场却看不到。而 common.css 由 app/guest 两个 layout 用
+ *   `?v={{ assetVersion('css/common.css') }}`（= 文件 mtime）引入，文件一变 URL 就变，必然会重新拉。
+ * 选择器按真实 DOM 写（context-js.js 生成的是 li.submenu-back > a > i.fas.fa-chevron-left）；
+ * !important + 3 个类（0,3,2）不依赖打包顺序（.mr-1 那个工具类实际也没被 Tailwind 生成）。
+ * ------------------------------------------------------------------------- */
+.dropdown-context .submenu-back > a > i {
+    margin-right: 7px !important;
 }
