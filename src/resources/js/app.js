@@ -73,7 +73,12 @@ window.utils = {
                 loading: false,
                 finished: false,
             };
-            $(selector).append(`<div class="infinite-scroll"><span>${loadingText}</span></div>`);
+            // 哨兵（列表末尾那行「加载更多 / 我也是有底线的~」）的专属类：click 委托只认它，
+            // 不再用「容器内任意 span」—— 否则列表行里任何一个 span（相册名、徽标…）被点都会
+            // 误触发加载。模板一行都不用改：哨兵是这里自己插进容器的。
+            // （外层 .infinite-scroll 容器类保留 —— CSS 靠它控制弹窗里隐藏/显示，别动。）
+            const sentinelClass = 'js-infinite-scroll-trigger';
+            $(selector).append(`<div class="infinite-scroll"><span class="${sentinelClass}">${loadingText}</span></div>`);
             for (const classesKey in classes) {
                 $(selector).find('.infinite-scroll').addClass(classes[classesKey]);
             }
@@ -130,7 +135,16 @@ window.utils = {
 
             // 首次加载
             load();
-            $(selector).off('click').on('click', 'span:not(.disabled)', () => load());
+            // 点哨兵加载下一页。判据收窄到本方法自己插的那条哨兵（专属类 sentinelClass）；
+            // 用 closest 而不是 is —— 点哨兵里的子元素（图标/文字）也算点了哨兵，行为不变。
+            // .disabled 语义保留：加载中/到底/出错时哨兵带 .disabled，那时点了不加载。
+            // 事件带命名空间（click.infiniteScroll）：destroy() 只解绑自己这一条，不再把绑在
+            // 同一个容器上别人的 click 委托一起摘掉（图片页容器上还有一条 .image-selector）。
+            $(selector).off('click.infiniteScroll').on('click.infiniteScroll', (e) => {
+                const $trigger = $(e.target).closest('.' + sentinelClass);
+                if ($trigger.length === 0 || $trigger.hasClass('disabled')) return;
+                load();
+            });
 
             // 滚动到底自动加载。默认跟「容器自己的滚动条」（抽屉这类固定高度面板）；
             // options.root = 'window' 时跟整页滚动 —— 图片墙已改成整页滚动（手机地址栏才会收起）。
@@ -179,7 +193,7 @@ window.utils = {
                     load();
                 },
                 destroy() {
-                    $(selector).unbind('scroll.infiniteScroll').unbind('click')
+                    $(selector).off('scroll.infiniteScroll').off('click.infiniteScroll')
                     // 谁注册谁解绑：window 版把监听挂在 window 上，容器版（相册弹窗/移动到相册
                     // 列表）挂在自己的 selector 上。原来这行是无条件的 —— 容器版一 destroy
                     // 就把图片墙的整页滚动监听一起摘掉了（相册弹窗开→关之后，滚到底不再自动
