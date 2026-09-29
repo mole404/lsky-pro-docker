@@ -78,7 +78,11 @@
             </x-dropdown>
         </div>
     </div>
-    <div class="relative inset-0 h-full overflow-hidden">
+    {{-- 布局容器已从「绝对定位、确定高度」改成正常流（为让手机浏览器能收起地址栏），
+         所以这里不能再靠祖先的高度：h-full 的百分比会解析成 auto，里面的
+         #images-scroll（absolute inset-0）就跟着算成 0 高 —— 图片墙整片消失。
+         改成 flex-1（容器是 flex flex-col + min-h-screen），自己吃掉除工具栏外的剩余高度。--}}
+    <div class="relative overflow-hidden flex-1">
         <!-- content -->
         <div id="images-scroll" class="absolute inset-0 overflow-y-scroll dragselect select-none">
             <div id="images-grid" class="dragselect"></div>

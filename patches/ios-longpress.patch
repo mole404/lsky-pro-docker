@@ -36,7 +36,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   3f845ab5321c2605dcd0f369290fcc7b  src/resources/js/context-js.js
 #   3f845ab5321c2605dcd0f369290fcc7b  src/public/js/context-js/context-js.js
-#   2afe66b758040d0a341a43e9862b2f57  src/resources/views/user/images.blade.php
+#   b1151d9a5d0565d2f3a761017f5af5ff  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
@@ -1988,7 +1988,18 @@
                      </a>
                  </x-slot>
  
-@@ -82,11 +84,11 @@
+@@ -76,17 +78,21 @@
+             </x-dropdown>
+         </div>
+     </div>
+-    <div class="relative inset-0 h-full overflow-hidden">
++    {{-- 布局容器已从「绝对定位、确定高度」改成正常流（为让手机浏览器能收起地址栏），
++         所以这里不能再靠祖先的高度：h-full 的百分比会解析成 auto，里面的
++         #images-scroll（absolute inset-0）就跟着算成 0 高 —— 图片墙整片消失。
++         改成 flex-1（容器是 flex flex-col + min-h-screen），自己吃掉除工具栏外的剩余高度。--}}
++    <div class="relative overflow-hidden flex-1">
+         <!-- content -->
+         <div id="images-scroll" class="absolute inset-0 overflow-y-scroll dragselect select-none">
              <div id="images-grid" class="dragselect"></div>
          </div>
          <!-- right drawer -->
@@ -2004,7 +2015,7 @@
              </div>
              <div id="drawer-content" class="overflow-y-auto"></div>
          </div>
-@@ -96,13 +98,13 @@
+@@ -96,13 +102,13 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -2020,7 +2031,7 @@
                  </div>
              </div>
              <img alt="__name__" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
-@@ -114,22 +116,22 @@
+@@ -114,22 +120,22 @@
              <div id="album-add" class="flex flex-col w-full hidden border rounded p-2">
                  <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
                  <form class="w-full space-y-2" action="/user/albums">
@@ -2050,7 +2061,7 @@
          </a>
      </script>
  
-@@ -137,9 +139,9 @@
+@@ -137,9 +143,9 @@
          <div id="album-edit" data-id="__id__" class="flex flex-col w-full border rounded p-2">
              <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
              <form class="w-full space-y-2" action="/user/albums/__id__">
@@ -2063,7 +2074,7 @@
              </form>
          </div>
      </script>
-@@ -148,51 +150,51 @@
+@@ -148,51 +154,51 @@
          <div class="my-4 px-4 space-y-3">
              <div>
                  <span class="text-sm font-semibold">相册名称</span>
@@ -2127,7 +2138,7 @@
              </div>
          </div>
      </script>
-@@ -201,7 +203,8 @@
+@@ -201,7 +207,8 @@
          <script src="{{ asset('js/justified-gallery/jquery.justifiedGallery.min.js') }}"></script>
          <script src="{{ asset('js/viewer-js/viewer.min.js') }}"></script>
          <script src="{{ asset('js/dragselect/ds.min.js') }}"></script>
@@ -2137,7 +2148,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -308,7 +311,7 @@
+@@ -308,7 +315,7 @@
              }
  
              const getAlbums = (options, callback) => {
@@ -2146,7 +2157,7 @@
                  let content = $('#albums-container-tpl').html();
                  drawer.toggle(title, content, function () {
                      let $albums = $('#albums-container');
-@@ -337,8 +340,8 @@
+@@ -337,8 +344,8 @@
                                  if (albums[i].id === selectedAlbum.id) {
                                      // 选中的相册高亮
                                      item = item
@@ -2157,7 +2168,7 @@
                                  }
  
                                  html += item;
-@@ -486,10 +489,10 @@
+@@ -486,10 +493,10 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -2170,7 +2181,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -509,6 +512,26 @@
+@@ -509,6 +516,26 @@
              ds.subscribe('elementselect', _ => bindOperates());
              ds.subscribe('elementunselect', _ => bindOperates());
  
@@ -2197,7 +2208,7 @@
              $photos.on('click', '.image-selector', function () {
                  ds.toggleSelection($(this).closest('a'));
                  bindOperates();
-@@ -575,7 +598,7 @@
+@@ -575,7 +602,7 @@
                  permission() {
                      Swal.fire({
                          title: '选择一个权限',
@@ -2206,7 +2217,7 @@
                          input: 'select',
                          inputOptions: {
                              public: '公开',
-@@ -853,6 +876,10 @@
+@@ -853,6 +880,10 @@
                      case 'delete': // 删除
                          methods.delete();
                          break;
