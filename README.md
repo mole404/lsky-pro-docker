@@ -26,10 +26,6 @@ services:
       - WEB_PORT=8089
 ```
 
-```bash
-docker compose up -d
-```
-
 等价的 `docker run`：
 
 ```bash
@@ -51,8 +47,6 @@ docker run -d --name lsky-pro --restart unless-stopped \
 
 ## 升级
 
-升级 = 换镜像，不需要动卷里的文件：
-
 ```bash
 docker compose pull
 docker compose up -d          # 不需要 --force-recreate
@@ -60,27 +54,6 @@ docker compose up -d          # 不需要 --force-recreate
 
 同一个 tag 下镜像 digest 变了，compose 会自己重建容器。入口脚本会按版本标记把新代码同步进卷、
 并作废编译视图缓存；`.env` / `database/` / `storage/` 等站点数据保持不变。
-
-## 回滚
-
-回滚 = 把 `image` 换回不可变的旧版本（用 `:sha-<完整 commit>` tag 或直接写 digest）：
-
-```yaml
-services:
-  lsky-pro:
-    # 例：回滚到上一个版本
-    image: ghcr.io/mole404/lsky-pro-docker:sha-915cd803ca21de44ede2dca98585f8f459972ee4
-    # 也可以按 digest 指定：
-    # image: ghcr.io/mole404/lsky-pro-docker@sha256:<digest>
-```
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-入口脚本看到镜像标记与卷里的不同，会把代码同步回那一版（同样不碰站点数据）。
-请保留用过的 `sha-` tag 或 digest，否则以后无法回滚到那一版。
 
 ## 备份与恢复
 
