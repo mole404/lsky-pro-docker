@@ -8,17 +8,6 @@
 - 本仓库源码相对上游的偏离清单维护在 `tools/diff-vs-upstream.sh`，可随时用
   `bash tools/diff-vs-upstream.sh` 自行核对。
 
-## 特性一览
-
-- **源码内置**：应用源码放在 `src/`，构建只在本机跑 `composer install`，不依赖上游在线。
-- **版本可控**：PHP 8.3 / Debian bookworm；依赖由 `src/composer.lock` 钉死；镜像用
-  `composer install --no-dev`，只装运行时包。
-- **换镜像 = 换代码**：入口脚本按镜像内的 `.code-revision` 版本标记判断，与卷里的标记不一致
-  （即换了镜像）才把代码同步进卷，一致则跳过（重启零开销）；站点数据任何情况下都不碰。
-- **HTTPS 自签**：容器首次启动用 `openssl` 生成自签证书，之后复用。
-- **Apache 可调**：内置面向低配单用户的 MPM 默认值，六项都能用 `APACHE_*` 环境变量逐项覆盖。
-- **自带健康检查**：镜像带 `HEALTHCHECK`，可被编排系统直接感知存活。
-
 ## 快速开始
 
 `compose.yaml`：
