@@ -39,7 +39,10 @@
         <div class="flex justify-start items-center max-w-[70%] {{ request()->routeIs('images', 'admin.images') ? 'pl-6' : 'pl-6 md:pl-2' }}">
             <a href="" class="text-[15px] font-semibold truncate text-ink" id="header-title">@yield('title', \App\Utils::config(\App\Enums\ConfigKey::AppName))</a>
         </div>
-        <div class="flex justify-end items-center space-x-3">
+        {{-- 与左侧折叠按钮对称：绝对定位贴容器盒右缘内缩 4px。absolute 相对容器的
+             padding box，所以容器内边距（图片页 24 / 普通页 40 / 2xl 240）推不动它 ——
+             左右两端因此在同一套规则下对齐（左 3px、右 4px）。 --}}
+        <div class="absolute right-1 inset-y-0 flex items-center space-x-3">
             <x-theme-switch />
             @includeWhen($_is_notice, 'layouts.notice')
             @includeWhen($_group->strategies->isNotEmpty(), 'layouts.strategies')
