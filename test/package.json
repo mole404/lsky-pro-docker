@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "//": "约定：npm test 用 shell 通配跑全量 *.test.mjs（新增测试文件不用改这里），任一个失败即非 0 退出；需要 Node >= 22.22（jsdom 30 的 engines 要求，Node 18 会报 ERR_REQUIRE_ESM）",
-  "//deps": "sweetalert2 / less 在这里**正经声明**：swal-theme.test.mjs 要读 sweetalert2 自己注入的 CSS、并调 lessc 编译 common.less。以前它直接去读 ../src/node_modules，换个环境（CI 新拉的 checkout 没有 src/node_modules）就跑不了。这两个包用**精确版本**（= src/package-lock.json 里应用构建期实际用的那份）：CSS 断言依赖 sweetalert2 的具体默认样式，换版本会真的改变结果（实测 11.26 就会红）。src 升级时这里要同步跟着升（swal-theme.test.mjs 里有逐字一致性断言兜底）。",
+  "//deps": "sweetalert2 / less 在这里**正经声明**：swal-theme.test.mjs 要读 sweetalert2 自己注入的 CSS、并调 lessc 编译 common.less。以前它直接去读 ../src/node_modules，换个环境（CI 新拉的 checkout 没有 src/node_modules）就跑不了。这两个包用**精确版本**（= src/package-lock.json 里应用构建期实际用的那份）：CSS 断言依赖 sweetalert2 的具体默认样式，换版本会真的改变结果 —— 实测升级 11.4.6 → 11.22.4 时它把默认规则改成 `div:where(.swal2-container) .swal2-xxx`（权重从 (0,1,0) 抬到 (0,1,1)），输入框高度那几条断言当场变红，直到把 common.less 的皮肤前缀从 `html ` 抬到 `html:root `。src 升级时这里要同步跟着升（swal-theme.test.mjs 里有逐字一致性断言兜底）。",
   "engines": {
     "node": ">=22.22"
   },
@@ -15,6 +15,6 @@
     "jquery": "3.7.1",
     "jsdom": "^30.1.1",
     "less": "4.1.2",
-    "sweetalert2": "11.4.6"
+    "sweetalert2": "11.22.4"
   }
 }

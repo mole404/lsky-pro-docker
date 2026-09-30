@@ -197,10 +197,15 @@ input:checked + .slider:before {
  *   12px 圆角、13/14px 字号、16px semibold 标题、令牌色（亮/暗自动正确）、
  *   按钮 = 全局 ls-btn / ls-btn-primary、输入框 = ls-input。
  * 注意：sweetalert2 的样式是运行时由 JS 注入到 <head> 末尾的（排在 common.css 之后），
- * 所以这里统一加 `html ` 前缀把权重提到 (0,2,1) 压过它的 (0,2,0)，不写 !important。
+ * 所以这里统一加 `html:root ` 前缀把权重提到 (0,2,1) 压过它的 (0,1,1)，不写 !important。
+ * （11.4 时代它的默认规则是纯类选择器，`html ` 一位元素就够了；11.22 起它改成
+ *   `div:where(.swal2-container) .swal2-input { height: 2.625em; padding: 0 .75em }`
+ *   这种「祖先 :where 包裹 + 类」写法，权重正好 = `html `.swal2-x（都是 (0,1,1)），
+ *   而它的样式后注入 → 平权重时按顺序赢，输入框高度会被它顶回 36.75px。
+ *   `:root` 是伪类，加在 html 上把我们的权重再抬一位到 (0,2,1)，重新稳压它。）
  * 颜色全部走设计令牌，亮/暗两套自动生效 —— 所以下面不再需要单独的暗色覆盖。
  * ------------------------------------------------------------------------- */
-html {
+html:root {
     // 遮罩：与 x-modal 的 bg-black/50 + backdrop-blur-[2px] 对齐
     .swal2-container.swal2-backdrop-show,
     .swal2-container.swal2-noanimation {
