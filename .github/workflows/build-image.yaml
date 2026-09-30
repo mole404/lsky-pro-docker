@@ -294,7 +294,9 @@ jobs:
       # 自证：不只看「构建成功」，而是把推上去的镜像拉回来实测
       #   1. 核对补丁文件 md5（确认 src/ 里的补丁真的进了镜像）
       #   2. 记录 PHP / 扩展 / Debian / ImageMagick 版本（换基础镜像时的对比基线）
-      #   3. 关键扩展硬断言（pdo_sqlite 缺了线上 SQLite 站点直接挂）
+      #   3. 扩展自证（**只把 pdo_sqlite 当硬断言** —— 缺了线上 SQLite 站点直接挂；
+      #      sqlite3 / imagick / redis / pdo_mysql / bcmath / ftp 只打印 =0/1 供人工比对，
+      #      不因缺失而判红：它们对本站不是必需，钉死会在合理变动时误报）
       #   4. 真起一个容器 curl 首页，确认 Apache + PHP + 应用真的能跑
       # 注意：本段整体被外层单引号包着（sh -c '...'），里面只能出现双引号，
       #       写单引号会把脚本提前截断 → syntax error near unexpected token `('
@@ -315,7 +317,7 @@ jobs:
             php -v 2>&1 | head -3
             echo "== php -m =="
             php -m | sort | tr "\n" " "; echo
-            echo "== 关键扩展断言 =="
+            echo "== 扩展快照（=1 已装 / =0 缺失；下方只硬断言 pdo_sqlite）=="
             # ftp 是 2026-09-28 换 PHP 8.3 时踩到的：官方镜像不再自带 ftp，必须显式装 + 断言
             for ext in pdo_sqlite sqlite3 imagick redis pdo_mysql bcmath ftp; do
               if php -m | grep -qix "$ext"; then echo "$ext=1"; else echo "$ext=0"; fi
@@ -406,7 +408,7 @@ jobs:
             echo "::error::新镜像里 pdo_sqlite 没加载（线上是 SQLite 数据库，不能丢）"
             exit 1
           fi
-          echo "关键扩展断言通过（pdo_sqlite / sqlite3 等）"
+          echo "关键扩展断言通过（硬断言只有 pdo_sqlite；快照里的 sqlite3/imagick/redis/pdo_mysql/bcmath/ftp 仅打印 =0/1 供人工比对，不判红）"
 
           # 镜像里的上游 pin 必须等于 Dockerfile 里的 pin（防止再次出现"标记漂移"）
           MARKER_PIN=$(echo "$REPORT" | awk -F= '/^lsky_commit=/ {print $2}')

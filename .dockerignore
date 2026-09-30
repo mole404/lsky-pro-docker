@@ -45,3 +45,9 @@ src/storage/framework/testing/*
 !src/storage/framework/testing/.gitignore
 src/storage/framework/views/*.php
 src/bootstrap/cache/*.php
+
+# 开发机的 Laravel 日志：里面是本机的绝对路径与错误栈，绝不该随 COPY src/ 烤进镜像。
+# 写法与上面 framework/* 同理：`*` 会把 storage/logs/.gitignore 占位也排掉（目录就没了），
+# 而 Laravel 运行期必须能往这个目录写日志 —— 所以紧跟一条 `!` 把占位文件留下，保住目录。
+src/storage/logs/*
+!src/storage/logs/.gitignore
