@@ -16,6 +16,11 @@
 #   4. install-php-extensions 钉到具体版本，不再用 latest
 #   5. 构建期自证：① 我们从不修改的上游文件按上游 md5 校验（快照没被动过）
 #      ② 补丁产物与「有意偏离上游」的 composer.lock 按预期 md5 校验（改了不更新就构建失败）
+#   6. 运行时加固（F23，2026-09-30）：PHP 关掉 expose_php / display_errors
+#      （/usr/local/etc/php/conf.d/zz-lsky-hardening.ini）、Apache 关掉版本号外泄
+#      （/etc/apache2/conf-enabled/zz-lsky-hardening.conf：ServerTokens Prod + ServerSignature Off），
+#      两处都带构建期断言；CI 的「Verify published image」再对真实响应头断言一次。
+#   7. 认证类 POST 加路由级节流（src/routes/auth.php：login/register/forgot-password/confirm-password）
 #
 # 构建：docker build -t lsky-pro-docker .
 # ---------------------------------------------------------------------------
@@ -104,10 +109,14 @@ RUN printf '%s\n' \
 # app/Services/ImageService.php 同样是有意偏离的：移除 SVG 支持时删掉了几个「只可能因为
 # svg 数据而命中」的分支（上传跳过图片处理 / 跳过违规扫描的 in_array svg、makeThumbnail
 # 里 svg 直拷原文件），详见 README「与上游的差异」第 7 条。
-# 这三个文件以后只要被改动（哪怕手滑），构建就会红 —— md5 必须随改动同步更新。
+# routes/auth.php 也是有意偏离（F23 防爆破）：给 login / register / forgot-password /
+# confirm-password 四个 POST 端点加了 throttle（详见文件内注释）。它同样被钉住，
+# 改了不更新这行 md5 就构建失败。
+# 这几个文件以后只要被改动（哪怕手滑），构建就会红 —— md5 必须随改动同步更新。
 RUN printf '%s\n' \
         '8136e73b50315d783f105dd4ac9971bb  ./config/convention.php' \
         'f6167a0726f8f2892494952a14c2bf49  ./routes/web.php' \
+        'c1ab546f3e7f5237c1d45435171858ce  ./routes/auth.php' \
         'e7edc0fc9dc8c654c4debca0e1d2eac4  ./app/Services/ImageService.php' \
     | md5sum -c -
 
@@ -117,10 +126,13 @@ RUN printf '%s\n' \
 #   laravel/framework 9.52.22（9.x 最后一个补丁；9.52.21 -> 9.52.22 是一次安全修复）、symfony/* 6.4 LTS（Laravel 9 的 ^6.0 允许）、
 #   guzzlehttp/guzzle 7.15.5、guzzlehttp/psr7 2.13.1、phpseclib 3.0.57、
 #   league/commonmark 2.10.3、aws/aws-sdk-php 3.398.1、laminas-diactoros 2.26.0
+#   psy/psysh 0.11.23（2026-09-30：原 0.11.12 有 GHSA-4486-gxhx-5mg7 —— CWD 下 .psysh.php 自动加载
+#   导致本地提权；上游在同一条 0.11 线发了修复，随 laravel/tinker 一起进镜像，故一并升掉。
+#   osv-scanner.toml 里对应那条白名单已随之删除=扫描真的干净，而不是被豁免。）
 #   —— 修掉了除「Laravel 9 框架自身那几条（9.x 线没有修复版本）」以外的已知公告。
 # 所以它不再等于上游值 —— 但仍钉 md5：任何改动都必须同步更新这里（防止有人别处悄悄改）。
 RUN printf '%s\n' \
-        '47dc4ba720293bffe2d3ee1992775e02  ./composer.lock' \
+        '12ab233331630b2dd1c48cee9e5ce927  ./composer.lock' \
     | md5sum -c -
 
 # --no-dev：镜像只装运行时依赖。开发包（debugbar / ignition / whoops / phpunit / faker / sail…）
@@ -242,6 +254,33 @@ RUN sed -i \
     && ! grep -rn '/etc/ssl/certs/ssl-cert-snakeoil\|/etc/ssl/private/ssl-cert-snakeoil' /etc/apache2/ \
     && grep -q 'lsky-selfsigned.crt' /etc/apache2/sites-available/default-ssl.conf
 
+# ---------------------------------------------------------------------------
+# F23：Apache 版本号外泄 —— 关掉 Server 头里的精确版本与页脚签名。
+#   实测（2026-09-30，本机 docker run 已发布镜像）：响应头 `Server: Apache/2.4.68 (Debian)`。
+#   （同一次探测还看到 `X-Powered-By: PHP/8.3.35` —— 那条由下面的 PHP ini 加固负责。）
+#   ServerTokens Prod  → Server 头只发 "Apache"（不带版本 / 模块 / OS）；
+#   ServerSignature Off → 错误页与目录列表不再追加 "Apache/2.4.68 (Debian) Server at …" 页脚
+#                        （Debian 出厂默认本就是 Off，这里显式写死：基镜像换版本时默认值可能变）。
+#   为什么放 conf-enabled 的独立文件、而不是 000-default.conf.template 那个 vhost 模板：
+#     ① ServerTokens 是**全局（main server config）指令**，写进 <VirtualHost> 里 Apache 会直接
+#        拒绝加载该配置（"ServerTokens not allowed in <VirtualHost> context"）→ 整站起不来；
+#        它必须落在全局上下文，而模板整份就是 vhost。
+#     ② 那个模板同时管 HTTPS vhost、目录权限等一堆东西，改它等于改 vhost 行为，风险面远大于
+#        「加一个 conf-enabled 文件」。
+#     ③ apache2.conf 先 IncludeOptional mods-enabled/ 再 IncludeOptional conf-enabled/，入口
+#        脚本写 mpm.conf 也走这里；conf-enabled 不会被入口脚本覆写，换镜像照样生效。
+#   构建期自证：① 文件真的在；② 两行**逐行精确**在里面（grep -qx，不是模糊包含）。
+#   语法由真容器自证（CI 的 smoke 步骤会起容器跑 Apache，配置写错站点就起不来）。
+# ---------------------------------------------------------------------------
+RUN printf '%s\n' \
+        '# fork 加固（F23）：不对外泄露 Apache 精确版本' \
+        'ServerTokens Prod' \
+        'ServerSignature Off' \
+        > /etc/apache2/conf-enabled/zz-lsky-hardening.conf \
+    && test -f /etc/apache2/conf-enabled/zz-lsky-hardening.conf \
+    && grep -qx 'ServerTokens Prod' /etc/apache2/conf-enabled/zz-lsky-hardening.conf \
+    && grep -qx 'ServerSignature Off' /etc/apache2/conf-enabled/zz-lsky-hardening.conf
+
 # ftp 必须**显式**装进运行时镜像：官方 php:8.1 镜像自带 ftp，php:8.3 的没有
 # （2026-09-28 换 8.3 时 CI 实测：builder 阶段 composer install 直接失败，
 #  报 league/flysystem-ftp requires ext-ftp）。它是 Lsky 的 FTP 存储驱动要用的扩展，
@@ -274,6 +313,27 @@ RUN apt-get update && \
     mkdir /var/www/data; \
     chown -R www-data:root /var/www; \
     chmod -R g=u /var/www
+
+# ---------------------------------------------------------------------------
+# F23：PHP ini 加固 —— 关掉「版本号外泄」与「错误直出」。
+#   实测（2026-09-30，本机 docker run 已发布镜像）：响应头带 `X-Powered-By: PHP/8.3.35`。
+#   官方 php 镜像**不带 php.ini**（只有 php.ini-production/-development 两个样本），于是
+#   PHP 编译期的默认值直接生效：expose_php=1、display_errors=1。
+#     expose_php=0     → 不再发 X-Powered-By（少给扫描器一条精确版本情报）；
+#     display_errors=0 → 运行期错误不往 HTTP 响应里吐（Laravel 自己的错误处理/日志不受影响）。
+#   文件名用 zz- 前缀：conf.d 里的 ini 按**文件名 ASCII 序**加载、后加载的覆盖先前的，
+#   zz- 排最后 = 以后基镜像或扩展安装器再加什么 ini，都盖不掉这两项（顺序就是这里的关键）。
+#   只改镜像的 PHP 配置，不碰应用代码，也不动现有那几份 ini（upload / opcache / memory）。
+#   构建期自证：用 php -r **真读回 ini_get()** 断言已是关闭态 —— 不是 grep 配置文件里有没有那两行
+#   （那只证明"文件写了"，证明不了"PHP 真的读到了"）。判定用 filter_var(FILTER_VALIDATE_BOOL)，
+#   兼容 Off / false / 0 / 空串 几种写法；CLI 与 Apache 模块用的是同一份 /usr/local/etc/php/conf.d。
+# ---------------------------------------------------------------------------
+RUN printf '%s\n' \
+        'expose_php=0' \
+        'display_errors=0' \
+        > /usr/local/etc/php/conf.d/zz-lsky-hardening.ini \
+    && test -f /usr/local/etc/php/conf.d/zz-lsky-hardening.ini \
+    && php -r 'foreach (["expose_php", "display_errors"] as $k) { if (filter_var(ini_get($k), FILTER_VALIDATE_BOOL)) { fwrite(STDERR, "ini 加固自证失败：".$k." 仍开着 (".var_export(ini_get($k), true).")".PHP_EOL); exit(1); } echo $k."=".var_export(ini_get($k), true)." 已关闭".PHP_EOL; }'
 
 # F21：不再随镜像发货证书。
 # 原来这里是 `COPY ./ssl /etc/ssl` —— 把仓库里那对 Debian snakeoil 证书（ssl/certs + ssl/private，

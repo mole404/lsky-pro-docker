@@ -42,16 +42,12 @@ ignoreUntil = 2027-06-30
 reason = "laravel/framework 9.x：上游修复在 12.69.0/13.30.0，9.x(EOL) 无补丁；镜像里 APP_DEBUG 关闭，调试页不对外"
 
 # -----------------------------------------------------------------------------
-# 2) psy/psysh v0.11.12 —— 生产依赖（随 laravel/tinker 进镜像）
-#    上游已在 **同一条 0.11 线** 发修复（0.11.23），是可修的。
-#    但改它必须动 src/composer.lock，而 Dockerfile 对 composer.lock 有 md5 自证，
-#    牵一发动全身；不在本次「只加门禁」范围内 —— 记为待办，到期前处理。
-#    想根治：把 psy/psysh 升到 >=0.11.23 并同步更新 Dockerfile 里的 lock md5 自证。
+# 2) psy/psysh —— **已修**（2026-09-30），不再需要白名单。
+#    原 v0.11.12 命中 GHSA-4486-gxhx-5mg7（CVE-2026-25129：CWD 下 .psysh.php 自动加载
+#    导致本地提权）；它是**生产依赖**（随 laravel/tinker 进镜像），且上游在同一条 0.11 线
+#    发了修复。已把 src/composer.lock 升到 v0.11.23，并同步更新 Dockerfile 里的 lock md5 自证
+#    （47dc4ba7… → 12ab2333…）。没有白名单兜底 —— 若 lock 被回退，这条会被扫描重新报出来。
 # -----------------------------------------------------------------------------
-[[IgnoredVulns]]
-id = "GHSA-4486-gxhx-5mg7"        # CVE-2026-25129：CWD 下 .psysh.php 自动加载导致本地提权
-ignoreUntil = 2026-12-31
-reason = "psy/psysh 0.11.12：同线 0.11.23 已修，但升级需改 composer.lock + Dockerfile md5 自证（待办）；镜像内 psysh 仅本机可触达，无远程面"
 
 # -----------------------------------------------------------------------------
 # 3) maximebf/debugbar v1.18.2 —— **开发依赖**（packages-dev）
@@ -79,21 +75,12 @@ ignoreUntil = 2026-12-31
 reason = "phpunit 是 packages-dev 开发依赖，不进 --no-dev 镜像；同线 9.6.33 已修，升级需动 lock（待办）"
 
 # -----------------------------------------------------------------------------
-# 5) sweetalert2@11.4.6 —— 只被 test/ 的行为测试用（test/package-lock.json），
-#    是测试工具链依赖，不随镜像发布（镜像里没有 sweetalert2）。
-#    上游已发 11.22.4（同线可修）→ 升级 test/package-lock.json 即可，属待办。
+# 5) sweetalert2 —— **已修**（2026-09-30），不再需要白名单。
+#    它既是 test/ 行为测试的依赖（test/package-lock.json），也作为前端依赖被打进
+#    镜像里的 public/js/app.js（resources/js/bootstrap.js 里 require 的）—— 所以本轮
+#    把它从 11.4.6 升到 11.22.4（三条公告的总修复版本），src/ 与 test/ 两侧同步升。
+#    锁定后：src/package-lock.json 与 test/package-lock.json 都解析到 11.22.4
+#    （swal-theme.test.mjs 有「两侧版本逐字一致」断言兜底），并重建了 public/js/app.js。
+#    三条公告（GHSA-457r-cqc8-9vj9 / GHSA-8jh9-wqpf-q52c / GHSA-pg98-6v7f-2xfv）随之消失，
+#    白名单条目已删除 —— 若任一侧的锁被回退，会被扫描重新报出来。
 # -----------------------------------------------------------------------------
-[[IgnoredVulns]]
-id = "GHSA-457r-cqc8-9vj9"
-ignoreUntil = 2026-12-31
-reason = "sweetalert2 仅为 test/ 行为测试依赖，不进镜像；同线 11.22.4 已修，升 test/package-lock.json 即消（待办）"
-
-[[IgnoredVulns]]
-id = "GHSA-8jh9-wqpf-q52c"
-ignoreUntil = 2026-12-31
-reason = "同上：test-only 依赖，不进镜像，同线可修"
-
-[[IgnoredVulns]]
-id = "GHSA-pg98-6v7f-2xfv"
-ignoreUntil = 2026-12-31
-reason = "同上：test-only 依赖，不进镜像，同线可修"

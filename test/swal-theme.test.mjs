@@ -181,8 +181,8 @@ console.log('\n[③ 旧弹窗] 三个确认框改用与新弹窗同一套皮肤�
 
     check('皮肤在同一份 common.less 里升级（没有另起一套文件）',
         fs.readdirSync(path.join(SRC, 'resources', 'css')).filter((f) => /swal/i.test(f)).length === 0);
-    // 皮肤段 = 代码里的 `html { … }`（sweetalert2 主题）到 `html.dark { … }` 之间
-    const swalSection = less.slice(less.indexOf('html {'), less.indexOf('html.dark {'));
+    // 皮肤段 = 代码里的 `html:root { … }`（sweetalert2 主题）到 `html.dark { … }` 之间
+    const swalSection = less.slice(less.indexOf('html:root {'), less.indexOf('html.dark {'));
     check('旧的「只在 html.dark 里覆盖」已升级成亮/暗共用（html.dark 里不再有 swal2 规则）',
         !/html\.dark\s*\{[\s\S]*?\.swal2-/.test(less));
     check('皮肤段里没有 !important（靠 html 前缀提权重；文件原有的 [x-cloak] 那条不算）',
@@ -242,17 +242,30 @@ console.log('\n[③ 层叠] 复刻运行时注入顺序（common.css 在前、sw
     onlyOurs.window.close?.();
 
     // 选择器权重（本测试只用得到 元素/类 这几种，够用了）
+    // `:where(...)` 内部**不计分**（CSS 规定，jsdom 也照此实现）—— 先剥掉再数。
     const spec = (sel) => {
-        const s = sel.trim();
+        const s = sel.trim().replace(/:where\([^()]*\)/g, '');
         const ids = (s.match(/#[\w-]+/g) || []).length;
         const cls = (s.match(/\.[\w-]+/g) || []).length + (s.match(/\[[^\]]+\]/g) || []).length
             + (s.match(/(?<!:):[a-z-]+/g) || []).length;
         const els = (s.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
         return ids * 10000 + cls * 100 + els;
     };
-    check('权重：sweetalert2 用 `.swal2-popup { border: none }` 关边框，我们那条 `html .swal2-popup` 权重更高',
-        /\.swal2-popup\s*\{[^}]*border:\s*none/.test(swalCss) && spec('html .swal2-popup') > spec('.swal2-popup'),
-        `ours=${spec('html .swal2-popup')} swal=${spec('.swal2-popup')}`);
+    // sweetalert2 11.22 起：默认边框从字面量 `border: none` 改成变量声明
+    // （`:root { --swal2-border: none }`），基础卡片规则写成
+    // `div:where(.swal2-container) div:where(.swal2-popup) { border: var(--swal2-border); … }`。
+    check('sweetalert2 默认无边框：:root 里 `--swal2-border: none`，基础卡片规则用 `border: var(--swal2-border)`',
+        /--swal2-border:\s*none/.test(swalCss)
+        && /div:where\(\.swal2-container\)\s+div:where\(\.swal2-popup\)\s*\{[^}]*border:\s*var\(--swal2-border\)/.test(swalCss));
+    check('权重：我们的 `html:root .swal2-popup`（(0,2,1)）压过它那条基础规则 `div:where(…) div:where(…)`（(0,0,2)）',
+        spec('html:root .swal2-popup') > spec('div:where(.swal2-container) div:where(.swal2-popup)'),
+        `ours=${spec('html:root .swal2-popup')} swal=${spec('div:where(.swal2-container) div:where(.swal2-popup)')}`);
+    // 输入框是这场「权重竞赛」里最吃紧的一处：11.22 的
+    // `div:where(.swal2-container) .swal2-input { height: 2.625em; padding: 0 .75em }` 是 (0,1,1)，
+    // 与旧的 `html .swal2-input` 平权重、靠后注入取胜 —— 所以前缀必须抬到 `html:root`（(0,2,1)）。
+    check('权重：我们的 `html:root .swal2-input`（(0,2,1)）压过它 `div:where(.swal2-container) .swal2-input`（(0,1,1)）',
+        spec('html:root .swal2-input') > spec('div:where(.swal2-container) .swal2-input'),
+        `ours=${spec('html:root .swal2-input')} swal=${spec('div:where(.swal2-container) .swal2-input')}`);
     expect('弹窗卡片：文字左对齐', '.swal2-popup', 'text-align', 'left');
     expect('标题 16px（默认 30px）', '.swal2-title', 'font-size', '16px');
     expect('标题 semibold 600', '.swal2-title', 'font-weight', '600');
@@ -269,14 +282,17 @@ console.log('\n[③ 层叠] 复刻运行时注入顺序（common.css 在前、sw
     expect('校验提示 13px', '.swal2-validation-message', 'font-size', '13px');
     check('警示图标缩到 55px（默认 80px）', val('.swal2-icon', 'width') === '55px', val('.swal2-icon', 'width'));
 
-    // 反证：不加 html 前缀、权重不够的写法会输给 sweetalert2（说明上面这些不是白写的）
+    // 反证：前缀只加一位（`html `）的写法会输给 sweetalert2 的
+    // `div:where(.swal2-container) .swal2-input`（(0,1,1) 平权重 + 它的样式后注入 → 它赢），
+    // 说明把前缀抬到 `html:root `（(0,2,1)）不是白加的。卡片那条早先还有平权重问题，
+    // 11.22 起它的基础规则换成 `div:where(…) div:where(…)`（(0,0,2)），纯类覆盖本来就够 —— 换成输入框这条更贴现实。
     const weak = new JSDOM(`<!DOCTYPE html><html><head>
-        <style>.swal2-popup { border-radius: 12px; }</style>
+        <style>html .swal2-input { height: 38px; }</style>
         <style>${swalCss}</style></head><body>
-        <div class="swal2-container"><div class="swal2-popup"></div></div></body></html>`);
-    const weakVal = weak.window.getComputedStyle(weak.window.document.querySelector('.swal2-popup')).borderRadius;
-    check('（对照）不带 html 前缀的 .swal2-popup 覆盖不住 sweetalert2 注入的默认值',
-        weakVal !== '12px', `border-radius=${JSON.stringify(weakVal)}`);
+        <div class="swal2-container"><div class="swal2-popup"><input class="swal2-input" value="x"></div></div></body></html>`);
+    const weakVal = weak.window.getComputedStyle(weak.window.document.querySelector('.swal2-input')).height;
+    check('（对照）只带 `html ` 前缀的 .swal2-input 覆盖不住 sweetalert2 注入的默认值',
+        weakVal !== '38px', `height=${JSON.stringify(weakVal)}`);
     dom.window.close?.();
     weak.window.close?.();
 }
