@@ -1,13 +1,12 @@
 <header class="transition-all duration-300 w-full h-14 bg-surface border-b border-line text-ink flex justify-center fixed top-0 z-[9]">
     {{-- relative 是必需的：下面那个按钮用 absolute 贴到顶栏最左侧 = 这个容器的盒左缘。 --}}
-    {{-- ⚠ 这里显式再写一次 md:px-10：x-container 在 images/admin.images 两条路由上会切成
-         「全宽变体」（去掉全部水平内边距，图片墙铺满），而顶栏不是全宽页 —— 那两条路由下
-         顶栏容器只剩 px-6（24px），标题右缘就落进按钮 [0,32] 里面（实测标题 280 < 按钮右缘 288，
-         差 −8px，就是老师截图里 ‹ 压在「我」上的样子）。补上 md:px-10 后顶栏在 ≥768px
-         所有路由下内边距恒为 40px（普通路由本来就有，等于空操作），与按钮/标题的距离无关路由。
-         只补到 md（不写 lg/xl/2xl）：图片页在 2xl 仍是「宽屏全宽页」，顶栏保持 40px 内缩比
-         跟着 2xl:px-60（240px）缩进更贴合该页形态，且两种取值下都不会碰到按钮。 --}}
-    <x-container class="relative w-full px-6 md:px-10 flex justify-between items-center">
+    {{-- ⚠ 顶栏容器「只传 px-6」，绝不能再在这里补 md:px-10 —— 补过一次，是回归：
+         x-container 的默认类在 images/admin.images 两条路由上会切成「全宽变体」（去掉全部
+         水平内边距，图片墙铺满），因此顶栏内边距是「图片页 24px、普通页 40px」（后者来自容器
+         默认类的 px-6 md:px-10 lg/xl:px-10 2xl:px-60）。这是有意的路由差异，不是 bug。
+         在这里再补 md:px-10 会把图片页的右内边距也顶成 40，把右上角那组图标整体往里推 16px
+         （老师截图里的回归）。路由差异一律交给容器默认类 + 下面标题组的 routeIs 分支处理。 --}}
+    <x-container class="relative w-full px-6 flex justify-between items-center">
         {{-- 折叠/展开侧栏（同一语义：开关侧栏），手机仍是抽屉开关。
              用绝对定位而不是负 margin：容器左外边距随侧栏宽度（16rem / 折叠 4rem）和断点变，
              负 margin 得逐断点手算，贴容器自身左缘则展开收起两态都对 ——
@@ -26,18 +25,18 @@
             <i class="hidden sm:inline-block fas text-sm"
                :class="$store.sidebar.collapsed ? 'fa-chevron-right' : 'fa-chevron-left'"></i>
         </a>
-        {{-- 标题位置 = 按钮右缘 + 13px（实测，真 Chromium + 真 app.css，32 种情形全部 gap=13）：
-             容器内边距 <768px 是 px-6(24)、768~1535px 是 md:px-10(40)，差 16px；标题左边距
-             pl-6(24) → md:pl-2(8) 也正好差 16px，两者相抵 ⇒ 标题绝对 x = 容器左缘 + 48
-             在 <768 与 768~1535 两段是同一个值（跨 768px 不跳）。≥1536px（2xl）容器内边距
-             跟着 2xl:px-60 变 240，标题 = 容器左缘 + 248，仍比该断点的内容左缘右 8px。
-             普通页（示例 1440 / 侧栏展开）：内容左缘 296 → 标题 304，比内容右 8px（老师要的 4~8px）；
-                                          按钮右缘 291 → 间隙 13 ✅
-             图片页（同一 1440）：该页内容左缘 256 落在按钮区间 [259,291] 里，物理上无法对齐；
-                                 标题最小安全位 259+32+8 = 299，取 304 =「不重叠」与
-                                 「与普通页标题同 x」两个约束的交点。
-             窄屏（390）：容器左缘 0、按钮 [3,35]、标题 48 → 间隙同样 13px。 --}}
-        <div class="flex justify-start items-center max-w-[70%] pl-6 md:pl-2">
+        {{-- 标题左边距「按路由区分」，与 x-container 的 routeIs 分支同源（一行三元，保持可读）：
+             容器内边距图片页恒为 24（该页是全宽变体，水平内边距只剩顶栏自己传的 px-6），
+             普通页 <768px 为 24(px-6)、≥768px 为 40(md:px-10)，两者差 16px。
+             - 图片页：pl-6(24) → 标题 = 容器左缘 + 48，容器内边距不随断点变，恒成立。
+             - 普通页：pl-6 md:pl-2（24/8）与容器内边距 24/40 逐段差 16、正好相抵
+                      ⇒ 标题同为容器左缘 + 48，跨 768px 不跳。
+             两路由标题绝对 x 都是容器左缘 + 48，恒 > 按钮右缘（容器左缘 + 35），间距恒 13px，
+             满足硬指标「标题左缘 − 按钮右缘 ≥ 8」。（≥1536px 普通页容器内边距变 2xl:px-60
+             = 240，标题 = 左缘 + 248；图片页仍是 +48，离右侧图标组还很远。）
+             反例：若统一写 pl-6 md:pl-2，图片页 ≥768px 会按「容器 40」的假设把标题压到
+             容器左缘 + 32，比按钮右缘还左 3px —— 就是截图里 ‹ 压在「我」上的样子。 --}}
+        <div class="flex justify-start items-center max-w-[70%] {{ request()->routeIs('images', 'admin.images') ? 'pl-6' : 'pl-6 md:pl-2' }}">
             <a href="" class="text-[15px] font-semibold truncate text-ink" id="header-title">@yield('title', \App\Utils::config(\App\Enums\ConfigKey::AppName))</a>
         </div>
         <div class="flex justify-end items-center space-x-3">
