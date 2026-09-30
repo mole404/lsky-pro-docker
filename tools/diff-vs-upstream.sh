@@ -81,6 +81,10 @@ src/composer.lock
 src/app/Utils.php
 #   src/package.json
 src/package.json
+#   src/package-lock.json（前端依赖升级：sweetalert2 11.4.6 → 11.22.4，修掉它的 3 条 npm 公告
+#       —— 见 osv-scanner.toml「test/package-lock.json 侧」；锁里只有 sweetalert2 一处
+#       version/resolved/integrity/赞助链接变化，其余与上游锁逐字节一致）
+src/package-lock.json
 #   src/resources/css/app.css
 src/resources/css/app.css
 #   src/resources/css/common.less
@@ -237,6 +241,12 @@ src/public/mix-manifest.json
 src/app/Providers/AppServiceProvider.php
 #   src/config/database.php
 src/config/database.php
+
+# [8 安全加固（F23）：认证类 POST 端点加路由级节流 —— login / register / forgot-password /
+#   confirm-password 各加 throttle（防爆破、防同 IP 批量撒网/邮箱枚举、防邮件轰炸）。
+#   应用里 Breeze 自带的 RateLimiter 只按 (邮箱|IP) 计数，挡不住换邮箱或换 IP 的批量请求]
+#   src/routes/auth.php
+src/routes/auth.php
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单

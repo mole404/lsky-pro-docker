@@ -103,7 +103,11 @@ jobs:
           git diff -U0 -- src/composer.lock | grep -E '^[+-]\s+"version"' | head -60 || true
 
       - name: Upload composer.lock
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        # 钉到 actions/upload-artifact v7.0.1 的 commit SHA（不是可移动的 tag）。
+        # 旧 pin ea165f8d…（v4）的 action.yml 是 runs.using: node20 → 会打 Node 20 弃用警告；
+        # v7.0.1 是 node24。name / path / if-no-files-found 三个输入在 v7 里都存在且语义不变
+        # （已核该 SHA 的 action.yml），with: 段无需改动。
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: composer-lock-php${{ inputs.php_version }}
           path: src/composer.lock

@@ -8,9 +8,13 @@
 # 再换上本次构建的新镜像挂同一个卷起，是端到端的真升级。
 #
 # 关键设计（每条都有理由，改之前先读）：
-#   1) 升级基线用**不可变 tag**（`UPGRADE_FROM_TAG` = sha-<commit>），不用 :latest：
+#   1) 升级基线用**不可变 tag**（sha-<commit>），不用 :latest：
 #      immutable tag 永不变动、公开可拉，是唯一可复现的「旧版本」；:latest 会随每次 promote
 #      漂移（甚至可能正好是本次这次构建的同 commit 产物 —— 那就成了自己升级自己）。
+#      基线 tag **不写死**：由 resolve_upgrade_base() 向 GHCR 匿名 API 现查「最新的
+#      sha-<commit> tag，且 ≠ 本次构建的 commit」。写死总有一天会因那个 tag 从 GHCR
+#      消失而假红（红的理由与本次改动无关，还会挡住发布）。环境变量 UPGRADE_FROM_TAG
+#      仍是覆盖手段（应急钉死某个已知 tag）。
 #      防漂移：脚本拿 tag 名里的 sha 去核镜像自带的 .code-revision（互相印证），
 #      谁把 tag 挪到别的版本上，这里当场报错（本仓库历史上真的贴错过 tag）。
 #   2) 「升级」= 删掉旧容器，再用新镜像挂**同一个卷**起 —— 与线上
@@ -36,24 +40,104 @@
 #        （旧容器先 rm 掉，再起新的 —— 任何时刻最多一个容器在跑 entrypoint）。
 #
 # 本地复跑（不需要 docker build，公开镜像直接 docker pull）：
-#   IMAGE_REF=ghcr.io/mole404/lsky-pro-docker:latest \
+#   IMAGE_REF=ghcr.io/mole404/lsky-pro-docker:sha-<本次 commit> \
 #   GITHUB_SHA=$(git -C <repo> rev-parse HEAD) bash tools/upgrade-test.sh
+#   # 基线默认自动解析；要钉死某一版再跑：加 UPGRADE_FROM_TAG=sha-<commit>
+# 注意：NEW_REF 必须先存在于本地（脚本只 inspect、不 pull 新镜像；CI 里前一步已 pull）。
 # ============================================================================
 set -euo pipefail
 
 IMAGE="${IMAGE:-ghcr.io/mole404/lsky-pro-docker}"
 IMAGE_REF="${IMAGE_REF:-}"
-# 旧版基线：不可变 tag。默认值是 2026-09-30 那次发布之前的那一版（sha-cd14a3b…）。
-UPGRADE_FROM_TAG="${UPGRADE_FROM_TAG:-sha-cd14a3b9a5e176bf929c962d0575a418e9d80cd3}"
+# 升级基线（不可变 tag）默认**动态解析**（见下方 resolve_upgrade_base）；环境变量是覆盖手段，
+# 只有「GHCR 匿名 API 挂了又要立刻出包」时才手工钉一个已知的 sha-<commit>。
+UPGRADE_FROM_TAG_OVERRIDE="${UPGRADE_FROM_TAG:-}"
 EXPECT_SHA="${GITHUB_SHA:-}"     # CI 里必有；本地跑可省（省了就只断言「新旧确实不同」）
 EXP_CTX="${EXP_CTX:-}"           # 补丁版 context-js.js 的 md5；空则从 Dockerfile 解析
 
 if [ -z "$IMAGE_REF" ]; then
     echo "用法：IMAGE_REF=<本次构建的镜像引用，如 ${IMAGE}:sha-<commit>> [UPGRADE_FROM_TAG=sha-<commit>] $0" >&2
+    echo "      不传 UPGRADE_FROM_TAG 时会向 GHCR 匿名解析「最新的 sha-<commit> tag（≠ 本次构建）」当基线。" >&2
     exit 2
 fi
-OLD_REF="${IMAGE}:${UPGRADE_FROM_TAG}"
 NEW_REF="$IMAGE_REF"
+UPGRADE_FROM_TAG=""   # 下面「解析 / 覆盖」后再赋值
+OLD_REF=""            # ditto
+
+# ---------------------------------------------------------------- 升级基线解析
+# 为什么不再写死 tag：写死的 sha-cd14a3b… 总有一天会从 GHCR 消失（或被删），那一步就红 ——
+# 而它红的理由与「本次改动」毫无关系（纯假红，还挡住发布）。改成向 GHCR 的**匿名** API 现查。
+#
+# 为什么不用 tags/list 的返回顺序当「最新」：registry 规范不保证 tags 顺序（实测 GHCR 返回的
+# 顺序也确实不是时间序）—— 把它当时间序是隐式假设，换个 registry/实现就静默选错。所以逐个
+# 候选 tag 读**镜像配置里的 created（构建时间）**，取最大者：有据可依、可复现、且确定性。
+# 代价：每个候选 3 次匿名请求（index → amd64 manifest → config blob），8 路并发，
+# ~50 个候选约 10 秒；公开包全程匿名，不需要任何凭据。
+#
+# 参数 = 要排除的 commit（本次构建的 commit / 新镜像自带的 fork_sha）——「旧版本」不能是
+#        本次构建自己，否则用例会退化成「自己升级自己」。
+# 成功打印选中的 tag；失败返回非 0（由调用方决定怎么办，见下面调用处）。
+resolve_upgrade_base() {
+    local host path tok tmp cands tag
+    host="${IMAGE%%/*}"          # ghcr.io
+    path="${IMAGE#*/}"           # mole404/lsky-pro-docker
+    tmp=$(mktemp "${TMPDIR:-/tmp}/upgrade-bases.XXXXXX") || return 1
+    cands="$tmp.cands"
+    rm -f "$tmp" "$cands"
+
+    # ① 匿名 token（公开包，pull scope 足够）
+    tok=$(curl -fsS "https://${host}/token?scope=repository:${path}:pull" \
+          | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])' 2>/dev/null) \
+        || { rm -f "$cands"; return 1; }
+    [ -n "$tok" ] || { rm -f "$cands"; return 1; }
+
+    # ② 候选 = 不可变 tag（sha-<40hex>），排除掉「本次构建」那一版
+    curl -fsS -H "Authorization: Bearer $tok" "https://${host}/v2/${path}/tags/list" \
+      | python3 -c '
+import sys, json, re
+tags = json.load(sys.stdin).get("tags") or []
+exclude = set(a for a in sys.argv[1:] if a)
+pat = re.compile(r"^sha-[0-9a-f]{40}$")
+print("\n".join(t for t in tags if pat.match(t) and t[4:] not in exclude))
+' "$@" 2>/dev/null > "$cands" || { rm -f "$cands"; return 1; }
+    [ -s "$cands" ] || { rm -f "$cands"; return 1; }
+    echo "（解析升级基线：$(wc -l < "$cands" | tr -d ' ') 个候选 tag，逐个读镜像构建时间…）" >&2
+
+    # ③ 并发读每个候选的 created；取最大者（同秒按 tag 名兜底 → 确定性）
+    #    注意：本函数体经 export -f 在**新 bash**（无 set -e）里跑，所以单个候选失败只是
+    #    少一个候选（return 0），不会把整步搞红；最终一个都没解析到才由调用方报错。
+    export _UB_HOST="$host" _UB_PATH="$path" _UB_TOK="$tok"
+    _ub_created_of() { # $1=tag → 打印 "<created> <tag>"；取不到就什么都不打
+        local idx cfg created
+        idx=$(curl -fsSL -H "Authorization: Bearer $_UB_TOK" \
+                -H 'Accept: application/vnd.oci.image.index.v1+json' \
+                "https://${_UB_HOST}/v2/${_UB_PATH}/manifests/$1" 2>/dev/null \
+              | python3 -c 'import sys,json;m=json.load(sys.stdin).get("manifests") or [];print(next((x["digest"] for x in m if (x.get("platform") or {}).get("architecture")=="amd64"),""))' 2>/dev/null)
+        [ -n "$idx" ] || return 0
+        cfg=$(curl -fsSL -H "Authorization: Bearer $_UB_TOK" \
+                -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+                "https://${_UB_HOST}/v2/${_UB_PATH}/manifests/${idx}" 2>/dev/null \
+              | python3 -c 'import sys,json;print((json.load(sys.stdin).get("config") or {}).get("digest") or "")' 2>/dev/null)
+        [ -n "$cfg" ] || return 0
+        created=$(curl -fsSL -H "Authorization: Bearer $_UB_TOK" \
+                    "https://${_UB_HOST}/v2/${_UB_PATH}/blobs/${cfg}" 2>/dev/null \
+                  | python3 -c 'import sys,json;print(json.load(sys.stdin).get("created") or "")' 2>/dev/null)
+        [ -n "$created" ] && printf '%s %s\n' "$created" "$1"
+        return 0
+    }
+    export -f _ub_created_of
+    # 不用 xargs -r（GNU 专有）：上面已用 `[ -s "$cands" ]` 保证输入非空。
+    xargs -P8 -I{} bash -c '_ub_created_of "$@"' _ {} < "$cands" > "$tmp" 2>/dev/null || true
+    unset _UB_HOST _UB_PATH _UB_TOK
+
+    [ -s "$tmp" ] || { rm -f "$tmp" "$cands"; return 1; }
+    # created 是 ISO-8601（UTC，"Z"）→ 字典序即时间序，sort -r 取最大
+    tag=$(sort -r "$tmp" | head -1 | awk '{print $2}')
+    rm -f "$tmp" "$cands"
+
+    [ -n "$tag" ] || return 1
+    printf '%s\n' "$tag"
+}
 
 # 没有从 GITHUB_ENV 传进来就从 Dockerfile 解析（单一事实来源，别在这里抄常量）
 if [ -z "$EXP_CTX" ] && [ -f Dockerfile ]; then
@@ -93,16 +177,7 @@ trap on_err ERR
 
 cleanup   # 上一次跑残留的先清掉（幂等）
 
-echo "== 0) 升级基线自洽：tag 名里的 sha 必须等于旧镜像自带的 fork_sha =="
-for i in 1 2 3; do
-    if docker pull "$OLD_REF" >/dev/null 2>&1; then break; fi
-    echo "拉 $OLD_REF 失败，5 秒后重试（$i/3）"
-    sleep 5
-done
-docker image inspect "$OLD_REF" >/dev/null 2>&1 \
-    || { echo "::error::拉不到升级基线镜像 $OLD_REF（公开包，应能匿名拉取）"; exit 1; }
-docker image inspect "$NEW_REF" >/dev/null 2>&1 \
-    || { echo "::error::本地没有本次构建的镜像 $NEW_REF（前一步应当已经 pull 过）"; exit 1; }
+echo "== 0) 解析升级基线 + 自洽校验：tag 名里的 sha 必须等于旧镜像自带的 fork_sha =="
 
 # 镜像内文件的 md5（新镜像那份就是「同步之后卷里应该长成的样子」）
 img_md5() { docker run --rm --entrypoint md5sum "$1" "$2" | awk '{print $1}'; }
@@ -112,15 +187,49 @@ img_fork_sha() {
         | sed -n 's/^fork_sha=//p' | head -1
 }
 
-OLD_SHA=$(img_fork_sha "$OLD_REF")
+# 先确认「本次构建的镜像」在本地（前一步 pull 过），并读出它自带的 fork_sha ——
+# 它同时是解析基线时的排除项（「旧版本」绝不能是本次构建自己）。
+docker image inspect "$NEW_REF" >/dev/null 2>&1 \
+    || { echo "::error::本地没有本次构建的镜像 $NEW_REF（前一步应当已经 pull 过）"; exit 1; }
 NEW_SHA=$(img_fork_sha "$NEW_REF")
+[ -n "$NEW_SHA" ] || { echo "::error::新镜像 $NEW_REF 里没有 .code-revision"; exit 1; }
+
+if [ -n "$UPGRADE_FROM_TAG_OVERRIDE" ]; then
+    UPGRADE_FROM_TAG="$UPGRADE_FROM_TAG_OVERRIDE"
+    echo "升级基线：环境变量覆盖 → $UPGRADE_FROM_TAG"
+else
+    # 解析失败就**明确失败**（见下），理由：
+    #   · 静默通过 = 这次真升级根本没验，却让流水线变绿（最坏的一种「假绿」）；
+    #   · 回退到写死值也不行 —— 那正是本次要消掉的假红来源（那个 tag 迟早会没）。
+    # 应急通道留给了环境变量：设 UPGRADE_FROM_TAG=sha-<commit> 后重跑即可（覆盖优先）。
+    if ! UPGRADE_FROM_TAG=$(resolve_upgrade_base "$EXPECT_SHA" "$NEW_SHA"); then
+        echo "::error::无法从 GHCR 匿名 API 解析升级基线（token / tags/list / 镜像 created 时间都取不到）"
+        echo "::error::真升级用例没有基线时**不许静默通过**。应急：把 UPGRADE_FROM_TAG 设成一个已知的不可变 tag（sha-<commit>）后重跑。"
+        exit 1
+    fi
+    echo "升级基线（动态解析）→ $UPGRADE_FROM_TAG"
+fi
+if [[ ! "$UPGRADE_FROM_TAG" =~ ^sha-[0-9a-f]{40}$ ]]; then
+    echo "::error::基线 '$UPGRADE_FROM_TAG' 不是 sha-<40hex> 形式（动态解析或环境变量给了非法值）"
+    exit 1
+fi
+OLD_REF="${IMAGE}:${UPGRADE_FROM_TAG}"
+
+for i in 1 2 3; do
+    if docker pull "$OLD_REF" >/dev/null 2>&1; then break; fi
+    echo "拉 $OLD_REF 失败，5 秒后重试（$i/3）"
+    sleep 5
+done
+docker image inspect "$OLD_REF" >/dev/null 2>&1 \
+    || { echo "::error::拉不到升级基线镜像 $OLD_REF（公开包，应能匿名拉取）"; exit 1; }
+
+OLD_SHA=$(img_fork_sha "$OLD_REF")
 TAG_SHA="${UPGRADE_FROM_TAG#sha-}"
 NEW_APP_JS=$(img_md5 "$NEW_REF" /var/www/lsky/public/js/app.js)
 OLD_APP_JS=$(img_md5 "$OLD_REF" /var/www/lsky/public/js/app.js)
 NEW_IMGSVC=$(img_md5 "$NEW_REF" /var/www/lsky/app/Services/ImageService.php)
 
 [ -n "$OLD_SHA" ] || { echo "::error::旧镜像 $OLD_REF 里没有 .code-revision（太老的镜像不能当基线）"; exit 1; }
-[ -n "$NEW_SHA" ] || { echo "::error::新镜像 $NEW_REF 里没有 .code-revision"; exit 1; }
 if [ "$OLD_SHA" != "$TAG_SHA" ]; then
     echo "::error::基线 tag $UPGRADE_FROM_TAG 指向的镜像里 fork_sha=$OLD_SHA —— tag 被挪到别的版本上了（不可变 tag 必须指向它自己那一版）"
     exit 1

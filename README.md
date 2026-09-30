@@ -24,19 +24,20 @@
    （同一份内容的两处拷贝，必须一致）+ `resources/views/user/images.blade.php`（脚本版本串）。
    「我们相对上游改了什么」见 `patches/ios-longpress.patch`（存档，不参与构建），可用
    `bash tools/diff-vs-upstream.sh` 随时重新生成与核对。
-   该脚本内置一份**已知偏离清单**（`KNOWN_DEVIATIONS`，当前 92 个文件，按「为什么偏离」分组：
+   该脚本内置一份**已知偏离清单**（`KNOWN_DEVIATIONS`，当前 93 个文件，按「为什么偏离」分组：
    补丁产物 / 移除画廊与系统升级 / 移除 SVG / 依赖安全升级 / 前端换新与迭代 / 前端构建产物 /
-   sqlite 并发参数）：src/ 相对上游的「内容不同」清单必须**恰好**落在清单内 ——
+   sqlite 并发参数 / 认证端点节流）：src/ 相对上游的「内容不同」清单必须**恰好**落在清单内 ——
    出现清单之外的改动就 exit 1 报警（要么登记进清单并写一句理由，要么就是手滑）。
 3. 基础镜像显式写成 Debian **bookworm** 变体（与 2024-04 那版镜像同一 Debian 大版本），
    `install-php-extensions` 钉到具体版本（不再用 `latest`）。
 4. **构建期自证**：① 「**从不修改**的上游文件」（`public/index.php`）按上游 md5 校验 —— 保证 vendored
    快照没被动过；② 「**有意偏离**上游」的文件（`config/convention.php` / `routes/web.php` /
-   `app/Services/ImageService.php` / `composer.lock`）按预期 md5 校验 —— 改了就构建失败；
+   `routes/auth.php` / `app/Services/ImageService.php` / `composer.lock`）按预期 md5 校验 —— 改了就构建失败；
    ③ 补丁产物按预期 md5 校验（见 Dockerfile「自证 1 / 1b / 2」）。
 5. CI 推到 GHCR（用仓库自带 `GITHUB_TOKEN`，不需要任何 secret）。**构建前**先跑 `test/` 里的 jsdom
    行为测试（补丁的每条分支），构建后把镜像拉回来做真机自证：核 md5 + 断言补丁标记 + 记录
-   PHP/扩展/Debian 版本 + 真起容器 curl 安装页 + 核 Apache 实际吐出的 JS md5。
+   PHP/扩展/Debian 版本 + 真起容器 curl 安装页 + 核 Apache 实际吐出的 JS md5 +
+   **断言真实响应头里没有 `X-Powered-By`、`Server` 头不带具体版本号**（F23 加固的端到端自证）。
    上游的「每天定时重建」已去掉（源码钉死后定时重建没有意义）。
 6. **入口脚本按「代码版本标记」自动同步**（`entrypoint.sh`）：镜像里带一个 `.code-revision`
    （源码 commit + 补丁 md5），卷里也存一份；**两者不一致（= 换了镜像）才同步代码**，
@@ -68,6 +69,30 @@
      据此 `app/Services/ImageService.php` 也成了 **fork 有意修改**的文件（它原本在「从不修改的上游文件」
      名单里），md5 `9fb843806abd6b778d8acd3366e2f0f1` → `e7edc0fc9dc8c654c4debca0e1d2eac4`；
      Dockerfile 的构建期自证已把它从「自证 1（从不修改）」移到「自证 1b（有意偏离上游）」并同步期望值。
+8. **认证类 POST 端点加路由级节流（F23，2026-09-30 安全加固）**：`routes/auth.php` 里
+   `/login`、`/register`、`/forgot-password`、`/confirm-password` 四个 POST 各加 `throttle`
+   （登录/注册/密码确认 `5,1`、找回密码 `6,1`，即每 IP 每分钟 5/6 次，超出 429）。
+   原来这四个端点**一个路由级节流都没有**（全仓只有 `verification.verify` 的 `6,1`、
+   `verification.send` 的 `3,1`、`api/v1/tokens` 的 `3,1`，那三条没动）。
+   应用里 Breeze 自带的 `RateLimiter`（`LoginRequest`）是按 **(邮箱|IP)** 计数的、5 次失败 / 60 秒衰减，
+   只能挡「盯着同一个账号撞库」——换着邮箱撒网、或轮换 IP 的批量请求它挡不住，所以两者互补：
+   一个防单账号被撞，一个防同 IP 批量请求（邮箱枚举 / 注册滥用 / 邮件轰炸）。
+   **已知取舍**：`TrustProxies` 是 `$proxies = '*'`，`$request->ip()` 取自 `X-Forwarded-For`；
+   前面有反向代理（并且由代理覆写该头）时拿到的是真实客户端 IP，**若站点直接暴露在公网、没有代理
+   覆写这个头，攻击者能伪造 `X-Forwarded-For` 绕过按 IP 的限流**。这一条没有一并改（改它会牵动
+   所有取 IP 的地方，属单独一步）。该文件同样被钉进 `Dockerfile` 自证 1b 的 md5。
+9. **运行时加固：响应头不再泄露精确版本（F23，2026-09-30）**：镜像里加两份配置，只改镜像自身的
+   PHP/Apache 配置、不碰应用代码：
+   - `/usr/local/etc/php/conf.d/zz-lsky-hardening.ini`：`expose_php=0`（不再发 `X-Powered-By: PHP/8.3.x`）、
+     `display_errors=0`（错误不直出响应体）。官方 php 镜像不带 `php.ini`，编译默认值就是 1；
+     文件名用 `zz-` 前缀是因为 `conf.d` 的 ini 按文件名字母序加载、后加载者覆盖先者，`zz-` 排最后就
+     不会被别的 ini 盖掉。
+   - `/etc/apache2/conf-enabled/zz-lsky-hardening.conf`：`ServerTokens Prod`（`Server` 头只留 `Apache`，
+     原来是 `Apache/2.4.68 (Debian)`）+ `ServerSignature Off`。**放 `conf-enabled` 而不是那个 vhost 模板
+     （`000-default.conf.template`）**：`ServerTokens` 是全局（主配置上下文）指令，写进 `<VirtualHost>` 里
+     Apache 会直接拒绝加载；模板整份是 vhost、还管着 HTTPS vhost 与目录权限，动它风险面大得多。
+   两处都有**构建期断言**（ini 那条是用 `php -r` 真读回 `ini_get()` 断言，不是 grep 文件内容），
+   CI 的「Verify published image」再对**真 Apache 吐出来的响应头**断言一次。
 
 ## 代码在仓库的哪里、怎么改
 
@@ -309,9 +334,10 @@ docker inspect lskypro --format '{{index .Config.Labels "org.opencontainers.imag
 - `resources/views/user/images.blade.php`：原始 `22c896eb7322ec2ff37d5eddd7ca0dec` → 补丁后 `cab1ae9abf815ae3ca30a63608dbf004`
 - `app/Services/ImageService.php`：`a7bcd8549c656501a057214637f10b45`（旧 pin）→ `9fb843806abd6b778d8acd3366e2f0f1`（上游 `38d52c46…` 的值）→ `e7edc0fc9dc8c654c4debca0e1d2eac4`（F3：移除 SVG 支持时删掉 svg 分支）
 - `config/convention.php`：`674975e4e5561cc15c27626cb1ce5233`（旧 pin）→ `ee439977cfcb2e4d3545b25689198c71`（允许 svg 那版）→ `8136e73b50315d783f105dd4ac9971bb`（F3：后缀白名单去掉 svg）
-- 除补丁产物（`context-js.js` 两份 + `images.blade.php`）外，**有意偏离上游**的还有 4 个文件：
+- 除补丁产物（`context-js.js` 两份 + `images.blade.php`）外，**有意偏离上游**的还有 5 个文件：
   `config/convention.php`、`routes/web.php`、`app/Services/ImageService.php`（上一条，F3 移除 SVG 支持时删了 svg 分支）、
-  `composer.lock`（安全升级）。`src/` 里**其他**文件都应等于上游 `38d52c46…` 的原值（CI「自证 1 / 1b」每次构建都会验）
+  `routes/auth.php`（F23 给认证类 POST 端点加节流）、`composer.lock`（安全升级）。`src/` 里**其他**文件都应等于上游 `38d52c46…` 的原值
+  （CI「自证 1 / 1b」每次构建都会验）
 
 功能上要过的用例：
 
@@ -322,6 +348,8 @@ docker inspect lskypro --format '{{index .Config.Labels "org.opencontainers.imag
 - 菜单开着时滚动、缩放、按 Esc → 菜单收起（刚打开 300ms 内它自己引发的滚动不算）
 - Windows 右键、Android Chrome 长按 → 菜单照旧
 - 单击看大图、拖拽多选、复制链接、重命名、删除、上传、原图与缩略图访问、登录、API
+- F23：`curl -sI http://<站点>/` 的响应头里**没有 `X-Powered-By`**，且 `Server` 只写 `Apache`（不带版本号）；
+  同一分钟内 `POST /login` 打第 6 次返回 **429**（`/register`、`/confirm-password` 同理，`/forgot-password` 是 6 次）
 
 `test/` 下有一个 node + jsdom 的行为测试（`cd test && npm install && npm test`，会依次跑全量
 `*.test.mjs`，任一个失败就非 0 退出），可以在没有 iPhone 的情况下先把每条分支跑一遍；
