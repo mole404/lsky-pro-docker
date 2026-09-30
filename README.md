@@ -1,6 +1,6 @@
 # Lsky Pro Docker 镜像
 
-基于 [Lsky Pro](https://github.com/lsky-org/lsky-pro) v3.1 的自维护 Docker 镜像：
+基于 [Lsky Pro](https://github.com/lsky-org/lsky-pro) 的自维护 Docker 镜像：
 应用源码 vendored 在本仓库的 `src/` 里，构建不联网拉上游，直接用它。
 
 - 镜像：`ghcr.io/mole404/lsky-pro-docker:latest`
