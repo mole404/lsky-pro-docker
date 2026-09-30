@@ -247,6 +247,14 @@ src/config/database.php
 #   应用里 Breeze 自带的 RateLimiter 只按 (邮箱|IP) 计数，挡不住换邮箱或换 IP 的批量请求]
 #   src/routes/auth.php
 src/routes/auth.php
+# [9 安全：收窄信任代理 —— TrustProxies 的 $proxies 从 '*' 改成只信任私有网段。
+#     上游默认 '*' 等于信任所有转发头，而外层 nginx 用的是 $proxy_add_x_forwarded_for
+#     （追加而不是覆盖），客户端自己带的 X-Forwarded-For 会排在列表最前面被采信 ——
+#     于是所有按 IP 限流的地方（登录失败计数、throttle 中间件）都能靠伪造一个头无限重置。
+#     实测：写 '*' 时应用解析出的客户端 IP 就是伪造值；改成私有网段后解析出真实客户端，
+#     且 HTTPS 判定不受影响（正常用户解析结果与改动前完全一致）。]
+#   src/app/Http/Middleware/TrustProxies.php
+src/app/Http/Middleware/TrustProxies.php
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单
