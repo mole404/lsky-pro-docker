@@ -16,10 +16,10 @@
              同时与侧栏里同款小按钮（w-8 h-8 rounded-lg hover:bg-surface-2）尺寸一致。
              mt-3 让它在 56px 顶栏里垂直居中（(56-32)/2 = 12px），实测中心偏差 < 0.5px。
              ⚠ 按钮「占位区间」= [容器左缘 + 3, 容器左缘 + 35]（absolute left-[3px] 相对的是容器的
-             padding box，内边距不会把它推开；3px 是老师要的「别顶到边上」的内缩，上限 4px），
+             padding box，内边距不会把它推开；8px 是老师要的「别顶到边上」的内缩，左右相等），
              所以任何情况下标题左缘都不得小于 容器左缘 + 43（= 3 + 32 + 8）。 --}}
         <a href="javascript:void(0)" @click="$store.sidebar.toggleSmart()" title="开关侧栏"
-           class="absolute left-[3px] top-0 mt-3 w-8 h-8 rounded-lg flex justify-center items-center text-ink-2 hover:bg-surface-2">
+           class="absolute left-2 top-0 mt-3 w-8 h-8 rounded-lg flex justify-center items-center text-ink-2 hover:bg-surface-2">
             {{-- 手机：抽屉（☰）；桌面：箭头，方向表示侧栏会往哪边收 --}}
             <i class="fas fa-bars text-lg sm:hidden"></i>
             <i class="hidden sm:inline-block fas text-sm"
@@ -39,10 +39,10 @@
         <div class="flex justify-start items-center max-w-[70%] {{ request()->routeIs('images', 'admin.images') ? 'pl-6' : 'pl-6 md:pl-2' }}">
             <a href="" class="text-[15px] font-semibold truncate text-ink" id="header-title">@yield('title', \App\Utils::config(\App\Enums\ConfigKey::AppName))</a>
         </div>
-        {{-- 与左侧折叠按钮对称：绝对定位贴容器盒右缘内缩 4px。absolute 相对容器的
+        {{-- 与左侧折叠按钮对称：绝对定位贴容器盒右缘内缩 8px。absolute 相对容器的
              padding box，所以容器内边距（图片页 24 / 普通页 40 / 2xl 240）推不动它 ——
-             左右两端因此在同一套规则下对齐（左 3px、右 4px）。 --}}
-        <div class="absolute right-1 inset-y-0 flex items-center space-x-3">
+             左右两端因此在同一套规则下对齐（各内缩 8px）。 --}}
+        <div class="absolute right-2 inset-y-0 flex items-center space-x-3">
             <x-theme-switch />
             @includeWhen($_is_notice, 'layouts.notice')
             @includeWhen($_group->strategies->isNotEmpty(), 'layouts.strategies')
