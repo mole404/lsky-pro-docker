@@ -24,9 +24,10 @@
    （同一份内容的两处拷贝，必须一致）+ `resources/views/user/images.blade.php`（脚本版本串）。
    「我们相对上游改了什么」见 `patches/ios-longpress.patch`（存档，不参与构建），可用
    `bash tools/diff-vs-upstream.sh` 随时重新生成与核对。
-   该脚本内置一份**已知偏离清单**（`KNOWN_DEVIATIONS`，当前 93 个文件，按「为什么偏离」分组：
+   该脚本内置一份**已知偏离清单**（`KNOWN_DEVIATIONS`，当前 94 个文件，按「为什么偏离」分组：
    补丁产物 / 移除画廊与系统升级 / 移除 SVG / 依赖安全升级 / 前端换新与迭代 / 前端构建产物 /
-   sqlite 并发参数 / 认证端点节流）：src/ 相对上游的「内容不同」清单必须**恰好**落在清单内 ——
+   sqlite 并发参数 / 认证端点节流 / 收窄信任代理（`TrustProxies` 不再信任所有转发头，否则伪造
+   `X-Forwarded-For` 就能重置按 IP 的限流））：src/ 相对上游的「内容不同」清单必须**恰好**落在清单内 ——
    出现清单之外的改动就 exit 1 报警（要么登记进清单并写一句理由，要么就是手滑）。
 3. 基础镜像显式写成 Debian **bookworm** 变体（与 2024-04 那版镜像同一 Debian 大版本），
    `install-php-extensions` 钉到具体版本（不再用 `latest`）。
