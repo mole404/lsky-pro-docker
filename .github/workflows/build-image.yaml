@@ -60,12 +60,17 @@ env:
   # 上游快照里的数据库迁移文件个数。换 pin 时若这个数变了，说明有 schema 变更，
   # 而 entrypoint 不会自动跑 migrate —— 那种情况必须人工处理，所以在 CI 里钉住提醒。
   UPSTREAM_MIGRATION_COUNT: "10"
-  # 「真升级用例」（tools/upgrade-test.sh）的升级基线：**不可变** tag（sha-<commit>）。
-  # 为什么用它、不用 :latest：immutable tag 公开可拉、永不变动，是唯一可复现的「旧版本」；
-  # latest 会随每次 promote 漂移（甚至可能正好就是本次这次构建的同 commit 产物 —— 那就成了
-  # 自己升级自己）。它不算「事实的副本」：脚本会拿 tag 名里的 sha 去核镜像自带的
-  # .code-revision（互相印证），谁把 tag 挪到别的版本上都会当场报错（这个仓库真的贴错过 tag）。
-  UPGRADE_FROM_TAG: sha-cd14a3b9a5e176bf929c962d0575a418e9d80cd3
+  # 「真升级用例」（tools/upgrade-test.sh）的升级基线：**不再写死**，由脚本向 GHCR 匿名 API
+  # 现查「最新的 sha-<commit> tag，且 ≠ 本次构建的 commit」当基线。
+  # 为什么改（原来的写法确实会红）：这里曾硬编码 sha-cd14a3b9…，那个 tag 一旦从 GHCR 消失
+  # （或被删），这一步就红 —— 而红的理由与本次改动毫无关系（纯假红，还挡住发布）。
+  # 为什么不用 :latest / 不选浮动 tag：immutable tag 永不变动、公开可拉，是唯一可复现的
+  # 「旧版本」；latest 会随每次 promote 漂移（甚至可能正好是本次构建的同 commit 产物 —— 那就
+  # 成了「自己升级自己」）。解析出的 tag 仍会被脚本用它自带的 .code-revision 反核（互相印证），
+  # 谁把 tag 挪到别的版本上都会当场报错（本仓库真的贴错过 tag）。
+  # 覆盖手段：给仓库变量 vars.UPGRADE_FROM_TAG 设一个 sha-<commit>（脚本里环境变量优先），
+  # 仅用于「GHCR 匿名 API 挂了又要立刻出包」这种应急场景。
+  # 解析失败时脚本**明确报错**、不会静默跳过（一次没跑成的升级验证等于没验证）。
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -220,7 +225,15 @@ jobs:
       #   ERR_REQUIRE_ESM 跑不起来（整条流水线红得毫无信息量）。这里显式装 Node 22 线
       #   （22 的最新补丁版已 ≥ 22.22；下面再打一行 node --version 留证）。
       - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        # 钉到 actions/setup-node v7.0.0 的 commit SHA（不是可移动的 tag）：
+        #   gh api repos/actions/setup-node/releases/latest --jq .tag_name   # → v7.0.0
+        #   gh api repos/actions/setup-node/git/ref/tags/v7.0.0 --jq .object.sha
+        # 为什么必须换（Node 20 弃用警告）：旧的 49933ea…（v4）action.yml 里是
+        #   runs.using: node20 → runner 每次都会打 "Node.js 20 is deprecated"。
+        #   v7.0.0 的 action.yml 是 runs.using: node24（该 release 的主旨就是迁移到新
+        #   runtime），警告消失。node-version / cache / cache-dependency-path 三个输入
+        #   在 v7 里名字与语义都没变（已核 action.yml），with: 段无需改动。
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
           cache: npm
@@ -239,6 +252,12 @@ jobs:
           npm ci --no-audit --no-fund
           npm test
 
+      # 说明（本次「Node 20 弃用」清扫的覆盖面）：下面 docker/* 系列与上面的 actions/checkout
+      # 都核对过 —— 它们钉的 commit SHA 就是各自**最新 release** 指向的 commit，且 action.yml 里
+      # 是 runs.using: node24，不会再触发 Node.js 20 弃用警告，故保持不变（不为动而动）。
+      # 核验命令（对每个 repo）：gh api repos/<repo>/releases/latest --jq .tag_name →
+      #   gh api repos/<repo>/git/ref/tags/<tag> --jq .object.sha（annotated tag 再 deref 一层）
+      #   → 用该 SHA 取 action.yml 看 runs.using。本次据此只换了 setup-node（见上）。
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
 
@@ -442,6 +461,33 @@ jobs:
             echo "::warning::/images 跟随重定向后 500（未安装状态的下游页，非回归）；dump 容器日志供参考"
             docker logs lsky-smoke 2>&1 | tail -20 || true
           fi
+
+          # F23：响应头加固自证 —— 验的是**真 Apache 吐出来的头**，不是看配置文件写了没写。
+          #   ① 不许出现 X-Powered-By（PHP 版本号外泄；镜像里 zz-lsky-hardening.ini 关掉 expose_php）
+          #   ② Server 头不许带具体版本号（镜像里 conf-enabled/zz-lsky-hardening.conf 设 ServerTokens Prod）
+          # 先把响应头落成文件再 grep —— 不写 `curl … | grep -q`：命中即退会 SIGPIPE（见上面的坑）。
+          curl -sS -D /tmp/hdr.txt -o /dev/null http://127.0.0.1:18089/
+          echo "== 响应头（GET /，即浏览器真正收到的头）=="
+          cat /tmp/hdr.txt
+          if [ ! -s /tmp/hdr.txt ]; then
+            echo "::error::拿不到响应头（/tmp/hdr.txt 是空的），响应头加固无法自证"
+            exit 1
+          fi
+          if grep -qi '^X-Powered-By:' /tmp/hdr.txt; then
+            echo "::error::响应头里仍有 X-Powered-By（PHP 版本号外泄）—— 检查 zz-lsky-hardening.ini 的 expose_php=0"
+            exit 1
+          fi
+          SRV_HDR=$(grep -i '^Server:' /tmp/hdr.txt | head -1 || true)
+          echo "Server 头：$SRV_HDR"
+          if [ -z "$SRV_HDR" ]; then
+            echo "::error::响应头里没有 Server 头，响应头加固无法自证（容器没起来或头被吞了）"
+            exit 1
+          fi
+          if grep -Eq '[0-9]+\.[0-9]+' <<< "$SRV_HDR"; then
+            echo "::error::Server 头泄露了具体版本号：$SRV_HDR（期望是 Server: Apache）"
+            exit 1
+          fi
+          echo "响应头加固自证通过：无 X-Powered-By，Server 头不含版本号"
 
           # 端到端：验 Apache 真正吐给浏览器的 JS（不是磁盘上的文件）
           SERVED_JS=$(curl -s http://127.0.0.1:18089/js/context-js/context-js.js | md5sum | awk '{print $1}')
@@ -875,7 +921,10 @@ jobs:
       - name: Verify real upgrade from previous image (data byte-identical)
         env:
           IMAGE_REF: ${{ env.IMAGE }}:sha-${{ github.sha }}
-          UPGRADE_FROM_TAG: ${{ env.UPGRADE_FROM_TAG }}
+          # 基线默认由 tools/upgrade-test.sh 向 GHCR 匿名解析（最新的 sha-<commit> tag ≠ 本次 commit）。
+          # 这里只在需要人工钉死时才读仓库变量 vars.UPGRADE_FROM_TAG（未设 = 空 = 走动态解析）；
+          # 变量在脚本里是「覆盖优先」，解析逻辑照旧不跑。
+          UPGRADE_FROM_TAG: ${{ vars.UPGRADE_FROM_TAG }}
         run: |
           set -euo pipefail
           bash tools/upgrade-test.sh
