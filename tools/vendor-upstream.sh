@@ -7,7 +7,7 @@
 #       /tmp 下并逐条打印 diff，需要你确认后把补丁重新贴到 src/ 里（或反过来弃用）。
 #       跑完必须：① 更新 Dockerfile 里的 LSKY_COMMIT 与两道自证的 md5
 #                 ② 重新生成 patches/ios-longpress.patch
-#                 ③ 跑 test/ 的行为测试（bash test/run.sh 或 cd test && npm test）
+#                 ③ 跑 test/ 的行为测试（cd test && npm test）
 #
 # 依赖：git、md5sum（需要能访问 github.com）
 # 用法：bash tools/vendor-upstream.sh <上游 commit>

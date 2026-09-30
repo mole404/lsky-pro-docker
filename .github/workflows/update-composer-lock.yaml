@@ -56,13 +56,23 @@ jobs:
               set -euo pipefail
               apt-get update -qq >/dev/null
               apt-get install -yqq git unzip >/dev/null
-              curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer >/dev/null
+              # F16：composer 安装器**先校验、再执行**（与仓库 Dockerfile 同一套做法）——
+              # 不能 curl | php 直接把网上的字节喂给解释器。预期 sha384 取自
+              # https://composer.github.io/installer.sig，与 https://getcomposer.org/installer
+              # 分属两个域名，单点被投毒时另一侧能拦住；哈希故意不写死（installer 随每个
+              # composer 版本重新生成，写死会让 composer 一发新版 CI 就红）。验不过即失败。
+              curl -fsSL -o /tmp/composer-setup.php https://getcomposer.org/installer
+              curl -fsSL -o /tmp/composer-setup.sig https://composer.github.io/installer.sig
+              grep -Eq "^[0-9a-f]{96}$" /tmp/composer-setup.sig
+              printf "%s  %s\n" "$(cat /tmp/composer-setup.sig)" /tmp/composer-setup.php | sha384sum -c -
+              php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
+              rm -f /tmp/composer-setup.php /tmp/composer-setup.sig
               composer --version
               if [ "${ADVPOL:-true}" = "true" ]; then
                 echo "==================== 注意 ===================="
                 echo "显式关闭 Composer 的「拒绝带未修公告版本」策略。"
-                echo "原因：整条 laravel/framework 9.x 线被 5 条公告覆盖（PKSA-*），不关掉就无法重新解析任何依赖。"
-                echo "这**不新增风险**：线上本来就跑在这条线上（9.52.17），只是把既有事实写明。"
+                echo "原因：整条 laravel/framework 9.x 线被 4 条公告覆盖（PKSA-*），不关掉就无法重新解析任何依赖。"
+                echo "这**不新增风险**：线上本来就跑在这条线上（9.52.22），只是把既有事实写明。"
                 echo "根治之道是升级 Laravel 大版本（另立项）。"
                 echo "=============================================="
                 # 必须用 --global：写进容器内的 ~/.composer/config.json，不碰仓库里的 composer.json
@@ -93,7 +103,14 @@ jobs:
           echo "=== 锁与 composer.json 是否一致（必须 OK，否则镜像构建会报 lock file is not up to date）==="
           git status --short -- src/composer.json
           docker run --rm -v "$PWD/src:/app" -w /app "php:${PHPVER}-cli" bash -lc '
-            curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer >/dev/null 2>&1
+            set -e
+            # 同样先校验再执行（F16，与上面那步、以及仓库 Dockerfile 保持一致）
+            curl -fsSL -o /tmp/composer-setup.php https://getcomposer.org/installer
+            curl -fsSL -o /tmp/composer-setup.sig https://composer.github.io/installer.sig
+            grep -Eq "^[0-9a-f]{96}$" /tmp/composer-setup.sig
+            printf "%s  %s\n" "$(cat /tmp/composer-setup.sig)" /tmp/composer-setup.php | sha384sum -c -
+            php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
+            rm -f /tmp/composer-setup.php /tmp/composer-setup.sig
             composer validate --no-check-publish --no-interaction 2>&1 | tail -4
           '
 
