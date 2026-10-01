@@ -179,6 +179,12 @@
 .dropdown-context .submenu-back > a > i {
     margin-right: 7px;
 }
+/* fork：去掉右键 / 长按菜单左上角的气泡尖角（老师要求，电脑端 + 手机端一致）。
+   尖角就是这两条伪元素画出来的（上面一条深色描边 + 下面一条面板色叠出「箭头」）。
+   用 content: none 让伪元素根本不生成 —— 只少这一个装饰；菜单的尺寸 / 圆角 / 阴影 /
+   定位 / 滚动关闭行为一个字都没动。
+   ⚠ 范围：.dropdown-context 只由 context-js.js 生成（顶栏下拉走 Alpine 组件的 .ls-menu，
+   不用这个类 —— 全仓 grep 只有 context-js.js 会产出它），所以这里是全局去掉、不会误伤别的浮层。 */
 .dropdown-context:before, .dropdown-context-up:before {
     position: absolute;
     top: -7px;
@@ -188,7 +194,7 @@
     border-bottom: 7px solid var(--lsky-border-2);
     border-left: 7px solid transparent;
     border-bottom-color: rgba(0, 0, 0, 0.2);
-    content: '';
+    content: none;
 }
 .dropdown-context:after, .dropdown-context-up:after {
     position: absolute;
@@ -198,7 +204,7 @@
     border-right: 6px solid transparent;
     border-bottom: 6px solid var(--lsky-surface);
     border-left: 6px solid transparent;
-    content: '';
+    content: none;
 }
 .dropdown-context-up:before, .dropdown-context-up:after {
     top: auto;
