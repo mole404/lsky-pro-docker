@@ -23,7 +23,9 @@
 #   7. 认证类 POST 加路由级节流（src/routes/auth.php：login/register/forgot-password/confirm-password）
 #   8. 测试版内存收紧（2026-10-01）：PHP memory_limit 收到 64M（可运行时用 env PHP_MEMORY_LIMIT
 #      覆盖，entrypoint 渲染进上面的 hardening ini）、opcache memory_consumption 128→64、
-#      Apache MaxConnectionsPerChild 默认 5→30。详见各段注释与 CI「Verify published image」的新断言。
+#      Apache MaxConnectionsPerChild 保持默认 5（低流量站，每 ~3 分钟换班开销可忽略，
+#      取最严的内存纪律；可运行时用 env APACHE_MAX_CONNECTIONS_PER_CHILD 覆盖，0 = 永不回收）。
+#      详见各段注释与 CI「Verify published image」的新断言。
 #
 # 构建：docker build -t lsky-pro-docker .
 # ---------------------------------------------------------------------------

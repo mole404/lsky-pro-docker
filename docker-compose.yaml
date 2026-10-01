@@ -11,7 +11,7 @@ services:
       # ---- Apache MPM（并发/内存占用）：不写就用镜像内置的低配默认值 ----
       # 逐项覆盖：写哪个改哪个，没写的保持默认。默认见 README「Apache MPM」一节：
       #   StartServers 2 / MinSpareServers 1 / MaxSpareServers 3 /
-      #   MaxRequestWorkers 5 / MaxConnectionsPerChild 30 / KeepAlive Off
+      #   MaxRequestWorkers 5 / MaxConnectionsPerChild 5 / KeepAlive Off
       # 例：并发大一点、子进程处理 5000 个请求后回收（0 = 永不回收，合法但内存只涨不落）
       # - APACHE_MAX_REQUEST_WORKERS=25
       # - APACHE_MAX_CONNECTIONS_PER_CHILD=5000
