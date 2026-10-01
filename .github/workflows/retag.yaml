@@ -9,6 +9,14 @@ name: Retag (repoint a tag to an existing image)
 #   · 改前/改后都打印 digest，并**断言目标 digest 与源逐字一致**（B7）：
 #     digest 是内容寻址的，相等 ⇒ 只改了指向、没换内容；不一致就 fail（并把两个 digest 都打出来）。
 #     若目标本来就指向同一个 digest 则幂等短路、不做无谓写入。
+#
+# 分支构建风险核对（2026-10-01，配合 build-image 新增的 push: test/*）：
+#   本 workflow **只有 `workflow_dispatch` 一种触发**（没有 push / pull_request），
+#   所以推 test/* 分支**不会**触发它；即便有人手动从任意 ref 派发，它也：
+#     ① 拒绝把 `latest` 当目标（校验输入那步硬拦），② 只接受 sha-* 源、③ 逐字校验 digest。
+#   结论：它无法把线上在用的 `latest` 顶成测试版 —— 无需再加 master-only 守卫
+#   （加了反而会挡住"从任一 ref 手工修复历史上贴错的不可变 tag"这个正当用途）。
+#   `latest` 的唯一改动者仍只有 build-image 的 Promote 步骤（已限定 github.ref == refs/heads/master）。
 
 on:
   workflow_dispatch:

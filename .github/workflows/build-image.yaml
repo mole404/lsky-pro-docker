@@ -11,6 +11,11 @@ on:
   push:
     branches:
       - master
+      # 测试版分支（老师用来先把改动放上分支验证，master 保持 = 线上稳定版）：
+      # 分支构建**只产出不可变的 sha-<commit> 镜像**，绝不动 :latest ——
+      # 由下面的「Promote verified image to latest」步骤用 `if: … github.ref == 'refs/heads/master'`
+      # 把关（否则分支一推就把线上在用的 latest 顶成测试版）。
+      - 'test/*'
   # 只用于「试构建」：临时换 PHP 版本验证兼容性，不改仓库里的默认值。
   # 留空 = 用 Dockerfile 里的 ARG PHP_VERSION。
   #
@@ -501,6 +506,27 @@ jobs:
           docker exec lsky-smoke php -r 'echo "artisan 可用："; echo file_exists("/var/www/html/artisan") ? "yes" : "no"; echo PHP_EOL;'
           echo "== 播种到卷里的补丁文件（部署后真正被 Apache 读的那份）=="
           docker exec lsky-smoke md5sum /var/www/html/public/js/context-js/context-js.js
+
+          # 测试版内存收紧自证（2026-10-01）：
+          #   ① PHP 生效的 memory_limit 必须是 64M —— 真读回 ini_get()，不是看配置文件写了没写
+          #      （CLI 与 Apache 模块共用同一份 conf.d，entrypoint 在启动时把 PHP_MEMORY_LIMIT 渲染进去）；
+          #   ② MaxConnectionsPerChild 默认必须是 30 —— 真读回容器里被 entrypoint 渲染出的 mpm.conf。
+          # 都按本仓规矩「先落文件再比较」—— 不写 `… | grep -q`：命中即退会 SIGPIPE（141），
+          # 上面带了 `set -o pipefail` 会把「命中」误判成失败（本仓踩过这个坑）。
+          docker exec lsky-smoke sh -c 'php -r "echo ini_get(\"memory_limit\");"' > /tmp/php-memlimit.txt 2>&1 || true
+          echo "容器里 memory_limit 生效值：$(cat /tmp/php-memlimit.txt 2>/dev/null)"
+          if [ "$(cat /tmp/php-memlimit.txt 2>/dev/null)" != "64M" ]; then
+            echo "::error::PHP memory_limit 不是 64M（读到：$(cat /tmp/php-memlimit.txt 2>/dev/null)）—— 检查 zz-lsky-hardening.ini 与 entrypoint 的 PHP_MEMORY_LIMIT 渲染"
+            exit 1
+          fi
+          docker exec lsky-smoke cat /etc/apache2/conf-enabled/mpm.conf > /tmp/smoke-mpm.txt 2>&1 || true
+          echo "== 容器里渲染出的 mpm.conf =="
+          cat /tmp/smoke-mpm.txt 2>/dev/null || true
+          if ! grep -qx 'MaxConnectionsPerChild 30' /tmp/smoke-mpm.txt; then
+            echo "::error::MaxConnectionsPerChild 默认不是 30（容器 mpm.conf 里没有这一行）"
+            exit 1
+          fi
+          echo "测试版内存收紧自证通过：memory_limit=64M，MaxConnectionsPerChild=30"
           docker rm -f lsky-smoke
 
           {
@@ -621,7 +647,7 @@ jobs:
             'MinSpareServers 1' \
             'MaxSpareServers 3' \
             'MaxRequestWorkers 5' \
-            'MaxConnectionsPerChild 5' \
+            'MaxConnectionsPerChild 30' \
             'KeepAlive Off' > /tmp/mpm-default.txt
           need_running lsky-mpm-a
           docker exec lsky-mpm-a cat "$MPM" > /tmp/mpm-actual.txt
@@ -652,7 +678,7 @@ jobs:
           need_running lsky-mpm-b
           docker exec lsky-mpm-b cat "$MPM"
           for line in 'StartServers 2' 'MinSpareServers 1' 'MaxSpareServers 3' \
-                      'MaxRequestWorkers 17' 'MaxConnectionsPerChild 5' 'KeepAlive Off'; do
+                      'MaxRequestWorkers 17' 'MaxConnectionsPerChild 30' 'KeepAlive Off'; do
             assert_line lsky-mpm-b "$line"
           done
           assert_no_line lsky-mpm-b '^KeepAliveTimeout'
@@ -935,7 +961,9 @@ jobs:
       - name: Promote verified image to latest
         # 试构建（手动指定 php_version 且与 Dockerfile 默认不同）只保留不可变 tag，不动 latest：
         # 免得"还没定案的版本"变成线上 `docker compose pull` 的目标。
-        # 只有 master 上的构建才许动 latest：分支上的试构建（含 UI 改造）绝不能把线上拉取目标改掉
+        # 只有 master 上的构建才许动 latest：分支构建（现在 push: test/* 也会触发）绝不能把线上
+        # 拉取目标改掉 —— 否则推一次测试版分支就把老师线上在用的 :latest 偷偷顶成测试版。
+        # 分支构建只产出不可变的 :sha-<commit>（由构建步骤推送），要测就显式按 sha tag 拉。
         if: steps.pin.outputs.is_test_build != 'true' && github.ref == 'refs/heads/master'
         run: |
           set -euo pipefail
