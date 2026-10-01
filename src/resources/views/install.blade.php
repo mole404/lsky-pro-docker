@@ -18,8 +18,8 @@
     <script src="{{ asset('js/app.js') }}"></script>
 </head>
 <body class="font-sans antialiased">
-<div class="min-h-screen text-ink bg-surface-3">
-    <div class="min-h-screen flex justify-center items-center px-6 py-10 md:py-20">
+<div class="min-h-screen ls-zoom-minh-screen text-ink bg-surface-3">
+    <div class="min-h-screen ls-zoom-minh-screen flex justify-center items-center px-6 py-10 md:py-20">
         <div class="md:w-[600px]">
             <h1 class="text-ink text-3xl">Install Lsky Pro</h1>
             <div id="checking" class="mt-4 p-6 rounded-md bg-surface w-full">

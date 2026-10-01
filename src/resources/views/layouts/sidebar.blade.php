@@ -1,3 +1,7 @@
+{{-- 高度：这里保留 h-screen 只为手机（<768px）口径与原样一致；桌面端真正生效的是
+     resources/css/common.less 里 #app-sidebar 的 height:100dvh（id 权重压过这个 class），
+     而桌面默认 110% 缩放的补偿（calc(100vh/1.1)）也加在那条 id 规则上 —— 所以别在这里补
+     md:h-[...]，那是死代码。 --}}
 <nav id="app-sidebar" class="transition-all duration-300 -left-[600px] sm:left-0 w-3/4 sm:w-64 h-screen bg-surface border-r border-line fixed z-10" :class="{
     '-left-[600px]': ! $store.sidebar.open,
     'left-0': $store.sidebar.open
@@ -78,7 +82,21 @@
         </div>
 
         {{-- 底部留出空间：原来 mb-5 时容量文字会被浏览器左下角的链接预览挡住（老师反馈）--}}
-        <div id="capacity-progress" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10">
+        {{-- 桌面端把这块整体上移（老师反馈 110% 缩放下它「稍微被下边缘裁掉一点」，
+             后又反馈「完整可见了，但被浏览器自己的预览小条挡住了一点」）。
+             实测（真 CSS + 真 Chromium 153、1440 宽、物理 px）：
+               mt-10(40px) → 容量块底边比视口底低 23.4px（被裁）
+               mt-2 (8px)  → 底边余量 +11.8px（H=800 时；上一轮的形态）
+               mt-1 (4px)  → 底边余量 +16.2px（只压线，留 0.2px 余量，不可靠）
+               mt-0 (0px)  → 底边余量 +20.6px  ← 取这一档
+             故桌面档从 mt-2 再上移 8px（局部）= 8.8px 物理，底部余量 ≥16px 且有余量。
+             断点/写法：用 common.less 的 ls-zoom-mt-0（@media(min-width:768px) 内，带 html 前缀压过
+             .mt-10），而不是 Tailwind 的 md: / min-[768px]: —— md 已随断点 ×1.1 变成 844.8px，
+             而 Tailwind 3.0.23 还没有任意值变体。语义与缩放阈值 768 严格对齐。
+             窗口更高时（内容放得下）flex 的 justify-between 会把这块吸到容器底部，
+             所以高窗口（≥864 实测余量 61.6px）观感与改动前逐像素一致 —— 只有「会溢出」的窗口才整体上移。
+             手机档（<768px）保持 mt-10 原样（老师要求手机端零变化）。--}}
+        <div id="capacity-progress" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10 ls-zoom-mt-0">
             <p class="text-ink-2 text-[13.5px]">容量使用</p>
             <progress class="w-full h-1.5" value="{{ Auth::user()->use_capacity }}" max="{{ Auth::user()->capacity }}"></progress>
             <p class="text-ink-3 text-[13.5px] truncate">
