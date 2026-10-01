@@ -132,52 +132,55 @@ console.log('\n[A. 静态] 标签落点：详情行 / 卡片角标 / 批量打�
     check('角标内容由列表返回的 tags 渲染（前 3 个、长名截断）',
         /cardTagsHtml\(images\[i\]\.tags\)/.test(blade) && /slice\(0, 3\)/.test(blade) && /max-w-\[7rem\] truncate/.test(blade));
 
-    check('弹窗标题是「修改标签」（不是「打标签」）',
-        /<p class="text-\[16px\] font-semibold leading-6 text-ink">修改标签<\/p>/.test(tpl('image-tags-tpl'))
-        && ! blade.includes('打标签'));
-    check('文案已标准化：标题「修改标签」、副标题「点击标签切换」、输入框「请输入…」',
-        tpl('image-tags-tpl').includes('点击标签切换')
-        && ! tpl('image-tags-tpl').includes('· 点标签切换')
-        && tpl('image-tags-tpl').includes('请输入新标签名称')
-        && detailTpl.includes('请输入标签名称，回车即可添加')
-        && blade.includes('暂无标签'));
-    check('批量修改标签弹窗：桌面工具栏 data-operate="tag"',
-        /<a data-operate="tag"[^>]*>修改标签<\/a>/.test(blade));
-    check('批量打标弹窗：手机 ⋯ 菜单里也有 data-operate="tag"',
-        (blade.match(/data-operate="tag"/g) || []).length === 2);
+    check('弹窗标题是「标签管理」（唯一窗口，不再是「修改标签 / 管理标签」两个）',
+        /<p class="text-\[16px\] font-semibold leading-6 text-ink">标签管理<\/p>/.test(tpl('image-tags-tpl'))
+        && ! blade.includes('打标签')
+        && ! blade.includes('<x-modal id="tag-manage-modal">'));
+    check('副标题按「有没有选中图片」两支文案（勾选 / 取消的语义写在窗口里）',
+        tpl('image-tags-tpl').includes('__hint__')
+        && blade.includes('勾选 = 给这些图片加上，取消勾选 = 从这些图片移除')
+        && blade.includes('未选择图片 · 可在这里新建、重命名、删除标签')
+        && tpl('image-tags-tpl').includes('请输入新标签名称'));
+    check('批量打标入口：桌面工具栏 + 手机 ⋯ 菜单，都叫「标签管理」',
+        /<a data-operate="tag"[^>]*>标签管理<\/a>/.test(blade)
+        && (blade.match(/data-operate="tag"/g) || []).length === 2);
     check('operates 白名单（单选 / 多选）都换成 tag',
         /operates = \['refresh', 'movements', 'tag', 'detail', 'rename', 'delete', 'deselect'\];/.test(blade)
         && /operates = \['refresh', 'movements', 'tag', 'delete', 'deselect'\];/.test(blade));
-    check('右键菜单里也能进「管理标签」（紧跟「修改标签」注入到图片菜单）',
-        /manageTags: \{\s*text: '管理标签',/.test(blade)
-        && /actions\.tag,\s*actions\.manageTags,\s*actions\.detail,/.test(blade)
-        && /action: _ => openTagManage\(\)/.test(blade));
-    check('右键菜单：actions.tag + 注入 + switch 落地都在',
-        /tag: \{\s*text: '修改标签',/.test(blade) && blade.includes('actions.tag,') && /case 'tag':/.test(blade));
-    check('批量弹窗模板：标签行 44px 点击区 + 底部取消/确定（默认禁用）',
-        /id="image-tags-item-tpl"/.test(blade) && /min-h-\[44px\]/.test(tpl('image-tags-item-tpl'))
-        && /id="image-tags-confirm"[^>]*disabled/.test(tpl('image-tags-tpl')));
-    check('批量打标请求形状：ids + tags + remove_tags（同一 route user.images.tags）',
+    check('右键菜单只有一个「标签管理」（旧的「管理标签」项已合并掉）',
+        /tag: \{\s*text: '标签管理',/.test(blade)
+        && ! blade.includes('manageTags')
+        && /actions\.tag,\s*actions\.detail,/.test(blade) && /case 'tag':/.test(blade));
+    check('窗口里一行 = 勾选区 + 右侧改名/删除两个常显 44×44 按钮',
+        /id="image-tags-item-tpl"/.test(blade)
+        && /image-tag-toggle/.test(tpl('image-tags-item-tpl'))
+        && (tpl('image-tags-item-tpl').match(/class="(?:update|delete) flex h-11 w-11/g) || []).length === 2
+        && tpl('image-tags-item-tpl').includes('aria-label="重命名标签"')
+        && tpl('image-tags-item-tpl').includes('aria-label="删除标签"'));
+    check('勾选语义是两态（三态循环「不变/添加/移除」已删干净）',
+        ! blade.includes('data-state="none"') && ! blade.includes('fa-circle-plus') && ! blade.includes('fa-circle-minus')
+        && blade.includes('const isChecked = (id)')
+        && blade.includes('勾上 = 给这些图片加上')
+        && blade.includes("label = pendingAdd ? '添加'") && blade.includes("label = '移除'"));
+    check('「确定」默认禁用、且没选中图片时整个不显示', /id="image-tags-confirm"[^>]*disabled/.test(tpl('image-tags-tpl'))
+        && /\$confirm\.prop\('disabled', true\)\.toggle\(hasSelection\)/.test(blade));
+    check('批量打标请求形状：ids + tags + remove_tags（同一 route user.images.tags，id 仍是数字）',
         /axios\.put\('\{\{ route\('user\.images\.tags'\) \}\}', payload\)/.test(blade)
-        && blade.includes('payload.tags = addIds;') && blade.includes('payload.remove_tags = removeIds;'));
+        && blade.includes('payload.tags = addIds.map(Number);') && blade.includes('payload.remove_tags = removeIds.map(Number);')
+        && blade.includes('let payload = {ids: selIds.map(Number)};'));
 }
 
-console.log('\n[A. 静态] 标签管理（标签本身的新建 / 重命名 / 删除）');
+console.log('\n[A. 静态] 标签窗口：标签本身的新建 / 重命名 / 删除（与打标同一个窗口）');
 {
-    check('入口在标签筛选下拉底部（#tag-manage-open「管理标签」）',
-        blade.includes('id="tag-manage-open"') && blade.includes('>管理标签</a>'));
-    check('钩子齐全：<x-modal id="tag-manage-modal"> + #tag-manage-content + 三个模板',
-        blade.includes('<x-modal id="tag-manage-modal">') && blade.includes('id="tag-manage-content"')
-        && ['tag-manage-tpl', 'tag-manage-item-tpl', 'tag-manage-edit-tpl'].every((id) => tpl(id).length > 0));
+    check('入口在标签筛选下拉底部（#tag-manage-open，文案「标签管理」）',
+        blade.includes('id="tag-manage-open"') && blade.includes('>标签管理</a>'));
+    check('只剩一个窗口：旧的 tag-manage-modal / content / 三个模板都删干净了',
+        ! blade.includes('tag-manage-modal') && ! blade.includes('tag-manage-content')
+        && ['tag-manage-tpl', 'tag-manage-item-tpl', 'tag-manage-edit-tpl'].every((id) => tpl(id).length === 0)
+        && blade.includes('id="image-tags-edit-tpl"') && blade.includes('id="tag-edit"'));
 
-    const rowTpl = tpl('tag-manage-item-tpl');
-    check('行内分区：≥44px 行 + 两个常显 44×44 按钮（模板里没有 hidden / group-hover）',
-        rowTpl.includes('min-h-[44px]') && (rowTpl.match(/class="(?:update|delete) flex h-11 w-11/g) || []).length === 2
-        && ! /class="[^"]*\bhidden\b/.test(rowTpl) && ! rowTpl.includes('group-hover')   // aria-hidden 不算
-        && rowTpl.includes('aria-label="重命名标签"') && rowTpl.includes('aria-label="删除标签"'));
-
-    check('三个请求形状：POST user/tags 新建 / PUT user/tags/{id} 重命名 / DELETE user/tags/{id} 删除',
-        /axios\.post\(\$form\.attr\('action'\), \$form\.serialize\(\)\)/.test(blade)
+    check('三个请求形状：POST user/tags 新建（JSON {name}）/ PUT user/tags/{id} 重命名 / DELETE user/tags/{id} 删除',
+        /axios\.post\('\{\{ route\('user\.tag\.create'\) \}\}', \{name: name\}\)/.test(blade)
         && /axios\.put\(\$form\.attr\('action'\), \$form\.serialize\(\)\)/.test(blade)
         && /axios\.delete\('\/user\/tags\/' \+ tag\.id\)/.test(blade));
 
@@ -188,13 +191,45 @@ console.log('\n[A. 静态] 标签管理（标签本身的新建 / 重命名 / �
     check('重命名是行内展开，名称用 .val() 填（标签名里的引号不会破坏属性）',
         blade.includes("$edit.find('input[name=name]').val($row.find('.name').text());"));
 
+    check('删除后把所有本地状态摘干净（筛选选中 / 待加 / 待减 / 行内表单）',
+        /addIds = addIds\.filter\(id => id !== String\(tag\.id\)\);/.test(blade)
+        && /removeIds = removeIds\.filter\(id => id !== String\(tag\.id\)\);/.test(blade)
+        && /\$\('#tag-edit'\)\.remove\(\)/.test(blade));
+
     check('改动后同步三个消费方（筛选下拉 / 详情候选 / 图片墙）',
         /const refreshAfterTagChange = \(\) => loadTags\(\)\.then\(\(\) => setTags\(\)\);/.test(blade));
 
     check('文案标准化：标题「标签管理」、按钮「新建标签」「确认修改」、空状态「暂无标签」',
-        tpl('tag-manage-tpl').includes('标签管理') && tpl('tag-manage-tpl').includes('请输入标签名称')
-        && tpl('tag-manage-tpl').includes('>新建标签</button>')
-        && tpl('tag-manage-edit-tpl').includes('确认修改') && tpl('tag-manage-edit-tpl').includes('请输入标签名称'));
+        tpl('image-tags-tpl').includes('>新建标签</button>')
+        && tpl('image-tags-edit-tpl').includes('确认修改') && tpl('image-tags-edit-tpl').includes('请输入标签名称')
+        && blade.includes('暂无标签，可在下方新建'));
+}
+
+console.log('\n[A. 静态] 「显示图片标签」开关 + 框选修复');
+{
+    check('开关在标签下拉里（#tag-badge-toggle + 文案 + 图标钩子）',
+        blade.includes('id="tag-badge-toggle"') && blade.includes('显示图片标签')
+        && blade.includes('id="tag-badge-toggle-icon"'));
+    check('开关状态记在本地、默认打开（localStorage）',
+        blade.includes("const TAG_BADGE_KEY = 'lsky.show_image_tags'")
+        && /localStorage\.getItem\(TAG_BADGE_KEY\) !== '0'/.test(blade)
+        && /localStorage\.setItem\(TAG_BADGE_KEY, showImageTags \? '1' : '0'\)/.test(blade));
+    check('关掉时角标整体不显示（容器类 + 页面 CSS）',
+        /\.image-tags-off \.image-tags \{\s*display: none;\s*\}/.test(blade)
+        && blade.includes("$photos.toggleClass('image-tags-off', ! show)"));
+    check('框选修复：按在「图片 / 卡片本身 / 空白处」都允许起拖动，落在控件（如小圆勾）上才 break()',
+        /let \$target = \$\(event\.target\);/.test(blade)
+        && /let onCardSurface = \$target\.is\(IMAGES_ITEM\)/.test(blade)
+        && /if \(! \$target\.hasClass\('dragselect'\) && ! onCardSurface\) \{/.test(blade)
+        && ! /if \(! \$\(event\.target\)\.hasClass\('dragselect'\)\) \{/.test(blade));
+    check('框选修复（真因）：图片墙排完版后让 DragSelect 重新量区域，否则缓存过期、拖动根本不启动',
+        /\$photos\.on\('jg\.complete jg\.resize'/.test(blade)
+        && /ds\.Interaction\.init\(\);/.test(blade)
+        && !/justifiedGallery\('norewind'\)[\s\S]{0,200}?ds\.Interaction\.init\(\)/.test(blade));
+    check('没有用 pointer-events / 自己接管点击之类的技巧（实测那条路会变成「拖动元素本身」）',
+        ! blade.includes('.images-item img {')
+        && ! /\$photos\.on\('click', IMAGES_ITEM/.test(blade)
+        && ! /immediateDrag/.test(blade));
 }
 
 console.log('\n[A. 静态] 钉住的产物没被碰');
@@ -230,11 +265,13 @@ const IMAGE = {
     tags: [{ id: 11, name: '风景' }],
 };
 
-// boot({ gridItems }) —— gridItems > 0 时预先放好图片墙的卡片（默认 1 张）
-function boot({ gridItems = 1, putStatus = true, postStatus = true, swalConfirmed = false } = {}) {
+// boot({ gridItems, itemTags }) —— gridItems > 0 时预先放好图片墙的卡片（默认 1 张）
+// itemTags(i) 可让每张卡片带不同标签（用来测「部分选中图片有这个标签」的半勾态）
+function boot({ gridItems = 1, putStatus = true, postStatus = true, swalConfirmed = false,
+                itemTags = () => [{ id: 11, name: '风景' }] } = {}) {
     const items = [];
     for (let i = 0; i < gridItems; i++) {
-        const json = JSON.stringify({ ...IMAGE, id: 7 + i, tags: [{ id: 11, name: '风景' }] }).replace(/'/g, '&#39;');
+        const json = JSON.stringify({ ...IMAGE, id: 7 + i, tags: itemTags(i) }).replace(/'/g, '&#39;');
         items.push(`<a class="images-item" data-id="${7 + i}" href="javascript:void(0)" data-json='${json}'>
             <div class="image-tags pointer-events-none absolute left-0 right-0 bottom-0 z-[1]"></div>
             <img alt="beach.jpg" src="https://i.example.com/beach-thumb.jpg"></a>`);
@@ -244,21 +281,19 @@ function boot({ gridItems = 1, putStatus = true, postStatus = true, swalConfirme
         <span id="header-title"></span>
         <a id="tag-filter" href="javascript:void(0)"><span>标签</span><i class="fas fa-tags"></i></a>
         <div id="tag-filter-menu"><div id="tag-filter-list"></div>
-            <a id="tag-filter-clear" class="ls-menu-item hidden text-brand" href="javascript:void(0)" x-data>清除筛选</a></div>
+            <a id="tag-filter-clear" class="ls-menu-item hidden text-brand" href="javascript:void(0)" x-data>清除筛选</a>
+            <a id="tag-badge-toggle" href="javascript:void(0)" x-data><span>显示图片标签</span><i id="tag-badge-toggle-icon" class="fas fa-toggle-on"></i></a>
+            <a id="tag-manage-open" href="javascript:void(0)" x-data>标签管理</a></div>
         <div id="images-scroll"><div id="images-grid">${items.join('')}</div></div>
         <div id="image-detail-modal" class="hidden"><div id="image-detail-content"></div></div>
         <div id="image-tags-modal" class="hidden"><div id="image-tags-content"></div></div>
-        <div id="tag-manage-modal" class="hidden"><div id="tag-manage-content"></div></div>
-        <a id="tag-manage-open" href="javascript:void(0)">管理标签</a>
-        <a data-operate="tag" class="hidden" href="javascript:void(0)">修改标签</a>
+        <a data-operate="tag" class="hidden" href="javascript:void(0)">标签管理</a>
         <input id="search">
         <script type="text/html" id="images-item-tpl">${tpl('images-item-tpl')}</script>
         <script type="text/html" id="image-detail-tpl">${tpl('image-detail-tpl')}</script>
         <script type="text/html" id="image-tags-tpl">${tpl('image-tags-tpl')}</script>
         <script type="text/html" id="image-tags-item-tpl">${tpl('image-tags-item-tpl')}</script>
-        <script type="text/html" id="tag-manage-tpl">${tpl('tag-manage-tpl')}</script>
-        <script type="text/html" id="tag-manage-item-tpl">${tpl('tag-manage-item-tpl')}</script>
-        <script type="text/html" id="tag-manage-edit-tpl">${tpl('tag-manage-edit-tpl')}</script>
+        <script type="text/html" id="image-tags-edit-tpl">${tpl('image-tags-edit-tpl')}</script>
     </body></html>`, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'https://lsky.test/user/images' });
 
     const { window } = dom;
@@ -322,7 +357,11 @@ function boot({ gridItems = 1, putStatus = true, postStatus = true, swalConfirme
         getSelection() { return this._sel; }
         subscribe() {} setSelectables() {} addSelection() {} toggleSelection() {} clearSelection() { this._sel = []; } stop() {} break() {}
     };
-    window.Viewer = class { update() {} };
+    window.Viewer = class {
+        constructor() { window.Viewer.last = this; this.views = []; }
+        update() {}
+        view(index) { this.views.push(index); }
+    };
     window.ClipboardJS = class { on() { return this; } };
         window.context = { init() {}, attach: (selector, options) => calls.attaches.push({ selector, options: options || {} }), isMenuOpen: () => false };
     window.toastr = {
@@ -459,7 +498,7 @@ console.log('\n[B. 行为] 详情卡：显示 / 移除 / 添加已有 / 现场�
     check('两个标签都挂上后 chip 有两个', $('#detail-tags .ls-badge').length === 2);
 }
 
-console.log('\n[B. 行为] 批量打标：添加 / 移除 / 新建（桌面与手机共用同一弹窗）');
+console.log('\n[B. 行为] 标签管理：给选中的图片加 / 移除标签（两态勾选）');
 {
     const { $, calls, t } = boot({ gridItems: 2 });
     await sleep(20);
@@ -467,26 +506,36 @@ console.log('\n[B. 行为] 批量打标：添加 / 移除 / 新建（桌面与�
     t.ds._sel = $('.images-item').get();
     t.methods.tag();
 
-    check('打开批量打标弹窗（#image-tags-modal）', calls.modalOpen.at(-1) === 'image-tags-modal');
-    check('标题 + 已选数量（两支图片）',
-        $('#image-tags-content').text().includes('修改标签') && $('#image-tags-content').text().includes('已选择 2 张图片'));
+    check('打开唯一的标签窗口（#image-tags-modal）', calls.modalOpen.at(-1) === 'image-tags-modal',
+        JSON.stringify(calls.modalOpen));
+    check('标题「标签管理」+ 已选数量（两支图片）',
+        $('#image-tags-content').text().includes('标签管理') && $('#image-tags-content').text().includes('已选择 2 张图片'));
     const rows = () => $('#image-tags-list .image-tag-row');
-    check('标签行渲染出来，且是 44px 点击区', rows().length === 2 && rows().eq(0).attr('class').includes('min-h-[44px]'));
-    check('没做任何选择时「确定」是禁用的', $('#image-tags-confirm').prop('disabled') === true);
+    check('两行标签，每行都有改名 / 删除按钮', rows().length === 2
+        && rows().eq(0).find('.update').length === 1 && rows().eq(0).find('.delete').length === 1);
+    check('两张图都有的标签默认就是勾上的（fa-check-square + 「已有」）',
+        rows().eq(0).find('.tag-state-icon').attr('class').includes('fa-check-square')
+        && rows().eq(0).text().includes('已有'));
+    check('没动过任何东西时「确定」是禁用的', $('#image-tags-confirm').prop('disabled') === true);
 
-    rows().eq(0).trigger('click');
-    check('点一下 → 添加（品牌色 + 文案「添加」）', $('#image-tags-list .image-tag-row').eq(0).attr('data-state') === 'add'
-        && $('#image-tags-list .image-tag-row').eq(0).text().includes('添加')
-        && $('#image-tags-list .image-tag-row').eq(0).attr('class').includes('bg-brand-soft'));
+    // 取消勾选「风景」（两张图上都有）→ 变成「移除」
+    rows().eq(0).find('.image-tag-toggle').trigger('click');
+    check('取消勾选 → 未勾选 + 文案「移除」+ 行描红（危险色）',
+        rows().eq(0).find('.tag-state-icon').attr('class').includes('fa-square')
+        && rows().eq(0).text().includes('移除')
+        && rows().eq(0).attr('class').includes('border-danger'));
     check('「确定」变成可用', $('#image-tags-confirm').prop('disabled') === false);
 
-    $('#image-tags-list .image-tag-row').eq(0).trigger('click');
-    check('再点一下 → 移除（危险色 + 文案「移除」）',
-        $('#image-tags-list .image-tag-row').eq(0).attr('data-state') === 'remove'
-        && $('#image-tags-list .image-tag-row').eq(0).text().includes('移除')
-        && $('#image-tags-list .image-tag-row').eq(0).attr('class').includes('text-danger'));
+    // 勾选「壁纸」（两张图上都没有）→ 添加
+    rows().eq(1).find('.image-tag-toggle').trigger('click');
+    check('勾选 → 文案「添加」+ 品牌色底',
+        rows().eq(1).text().includes('添加') && rows().eq(1).attr('class').includes('bg-brand-soft'));
+    rows().eq(1).find('.image-tag-toggle').trigger('click');
+    check('再点一次取消 → 回到未勾选，且不会提交「移除」（本来就没有）',
+        ! rows().eq(1).find('.tag-state-icon').attr('class').includes('fa-check-square')
+        && ! rows().eq(1).text().includes('移除'));
+    rows().eq(1).find('.image-tag-toggle').trigger('click');
 
-    $('#image-tags-list .image-tag-row').eq(1).trigger('click');
     $('#image-tags-confirm').trigger('click');
     await sleep(20);
 
@@ -499,7 +548,32 @@ console.log('\n[B. 行为] 批量打标：添加 / 移除 / 新建（桌面与�
         && ! $('.images-item').eq(0).find('.image-tags').text().includes('风景'));
 }
 
-console.log('\n[B. 行为] 批量打标：现场新建标签后直接置为「添加」');
+console.log('\n[B. 行为] 「部分选中的图片有这个标签」→ 半勾，点一下全勾');
+{
+    // 第 1 张带「风景」，第 2 张不带
+    const { $, calls, t } = boot({ gridItems: 2, itemTags: (i) => (i === 0 ? [{ id: 11, name: '风景' }] : []) });
+    await sleep(20);
+
+    t.ds._sel = $('.images-item').get();
+    t.methods.tag();
+
+    const row = () => $('#image-tags-list .image-tag-row[data-id="11"]');
+    check('半勾态：fa-minus-square + 文案「部分有」',
+        row().find('.tag-state-icon').attr('class').includes('fa-minus-square') && row().text().includes('部分有'));
+
+    row().find('.image-tag-toggle').trigger('click');
+    check('点一下 → 全勾（文案「添加」），确定可用', row().text().includes('添加')
+        && row().find('.tag-state-icon').attr('class').includes('fa-check-square')
+        && $('#image-tags-confirm').prop('disabled') === false);
+
+    $('#image-tags-confirm').trigger('click');
+    await sleep(20);
+    check('确定 → 只带 tags（补到两张图上）',
+        JSON.stringify(calls.puts.at(-1).data) === JSON.stringify({ ids: [7, 8], tags: [11] }),
+        JSON.stringify(calls.puts.at(-1).data));
+}
+
+console.log('\n[B. 行为] 标签管理：现场新建标签后直接勾上');
 {
     const { $, calls, t } = boot({ gridItems: 1 });
     await sleep(20);
@@ -510,10 +584,10 @@ console.log('\n[B. 行为] 批量打标：现场新建标签后直接置为「�
     $('#image-tags-create').trigger('click');
     await sleep(20);
 
-    check('POST user/tags 新建成功', calls.posts.at(-1)?.data.name === '新标签');
-    check('新行渲染出来并直接处于「添加」态',
-        $('#image-tags-list .image-tag-row[data-id="13"]').attr('data-state') === 'add'
-        && $('#image-tags-list .image-tag-row[data-id="13"]').text().includes('添加'));
+    check('POST user/tags 新建（JSON {name}）', calls.posts.at(-1)?.data.name === '新标签');
+    check('新行渲染出来并直接勾上（文案「添加」）',
+        $('#image-tags-list .image-tag-row[data-id="13"]').text().includes('添加')
+        && $('#image-tags-list .image-tag-row[data-id="13"]').attr('class').includes('bg-brand-soft'));
 
     $('#image-tags-confirm').trigger('click');
     await sleep(20);
@@ -522,49 +596,53 @@ console.log('\n[B. 行为] 批量打标：现场新建标签后直接置为「�
         JSON.stringify(calls.puts.at(-1).data));
 }
 
-console.log('\n[B. 行为] 标签管理：新建 / 重命名 / 删除（标签本身）');
+console.log('\n[B. 行为] 标签管理：不带选中图片打开（只改标签本身）');
 {
     const { $, calls } = boot({ swalConfirmed: true });
     await sleep(20);
 
     $('#tag-manage-open').trigger('click');
-    check('点「管理标签」打开 #tag-manage-modal', calls.modalOpen.at(-1) === 'tag-manage-modal', JSON.stringify(calls.modalOpen));
+    check('点下拉里的「标签管理」→ 打开的是同一个窗口', calls.modalOpen.at(-1) === 'image-tags-modal',
+        JSON.stringify(calls.modalOpen));
     await sleep(30);
 
-    const rows = () => $('#tag-manage-list .tag-manage-row');
+    const rows = () => $('#image-tags-list .image-tag-row');
+    check('没选中图片：副标题给提示、且「确定」不显示',
+        $('#image-tags-content').text().includes('未选择图片') && $('#image-tags-confirm').is(':hidden'),
+        $('#image-tags-content').text().trim().slice(0, 60));
     check('列出当前标签（名称 + 使用数量 + 重命名/删除两个按钮）',
-        rows().length === 2 && $('#tag-manage-list').text().includes('风景')
-        && $('#tag-manage-list').text().includes('3 张')
+        rows().length === 2 && $('#image-tags-list').text().includes('风景')
+        && $('#image-tags-list').text().includes('3 张')
         && rows().eq(0).find('.update').length === 1 && rows().eq(0).find('.delete').length === 1,
         rows().eq(0).text().trim().replace(/\s+/g, ' '));
 
     // 新建
-    $('#tag-manage-create input[name=name]').val('临时标签');
-    $('#tag-manage-create form').trigger('submit');
+    $('#image-tags-new').val('临时标签');
+    $('#image-tags-create').trigger('click');
     await sleep(40);
-    check('新建 → POST 到 user/tags（表单序列化）',
-        calls.posts.length === 1 && decodeURIComponent(calls.posts.at(-1).data).includes('name=临时标签'),
-        calls.posts.at(-1).data);
-    check('新建后列表刷新出这一行（3 行）', rows().length === 3 && $('#tag-manage-list').text().includes('临时标签'));
+    check('新建 → POST user/tags（JSON body {name}）',
+        calls.posts.length === 1 && calls.posts.at(-1).data.name === '临时标签',
+        JSON.stringify(calls.posts.at(-1)?.data));
+    check('新建后列表出现这一行（3 行）', rows().length === 3 && $('#image-tags-list').text().includes('临时标签'));
 
     // 重命名
-    let $row = $('#tag-manage-list .tag-manage-row').filter(function () { return $(this).text().includes('临时标签'); });
+    let $row = rows().filter(function () { return $(this).text().includes('临时标签'); });
     $row.find('.update').trigger('click');
     check('点「编辑」→ 行下方展开表单，输入框带出原名称',
-        $('#tag-manage-edit').length === 1 && $('#tag-manage-edit input[name=name]').val() === '临时标签');
+        $('#tag-edit').length === 1 && $('#tag-edit input[name=name]').val() === '临时标签');
 
-    $('#tag-manage-edit input[name=name]').val('改名后的标签');
-    $('#tag-manage-edit form').trigger('submit');
+    $('#tag-edit input[name=name]').val('改名后的标签');
+    $('#tag-edit form').trigger('submit');
     await sleep(40);
     check('重命名 → PUT /user/tags/{id}',
         calls.puts.at(-1).url === '/user/tags/13' && decodeURIComponent(calls.puts.at(-1).data).includes('name=改名后的标签'),
         calls.puts.at(-1).url);
     check('重命名后列表与筛选下拉都显示新名字（详情候选也刷新）',
-        $('#tag-manage-list').text().includes('改名后的标签') && ! $('#tag-manage-list').text().includes('临时标签')
+        $('#image-tags-list').text().includes('改名后的标签') && ! $('#image-tags-list').text().includes('临时标签')
         && $('#tag-filter-list').text().includes('改名后的标签'));
 
     // 删除
-    $row = $('#tag-manage-list .tag-manage-row').filter(function () { return $(this).text().includes('改名后的标签'); });
+    $row = rows().filter(function () { return $(this).text().includes('改名后的标签'); });
     $row.find('.delete').trigger('click');
     await sleep(40);
     check('删除弹二次确认，文案说明会从所有图片上移除、不可恢复',
@@ -580,32 +658,71 @@ console.log('\n[B. 行为] 标签管理：新建 / 重命名 / 删除（标签�
     await sleep(20);
     $2('#tag-manage-open').trigger('click');
     await sleep(20);
-    $2('#tag-manage-list .tag-manage-row').eq(0).find('.delete').trigger('click');
+    $2('#image-tags-list .image-tag-row').eq(0).find('.delete').trigger('click');
     await sleep(40);
     check('二次确认里点「取消」→ 不发 DELETE、行还在',
-        c2.deletes.length === 0 && $2('#tag-manage-list .tag-manage-row').length === 2);
+        c2.deletes.length === 0 && $2('#image-tags-list .image-tag-row').length === 2);
 }
 
-console.log('\n[B. 行为] 图片右键菜单：能跳到「管理标签」');
+console.log('\n[B. 行为] 「显示图片标签」开关');
 {
-    const { $, calls } = boot();
+    const { window, $ } = boot();
+    await sleep(20);
+
+    check('默认开着：网格没有 .image-tags-off，图标是 toggle-on',
+        ! $('#images-grid').hasClass('image-tags-off')
+        && $('#tag-badge-toggle-icon').attr('class').includes('fa-toggle-on'));
+
+    $('#tag-badge-toggle').trigger('click');
+    check('点一下 → 关掉：网格加类 + 图标变 toggle-off + 写进本地',
+        $('#images-grid').hasClass('image-tags-off')
+        && $('#tag-badge-toggle-icon').attr('class').includes('fa-toggle-off')
+        && window.localStorage.getItem('lsky.show_image_tags') === '0');
+
+    $('#tag-badge-toggle').trigger('click');
+    check('再点一下 → 开回来（本地也改成 1）',
+        ! $('#images-grid').hasClass('image-tags-off')
+        && window.localStorage.getItem('lsky.show_image_tags') === '1');
+}
+
+console.log('\n[B. 行为] 卡片点击不被打标/拖动逻辑接管（预览仍走看图器自己的路径）');
+{
+    const { $, t } = boot({ gridItems: 3 });
+    await sleep(20);
+
+    check('应用没有自己接管卡片点击（预览由 viewer 原生处理，不被拦）',
+        ! /on\('click', IMAGES_ITEM/.test(blade) && ! /viewer\.view\(/.test(blade));
+    check('拖动起手放宽只写在 predragstart 的判据里（不改 DragSelect 的其它配置）',
+        /keyboardDrag: false,/.test(blade) && ! /immediateDrag/.test(blade));
+
+    // 角标开关关了之后，卡片里的角标容器还在（只是被 CSS 隐藏），点击照样透到卡片
+    $('#tag-badge-toggle').trigger('click');
+    await sleep(50);
+    check('关掉角标后卡片 DOM 不变（只加容器类，不删角标节点）',
+        $('#images-grid').hasClass('image-tags-off')
+        && $('.images-item').eq(0).find('.image-tags').length === 1);
+}
+
+console.log('\n[B. 行为] 图片右键菜单：一个「标签管理」入口');
+{
+    const { $, calls, t } = boot({ gridItems: 2 });
     await sleep(20);
 
     const itemMenu = calls.attaches.find((a) => a.selector === '.images-item');
     const labels = (itemMenu?.options?.data || []).map((d) => d && d.text).filter(Boolean);
-    check('图片右键菜单里注册了「管理标签」', labels.includes('管理标签'), labels.join(' / '));
-    check('「管理标签」紧跟在「修改标签」后面',
-        labels.indexOf('管理标签') === labels.indexOf('修改标签') + 1,
-        labels.join(' / '));
+    check('右键菜单里只剩一个「标签管理」（旧的「管理标签」项已合并）',
+        labels.filter((x) => x === '标签管理').length === 1 && ! labels.includes('管理标签'), labels.join(' / '));
 
-    const manage = itemMenu.options.data.find((d) => d && d.text === '管理标签');
-    manage.action($('.images-item').get(0));
+    // 右键菜单打开时会把这张图选中（beforeOpen 里 ds.addSelection），这里照同样的状态调用
+    t.ds._sel = [$('.images-item').get(0)];
+    itemMenu.options.data.find((d) => d && d.text === '标签管理').action($('.images-item').get(0));
     await sleep(30);
-    check('点它 → 打开的是标签管理弹窗（不是逐图的打标弹窗）',
-        calls.modalOpen.at(-1) === 'tag-manage-modal' && ! calls.modalOpen.includes('image-tags-modal'),
+    check('点它 → 打开同一个标签窗口，并带上这张图片',
+        calls.modalOpen.at(-1) === 'image-tags-modal'
+        && $('#image-tags-content').text().includes('已选择 1 张图片'),
         JSON.stringify(calls.modalOpen));
-    check('管理弹窗内容渲染出来了（标签行 + 新建表单）',
-        $('#tag-manage-list .tag-manage-row').length === 2 && $('#tag-manage-create form').length === 1);
+    check('窗口里既有标签行，也有新建输入框（打标与标签维护是同一个窗口）',
+        $('#image-tags-list .image-tag-row').length === 2 && $('#image-tags-new').length === 1);
 }
 
 console.log('\n[B. 行为] 渲染出来的页面里搜不到「公开 / 私有」');
