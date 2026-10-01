@@ -15,6 +15,9 @@ on:
       # 分支构建**只产出不可变的 sha-<commit> 镜像**，绝不动 :latest ——
       # 由下面的「Promote verified image to latest」步骤用 `if: … github.ref == 'refs/heads/master'`
       # 把关（否则分支一推就把线上在用的 latest 顶成测试版）。
+      # 名字就叫 test（2026-10-01 由 test/memory-tuning 改名，避免被当成"测试套件目录"式命名）；
+      # 同时保留 test/* 模式：历史分支名与以后带后缀的测试分支仍能触发构建。
+      - test
       - 'test/*'
   # 只用于「试构建」：临时换 PHP 版本验证兼容性，不改仓库里的默认值。
   # 留空 = 用 Dockerfile 里的 ARG PHP_VERSION。
