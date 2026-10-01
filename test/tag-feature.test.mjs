@@ -162,8 +162,8 @@ console.log('\n[A. 静态] 标签落点：详情行 / 卡片角标 / 批量打�
         ! blade.includes('data-state="none"') && ! blade.includes('fa-circle-plus') && ! blade.includes('fa-circle-minus')
         && blade.includes('const isChecked = (id)')
         && blade.includes('勾上 = 给这些图片加上')
-        && blade.includes("label = hasSelection ? '已有' : ''") && blade.includes("label = '移除'")
-        && ! blade.includes("'添加'"));
+        && ! blade.includes('tag-state-label')
+        && ! blade.includes("'已有'") && ! blade.includes("'移除'") && ! blade.includes("'部分有'"));
     check('「确定」默认禁用、且没选中图片时整个不显示', /id="image-tags-confirm"[^>]*disabled/.test(tpl('image-tags-tpl'))
         && /\$confirm\.prop\('disabled', true\)\.toggle\(hasSelection\)/.test(blade));
     check('批量打标请求形状：ids + tags + remove_tags（同一 route user.images.tags，id 仍是数字）',
@@ -233,12 +233,9 @@ console.log('\n[A. 静态] 「显示图片标签」开关 + 框选修复');
         && blade.includes("attributeFilter: ['style']") && blade.includes('ds.SelectorArea._rect = undefined'));
     check('禁掉图片原生拖拽（-webkit-user-drag + dragstart 兜底）—— 否则拖动会「锁定不释放」',
         blade.includes('-webkit-user-drag: none') && /\$photos\.on\('dragstart'/.test(blade));
-    check('单击图片不改勾选：捕获阶段记下按下前的选中，松手没位移就还原（只有小圆勾才切换）',
-        /pressSel = ds\.getSelection\(\)\.slice\(\)/.test(blade)
-        && blade.includes("document.addEventListener('mousedown'")
-        && blade.includes("document.addEventListener('mouseup'")
-        && /ds\.setSelection\(want\(\)\)/.test(blade)
-        && blade.includes("closest('.image-selector')"));
+    check('（已按老师要求回滚）点图片本身照旧参与勾选：不做任何「单击回滚」，小圆勾 click 全平台生效',
+        ! blade.includes('pressCircle') && ! blade.includes('pressMoved')
+        && /\$photos\.on\('click', '\.image-selector', function \(\) \{\s*ds\.toggleSelection/.test(blade));
     check('标签管理窗口版式：新建行在列表之前、条目行 overflow-hidden、副标题只留已选数量',
         blade.indexOf('id="image-tags-new"') < blade.indexOf('id="image-tags-list"')
         && /class="image-tag-row[^"]*overflow-hidden/.test(blade)
@@ -530,16 +527,16 @@ console.log('\n[B. 行为] 标签管理：给选中的图片加 / 移除标签�
     const rows = () => $('#image-tags-list .image-tag-row');
     check('两行标签，每行都有改名 / 删除按钮', rows().length === 2
         && rows().eq(0).find('.update').length === 1 && rows().eq(0).find('.delete').length === 1);
-    check('两张图都有的标签默认就是勾上的（fa-check-square + 「已有」）',
+    check('两张图都有的标签默认就是勾上的（fa-check-square），行内不带任何字样',
         rows().eq(0).find('.tag-state-icon').attr('class').includes('fa-check-square')
-        && rows().eq(0).text().includes('已有'));
+        && ! rows().eq(0).text().includes('已有'));
     check('没动过任何东西时「确定」是禁用的', $('#image-tags-confirm').prop('disabled') === true);
 
     // 取消勾选「风景」（两张图上都有）→ 变成「移除」
     rows().eq(0).find('.image-tag-toggle').trigger('click');
     check('取消勾选 → 未勾选 + 文案「移除」+ 行描红（危险色）',
         rows().eq(0).find('.tag-state-icon').attr('class').includes('fa-square')
-        && rows().eq(0).text().includes('移除')
+        && ! rows().eq(0).text().includes('移除') && rows().eq(0).find('.tag-state-label').length === 0
         && rows().eq(0).attr('class').includes('border-danger'));
     check('「确定」变成可用', $('#image-tags-confirm').prop('disabled') === false);
 
@@ -577,8 +574,9 @@ console.log('\n[B. 行为] 「部分选中的图片有这个标签」→ 半勾�
     t.methods.tag();
 
     const row = () => $('#image-tags-list .image-tag-row[data-id="11"]');
-    check('半勾态：fa-minus-square + 文案「部分有」',
-        row().find('.tag-state-icon').attr('class').includes('fa-minus-square') && row().text().includes('部分有'));
+    check('半勾态：只看图标（fa-minus-square），行内没有任何字样',
+        row().find('.tag-state-icon').attr('class').includes('fa-minus-square')
+        && ! row().text().includes('部分有'));
 
     row().find('.image-tag-toggle').trigger('click');
     check('点一下 → 全勾（打了勾），确定可用', row().find('.tag-state-icon').attr('class').includes('fa-check-square')
