@@ -138,8 +138,9 @@ console.log('\n[A. 静态] 标签落点：详情行 / 卡片角标 / 批量打�
         && ! blade.includes('<x-modal id="tag-manage-modal">'));
     check('副标题按「有没有选中图片」两支文案（勾选 / 取消的语义写在窗口里）',
         tpl('image-tags-tpl').includes('__hint__')
-        && blade.includes('勾选 = 给这些图片加上，取消勾选 = 从这些图片移除')
-        && blade.includes('未选择图片 · 可在这里新建、重命名、删除标签')
+        && /\?\s*`已选择 \$\{selIds\.length\} 张图片`/.test(blade)
+        && ! blade.includes('勾选 = 给这些图片加上')
+        && blade.includes(": '未选择图片'")
         && tpl('image-tags-tpl').includes('请输入新标签名称'));
     check('批量打标入口：桌面工具栏 + 手机 ⋯ 菜单，都叫「标签管理」',
         /<a data-operate="tag"[^>]*>标签管理<\/a>/.test(blade)
@@ -161,7 +162,8 @@ console.log('\n[A. 静态] 标签落点：详情行 / 卡片角标 / 批量打�
         ! blade.includes('data-state="none"') && ! blade.includes('fa-circle-plus') && ! blade.includes('fa-circle-minus')
         && blade.includes('const isChecked = (id)')
         && blade.includes('勾上 = 给这些图片加上')
-        && blade.includes("label = pendingAdd ? '添加'") && blade.includes("label = '移除'"));
+        && blade.includes("label = hasSelection ? '已有' : ''") && blade.includes("label = '移除'")
+        && ! blade.includes("'添加'"));
     check('「确定」默认禁用、且没选中图片时整个不显示', /id="image-tags-confirm"[^>]*disabled/.test(tpl('image-tags-tpl'))
         && /\$confirm\.prop\('disabled', true\)\.toggle\(hasSelection\)/.test(blade));
     check('批量打标请求形状：ids + tags + remove_tags（同一 route user.images.tags，id 仍是数字）',
@@ -172,8 +174,8 @@ console.log('\n[A. 静态] 标签落点：详情行 / 卡片角标 / 批量打�
 
 console.log('\n[A. 静态] 标签窗口：标签本身的新建 / 重命名 / 删除（与打标同一个窗口）');
 {
-    check('入口在标签筛选下拉底部（#tag-manage-open，文案「标签管理」）',
-        blade.includes('id="tag-manage-open"') && blade.includes('>标签管理</a>'));
+    check('右上角标签下拉里已经不再有「标签管理」入口（老师要求去掉）',
+        ! blade.includes('id="tag-manage-open"'));
     check('只剩一个窗口：旧的 tag-manage-modal / content / 三个模板都删干净了',
         ! blade.includes('tag-manage-modal') && ! blade.includes('tag-manage-content')
         && ['tag-manage-tpl', 'tag-manage-item-tpl', 'tag-manage-edit-tpl'].every((id) => tpl(id).length === 0)
@@ -226,8 +228,23 @@ console.log('\n[A. 静态] 「显示图片标签」开关 + 框选修复');
         /\$photos\.on\('jg\.complete jg\.resize'/.test(blade)
         && /ds\.Interaction\.init\(\);/.test(blade)
         && !/justifiedGallery\('norewind'\)[\s\S]{0,200}?ds\.Interaction\.init\(\)/.test(blade));
+    check('桌面缩放（html zoom:1.1）下把 DragSelect 的盒子按 zoom 折算钉回真实位置',
+        blade.includes('pinDsBoxes') && blade.includes('dsPinned')
+        && blade.includes("attributeFilter: ['style']") && blade.includes('ds.SelectorArea._rect = undefined'));
+    check('禁掉图片原生拖拽（-webkit-user-drag + dragstart 兜底）—— 否则拖动会「锁定不释放」',
+        blade.includes('-webkit-user-drag: none') && /\$photos\.on\('dragstart'/.test(blade));
+    check('单击图片不改勾选：捕获阶段记下按下前的选中，松手没位移就还原（只有小圆勾才切换）',
+        /pressSel = ds\.getSelection\(\)\.slice\(\)/.test(blade)
+        && blade.includes("document.addEventListener('mousedown'")
+        && blade.includes("document.addEventListener('mouseup'")
+        && /ds\.setSelection\(want\(\)\)/.test(blade)
+        && blade.includes("closest('.image-selector')"));
+    check('标签管理窗口版式：新建行在列表之前、条目行 overflow-hidden、副标题只留已选数量',
+        blade.indexOf('id="image-tags-new"') < blade.indexOf('id="image-tags-list"')
+        && /class="image-tag-row[^"]*overflow-hidden/.test(blade)
+        && blade.includes('? `已选择 ${selIds.length} 张图片`'));
     check('没有用 pointer-events / 自己接管点击之类的技巧（实测那条路会变成「拖动元素本身」）',
-        ! blade.includes('.images-item img {')
+        ! /images-item[^{]*\{[^}]*pointer-events/.test(blade)
         && ! /\$photos\.on\('click', IMAGES_ITEM/.test(blade)
         && ! /immediateDrag/.test(blade));
 }
@@ -283,7 +300,7 @@ function boot({ gridItems = 1, putStatus = true, postStatus = true, swalConfirme
         <div id="tag-filter-menu"><div id="tag-filter-list"></div>
             <a id="tag-filter-clear" class="ls-menu-item hidden text-brand" href="javascript:void(0)" x-data>清除筛选</a>
             <a id="tag-badge-toggle" href="javascript:void(0)" x-data><span>显示图片标签</span><i id="tag-badge-toggle-icon" class="fas fa-toggle-on"></i></a>
-            <a id="tag-manage-open" href="javascript:void(0)" x-data>标签管理</a></div>
+            </div>
         <div id="images-scroll"><div id="images-grid">${items.join('')}</div></div>
         <div id="image-detail-modal" class="hidden"><div id="image-detail-content"></div></div>
         <div id="image-tags-modal" class="hidden"><div id="image-tags-content"></div></div>
@@ -528,8 +545,10 @@ console.log('\n[B. 行为] 标签管理：给选中的图片加 / 移除标签�
 
     // 勾选「壁纸」（两张图上都没有）→ 添加
     rows().eq(1).find('.image-tag-toggle').trigger('click');
-    check('勾选 → 文案「添加」+ 品牌色底',
-        rows().eq(1).text().includes('添加') && rows().eq(1).attr('class').includes('bg-brand-soft'));
+    check('勾选 → 打上勾的图标 + 品牌色底（且不再出现「添加」字样）',
+        rows().eq(1).find('.tag-state-icon').attr('class').includes('fa-check-square')
+        && rows().eq(1).attr('class').includes('bg-brand-soft')
+        && ! rows().eq(1).text().includes('添加'), rows().eq(1).text().trim());
     rows().eq(1).find('.image-tag-toggle').trigger('click');
     check('再点一次取消 → 回到未勾选，且不会提交「移除」（本来就没有）',
         ! rows().eq(1).find('.tag-state-icon').attr('class').includes('fa-check-square')
@@ -562,7 +581,7 @@ console.log('\n[B. 行为] 「部分选中的图片有这个标签」→ 半勾�
         row().find('.tag-state-icon').attr('class').includes('fa-minus-square') && row().text().includes('部分有'));
 
     row().find('.image-tag-toggle').trigger('click');
-    check('点一下 → 全勾（文案「添加」），确定可用', row().text().includes('添加')
+    check('点一下 → 全勾（打了勾），确定可用', row().find('.tag-state-icon').attr('class').includes('fa-check-square')
         && row().find('.tag-state-icon').attr('class').includes('fa-check-square')
         && $('#image-tags-confirm').prop('disabled') === false);
 
@@ -585,8 +604,8 @@ console.log('\n[B. 行为] 标签管理：现场新建标签后直接勾上');
     await sleep(20);
 
     check('POST user/tags 新建（JSON {name}）', calls.posts.at(-1)?.data.name === '新标签');
-    check('新行渲染出来并直接勾上（文案「添加」）',
-        $('#image-tags-list .image-tag-row[data-id="13"]').text().includes('添加')
+    check('新行渲染出来并直接勾上（打了勾）',
+        $('#image-tags-list .image-tag-row[data-id="13"]').find('.tag-state-icon').attr('class').includes('fa-check-square')
         && $('#image-tags-list .image-tag-row[data-id="13"]').attr('class').includes('bg-brand-soft'));
 
     $('#image-tags-confirm').trigger('click');
@@ -598,11 +617,14 @@ console.log('\n[B. 行为] 标签管理：现场新建标签后直接勾上');
 
 console.log('\n[B. 行为] 标签管理：不带选中图片打开（只改标签本身）');
 {
-    const { $, calls } = boot({ swalConfirmed: true });
+    const { $, calls, t } = boot({ swalConfirmed: true });
     await sleep(20);
 
-    $('#tag-manage-open').trigger('click');
-    check('点下拉里的「标签管理」→ 打开的是同一个窗口', calls.modalOpen.at(-1) === 'image-tags-modal',
+    // 没选中图片时打开窗口的入口只剩右键菜单（工具栏按钮此时会 return false；下拉入口按老师要求已删）
+    t.ds._sel = [];
+    const itemMenu = calls.attaches.find((a) => a.selector === '.images-item');
+    itemMenu.options.data.find((d) => d && d.text === '标签管理').action(null);
+    check('没选中图片时走右键菜单 → 也能打开同一个窗口（只改标签本身）', calls.modalOpen.at(-1) === 'image-tags-modal',
         JSON.stringify(calls.modalOpen));
     await sleep(30);
 
@@ -654,9 +676,11 @@ console.log('\n[B. 行为] 标签管理：不带选中图片打开（只改标�
         && ! $('#tag-filter-list').text().includes('改名后的标签'));
 
     // 取消删除不该发请求
-    const { $: $2, calls: c2 } = boot({ swalConfirmed: false });
+    const { $: $2, calls: c2, t: t2 } = boot({ swalConfirmed: false });
     await sleep(20);
-    $2('#tag-manage-open').trigger('click');
+    t2.ds._sel = [];
+    c2.attaches.find((a) => a.selector === '.images-item')
+        .options.data.find((d) => d && d.text === '标签管理').action(null);
     await sleep(20);
     $2('#image-tags-list .image-tag-row').eq(0).find('.delete').trigger('click');
     await sleep(40);

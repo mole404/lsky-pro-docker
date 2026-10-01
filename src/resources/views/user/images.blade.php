@@ -105,7 +105,9 @@
                          （否则会顶动 sticky 吸顶工具栏那一行）。--}}
                     <a id="tag-filter" class="inline-flex items-center gap-1.5 text-sm py-1.5 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
                         <span>标签</span>
-                        <i class="fas fa-tags text-brand"></i>
+                        {{-- 实测：图标墨迹中心比文字高 0.5px（文字 90.0 / 图标 89.5，截图按像素量的），
+                             用 relative+top 精确压下去 0.5px。--}}
+                        <i class="fas fa-tags text-brand relative top-[0.5px]"></i>
                     </a>
                 </x-slot>
 
@@ -118,8 +120,6 @@
                             <span>显示图片标签</span>
                             <i id="tag-badge-toggle-icon" class="fas fa-toggle-on text-brand" aria-hidden="true"></i>
                         </a>
-                        {{-- 唯一的「标签管理」入口：新建 / 重命名 / 删除标签 + 给选中的图片打标，都在同一个窗口 --}}
-                        <a id="tag-manage-open" class="ls-menu-item border-t border-line text-ink-2" href="javascript:void(0)" @click="open = false">标签管理</a>
                     </div>
                 </x-slot>
             </x-dropdown>
@@ -398,11 +398,12 @@
         <div class="mx-auto flex w-full max-w-xl flex-col">
             <p class="text-[16px] font-semibold leading-6 text-ink">标签管理</p>
             <p class="mt-1 text-[13px] leading-5 text-ink-3">__hint__</p>
-            <div id="image-tags-list" class="mt-4 flex max-h-[50vh] w-full flex-col gap-1.5 overflow-y-auto pr-1"></div>
+            {{-- 新建标签放在首行（老师要求）：进窗口第一眼就能建新标签 --}}
             <div class="mt-3 flex items-center gap-2">
                 <input type="text" id="image-tags-new" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入新标签名称">
                 <button type="button" id="image-tags-create" class="ls-btn h-11 shrink-0 px-4 sm:h-9">新建标签</button>
             </div>
+            <div id="image-tags-list" class="mt-3 flex max-h-[50vh] w-full flex-col gap-1.5 overflow-y-auto pr-1"></div>
             <div class="mt-4 flex justify-end gap-2">
                 <button type="button" id="image-tags-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
                 <button type="button" id="image-tags-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>确定</button>
@@ -427,7 +428,7 @@
          勾选语义（按老师定的两态）：勾上 = 给选中的这些图片加上该标签；取消勾选 = 从这些图片移除。
          如果该标签只在「部分选中的图片」上有，就显示成半勾表示现状，点一下变全勾（加上）。 --}}
     <script type="text/html" id="image-tags-item-tpl">
-        <div class="image-tag-row flex min-h-[44px] w-full items-stretch rounded-lg border border-line bg-surface transition-colors duration-150" data-id="__id__" data-json='__json__'>
+        <div class="image-tag-row flex min-h-[44px] w-full items-stretch overflow-hidden rounded-lg border border-line bg-surface transition-colors duration-150" data-id="__id__" data-json='__json__'>
             <a href="javascript:void(0)" class="image-tag-toggle flex min-h-[44px] min-w-0 flex-1 items-center gap-2.5 px-3 py-2 hover:bg-surface-2">
                 <i class="tag-state-icon fas fa-square w-4 shrink-0 text-ink-3" aria-hidden="true"></i>
                 <div class="min-w-0 flex-1 truncate text-[14px] name">__name__</div>
@@ -440,6 +441,19 @@
             </div>
         </div>
     </script>
+
+    @push('styles')
+        <style>
+            /* 按在图片上拖动时，浏览器会启动 <img> 的原生拖拽、把 mousemove 变成 drag 事件 ——
+               框选的选择框不跟随、松手也不会结束互动（实测「锁定不释放」）。Chromium/Safari 用
+               -webkit-user-drag 关掉原生拖拽（Firefox 不看这条，由脚本里的 dragstart 兜底）。 */
+            /* 注意卡片本身也要：<a href> 默认就是可拖拽元素，只禁 img 没用（实测 dragstart 照样发） */
+            #images-grid .images-item,
+            #images-grid .images-item img {
+                -webkit-user-drag: none;
+            }
+        </style>
+    @endpush
 
     @push('scripts')
         <script src="{{ asset('js/justified-gallery/jquery.justifiedGallery.min.js') }}"></script>
@@ -885,8 +899,8 @@
 
                 $('#image-tags-content').html(
                     $('#image-tags-tpl').html().replace(/__hint__/g, hasSelection
-                        ? `已选择 ${selIds.length} 张图片 · 勾选 = 给这些图片加上，取消勾选 = 从这些图片移除`
-                        : '未选择图片 · 可在这里新建、重命名、删除标签；选中图片后勾选即可打标')
+                        ? `已选择 ${selIds.length} 张图片`
+                        : '未选择图片')
                 );
 
                 const $list = $('#image-tags-list');
@@ -925,7 +939,7 @@
                         let labelCls = 'text-ink-3';
                         if (checked) {
                             icon = 'fa-check-square text-brand';
-                            label = pendingAdd ? '添加' : (hasSelection ? '已有' : '');
+                            label = hasSelection ? '已有' : '';
                             labelCls = pendingAdd ? 'text-brand font-medium' : 'text-ink-3';
                         } else if (pendingRemove) {
                             icon = 'fa-square text-danger';
@@ -1125,9 +1139,6 @@
                 loadTags().then(renderRows);
             };
 
-            // 顶部「标签」下拉底部那个入口：不带选中图片打开（只做标签本身的新建 / 改名 / 删除）
-            $('#tag-manage-open').off('click').on('click', _ => openTagManager([]));
-
             $('#search').keydown(function (e) {
                 if (e.keyCode === 13) {
                     resetImages({page: 1, keyword: $(this).val()});
@@ -1162,10 +1173,160 @@
             $photos.on('jg.complete jg.resize', () => {
                 try {
                     ds.Interaction.init();
+                    schedulePin();          // 排版改了高度，盒子也要跟着重新钉一次（见下）
                 } catch (e) {
                     console.warn('ds re-measure skipped:', e);
                 }
             });
+
+            /* ---- DragSelect 坐标与点选修正（fork 修复，对应老师报的 3 条）-----------------
+             * ① 桌面缩放冲突：common.less 给 <html> 加了 zoom:1.1，而 DragSelect 把
+             *    .ds-selector-area（position:fixed）和 .ds-selector（选择框）的坐标按「视觉像素」
+             *    写进内联样式 —— 浏览器在这个缩放文档里会再乘一次 zoom，于是它的命中矩形整体右移/下移
+             *    （实测区域真实 (282,120) 被它当成 (310,132)，正好 ×1.1）。症状就是老师看到的：
+             *    最左侧一条窄带拖不动、起点像是偏右、点图片会勾到右邻那张、选择框比手画的圈大 10%。
+             *    修法：盯着这两个元素的内联样式，按 zoom 折算回布局单位再写回去。
+             * ② 点图片不该改勾选：DragSelect 在 mousedown 那一刻就按命中结果选中卡片，所以「点图片 = 勾上它」。
+             *    这里记住按下前的选中，松手时若几乎没移动（算单击）就还原；真拖了就不还原（框选结果保留）。
+             * ------------------------------------------------------------------------- */
+            const dsZoom = () => parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+            // 记录「我们自己写进去的值」，避免观察器把自己的写入再折算一次
+            const dsPinned = new WeakMap();
+            const pinWrite = (el, want) => {
+                const mark = dsPinned.get(el) || {};
+                for (const key in want) {
+                    // 按数值比较（CSSOM 读回来是四舍五入过的，字符串比不出来）：
+                    //   已经是目标值 → 跳过；等于我们上一轮写的值 → 也跳过。
+                    // 不这么做会被反复除以 zoom，越折越小（实测框会缩到三分之一）。
+                    const target = parseFloat(want[key]);
+                    const cur = parseFloat(el.style[key]);
+                    if (! isNaN(cur) && Math.abs(cur - target) < 0.02) {
+                        continue;
+                    }
+                    if (! isNaN(cur) && mark[key] !== undefined && Math.abs(cur - mark[key]) < 0.02) {
+                        continue;
+                    }
+                    mark[key] = target;
+                    el.style[key] = target + 'px';
+                }
+                dsPinned.set(el, mark);
+            };
+            const pinDsBoxes = () => {
+                const z = dsZoom();
+                const area = document.querySelector(IMAGES_SCROLL);
+                if (z === 1 || ! area) {
+                    return;
+                }
+                const wrap = document.querySelector('.ds-selector-area');
+                if (wrap) {
+                    const r = area.getBoundingClientRect();     // 视觉坐标；除以 zoom 才是布局单位
+                    pinWrite(wrap, {
+                        left: r.left / z + 'px', top: r.top / z + 'px',
+                        width: r.width / z + 'px', height: r.height / z + 'px',
+                    });
+                    ds.SelectorArea._rect = undefined;          // 让库按新位置重算缓存矩形
+                }
+                const box = document.querySelector('.ds-selector');
+                if (box && getComputedStyle(box).display !== 'none') {
+                    const want = {};
+                    for (const key of ['left', 'top', 'width', 'height']) {
+                        const cur = parseFloat(box.style[key]);
+                        if (isNaN(cur)) {
+                            return;
+                        }
+                        want[key] = cur / z + 'px';
+                    }
+                    pinWrite(box, want);
+                }
+            };
+            let pinScheduled = false;
+            const schedulePin = () => {
+                if (pinScheduled) {
+                    return;
+                }
+                pinScheduled = true;
+                requestAnimationFrame(() => {
+                    pinScheduled = false;
+                    pinDsBoxes();
+                });
+            };
+            // 库每次改自己的盒子（拖动中每帧都改）都会触发这里，跟着折算一次
+            new MutationObserver(mutations => {
+                for (const m of mutations) {
+                    const cls = m.target.classList;
+                    if (cls && (cls.contains('ds-selector') || cls.contains('ds-selector-area'))) {
+                        schedulePin();
+                        return;
+                    }
+                }
+            }).observe(document.body, {subtree: true, attributes: true, attributeFilter: ['style']});
+            $(window).on('scroll resize', schedulePin);
+            $(document).on('lsky:sidebar-toggled', schedulePin);
+
+            // 让图片不再被浏览器当成可拖拽元素：否则按在图片上拖动会起原生拖拽，
+            // mousemove 被 drag 事件吃掉 —— 选择框不跟随、松手也不结束互动（实测「锁定不释放」）。
+            // -webkit-user-drag 管 Chromium/Safari（见样式块），dragstart 拦一发兜住 Firefox。
+            $photos.on('dragstart', e => {
+                if ($(e.target).closest(IMAGES_ITEM).length) {
+                    e.preventDefault();
+                }
+            });
+
+            // 单击（没拖动）不改变勾选 —— 见上面 ②
+            let pressSel = null;
+            let pressFrom = null;
+            let pressMoved = false;
+            let pressCircle = null;
+            // 用捕获阶段的原生监听：DragSelect 会给每张可选卡片挂 click/mousedown 并在自己的处理里
+            // 停传播，挂在冒泡阶段（jQuery 的 $(document).on）会被它拦掉，实测那些处理根本收不到。
+            document.addEventListener('mousedown', e => {
+                if (! $(e.target).closest(IMAGES_GRID).length) {
+                    return;
+                }
+                pressSel = ds.getSelection().slice();
+                pressFrom = {x: e.clientX, y: e.clientY};
+                pressMoved = false;
+                // 只有按在右上角小圆勾上才算「要勾选」
+                pressCircle = $(e.target).closest('.image-selector').length ? e.target : null;
+            }, true);
+            document.addEventListener('mousemove', e => {
+                if (pressFrom && (Math.abs(e.clientX - pressFrom.x) > 3 || Math.abs(e.clientY - pressFrom.y) > 3)) {
+                    pressMoved = true;
+                }
+            }, true);
+            document.addEventListener('mouseup', () => {
+                const sel = pressSel;
+                const circle = pressCircle;
+                const moved = pressMoved;
+                pressSel = null;
+                pressFrom = null;
+                pressMoved = false;
+                pressCircle = null;
+                // 手机上 DragSelect 是停掉的、这条逻辑不参与（勾选仍走 .image-selector 的 click）
+                if (sel === null || moved || utils.isMobile()) {
+                    return;
+                }
+                // 目标选中集合一次算好（幂等，可以反复盖）：
+                //   按下前有什么就还原成什么；如果按的是小圆勾，再把这张图加/去掉。
+                const card = circle ? $(circle).closest(IMAGES_ITEM).get(0) : null;
+                const want = () => (! card ? sel
+                    : (sel.indexOf(card) === -1 ? sel.concat([card]) : sel.filter(item => item !== card)));
+                const apply = () => {
+                    ds.setSelection(want());     // 单击 → 还原按下前的选中（点图片不会顺手勾上）
+                    bindOperates();
+                };
+                // 库在 mouseup、click、以及下一帧 rAF 里都可能「点哪个选哪个」，连盖两拍才稳
+                setTimeout(apply, 0);
+                requestAnimationFrame(() => setTimeout(apply, 0));
+            }, true);
+
+            // 兜底：万一库没收到 mouseup（拖到窗口外等），松手也要解锁，别让界面卡在拖动状态
+            document.addEventListener('mouseup', () => {
+                if (ds.Interaction && ds.Interaction.isInteracting) {
+                    ds.Interaction.reset({});
+                }
+            });
+
 
             const bindOperates = () => {
                 let selected = ds.getSelection();
@@ -1232,9 +1393,13 @@
                 }, 320);
             });
 
+            // 手机上 DragSelect 被 ds.stop() 停了、Interaction:end 不会再来，所以这条 click 路径留给手机；
+            // 桌面走上面那套（单击不改变勾选、只有小圆勾才切换），两条路径同时生效会对同一张图拨两次。
             $photos.on('click', '.image-selector', function () {
-                ds.toggleSelection($(this).closest('a'));
-                bindOperates();
+                if (utils.isMobile()) {
+                    ds.toggleSelection($(this).closest('a'));
+                    bindOperates();
+                }
             })
 
             /* ---------------- 卡片角标开关（显示图片标签） ---------------- */
