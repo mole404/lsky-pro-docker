@@ -35,7 +35,8 @@
         <link rel="stylesheet" href="{{ asset('css/app.css') }}?v={{ \App\Utils::assetVersion('css/app.css') }}">
     </head>
     <body class="font-sans antialiased">
-        <div class="min-h-screen text-ink bg-bg">
+        {{-- 与 layouts/app.blade.php 同源：桌面默认 110% 缩放，min-h-screen 要除以 1.1（仅 ≥768px）--}}
+        <div class="min-h-screen ls-zoom-minh-screen text-ink bg-bg">
             {{-- 登录/注册这类页面也放一个外观切换（右上角浮动）--}}
             <div class="absolute top-4 right-4 z-10" x-data>
                 <x-theme-switch />

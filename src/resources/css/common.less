@@ -416,8 +416,12 @@ html:root {
         animation: lsky-swal-out .2s cubic-bezier(.4, 0, 1, 1) both;
     }
 
-    @media (max-width: 767px) {
-        // md 以下（<768px）= x-modal 的「不上缩、整块往上滑 16px」那一档
+    // 阈值口径：这一档原来是 `max-width: 767px`（= 未缩放口径的「md 以下」）。断点 ×1.1 之后
+    // 「md 以下」在 CSS zoom 下对应的是真实视口 < 844.8px（浏览器 110% 下就是布局宽 <768），
+    // 所以改成 844.79px —— 对 <768 的真实视口而言两种写法都成立（那些宽度本来就 ≤767），
+    // 手机端动画取值不变。
+    @media (max-width: 844.79px) {
+        // md 以下 = x-modal 的「不上缩、整块往上滑 16px」那一档
         .swal2-show {
             animation-name: lsky-swal-in-mobile;
         }
@@ -558,4 +562,130 @@ html.dark {
 #app-sidebar {
     height: 100vh;
     height: 100dvh;
+}
+
+// ===========================================================================
+// fork：桌面端默认 110% 缩放（老师手动整页缩放到 110% 观感最舒服，希望默认就是它；仅电脑端）
+// ---------------------------------------------------------------------------
+// 为什么加在这里（common.less → public/css/common.css）：
+//   · 本文件由三个布局都引入（app.blade.php:45 / guest.blade.php:34 / install.blade.php:14），
+//     是全站真正生效的全局样式源（public/ 里的产物是提交进仓库的，改样式必须重建）；
+//   · 「缩放契约」的另一半 —— 上面那段 #app-sidebar 的 100vh/100dvh —— 本来就在本文件，
+//     而侧栏高度的补偿必须压过同一条 id 规则（见下），两者同源才不会各改一处漏一处；
+//   · blade 里那些 calc(100vh/1.1) 不能再用 Tailwind 类表达：md 已随"断点 ×1.1"变成 844.8px，
+//     与缩放阈值 768 不再同值；而 Tailwind 3.0.23 没有任意值变体（`min-[768px]:` 是 3.1+ 才有的，
+//     写了不会进产物 —— 本轮实测过：产物里一个字节都没有）。所以全部改成下面同一个 @media 里的
+//     .ls-zoom-* 类（带 html 前缀压过 app.css 的同名工具类）。
+// 断点口径：768px 是老师「未缩放」时的口径（与 Tailwind 的 sm=640 无关、与已 ×1.1 的 md 也不同名）。
+// @media 只包住桌面，<768px 一个字符都不受影响（手机端观感必须零变化）。
+// 为什么必须是 768 而不是 844.8：这组规则是"缩放的补偿"，必须与缩放的开闸阈值一字不差地一致；
+// 与 media query 的排版口径（已 ×1.1 的 md/lg/xl/2xl）是两码事，别混。
+// 配套：zoom 会把 vh/dvh 算出来的长度一起放大 1.1 倍，所以凡「= 一屏高」的地方
+//       （100vh / 100dvh）底部都会被切掉约 10%，必须换成 calc(100vh / 1.1)。
+//       顶栏 56px（pt-14 / h-14）不用动：它和页面一起被缩放，比例自洽。
+// ===========================================================================
+@media (min-width: 768px) {
+    html {
+        zoom: 1.1;
+    }
+}
+
+// 侧栏高度补偿（仅桌面）：110% 下 height:100dvh 会渲染成 1.1 屏高 → 侧栏底部 10% 跑到视口外。
+// 注意真正生效的是上面那条 id 规则（#app-sidebar 权重 (1,0,0) 压过 sidebar.blade.php 里
+// 那个 .h-screen (0,1,0)），所以补偿只能落在这里；给那个 class 补 md: 变体是死代码，会骗人。
+//
+// 同理：blade 里凡是"至少一屏高 / 一屏高"的外壳（layouts/app、layouts/guest、install、
+// components/auth-card、components/modal）改用下面两个类，而不是 Tailwind 的
+// `md:min-h-[calc(100vh/1.1)]`：
+//   · md 已随"断点 ×1.1"变成 844.8px，与缩放阈值 768 不再同值；用 md: 会留下
+//     768~844.8 这段"开了缩放但没补偿"的缝（实测少 10% 屏高的多滚动）。
+//   · Tailwind 3.0.23 没有任意值变体（`min-[768px]:` 是 3.1+ 才有的），写了也不会进产物。
+// 放这里还有一个好处：整份"缩放契约"（zoom 本身 + 所有反制）集中在同一个文件，改一处就够。
+@media (min-width: 768px) {
+    #app-sidebar {
+        height: calc(100vh / 1.1);
+        height: calc(100dvh / 1.1);
+    }
+
+    // 这里三条都带 `html ` 前缀不是随手写的：common.css 在三个布局里都排在 app.css **之前**
+    // （app:41/45/46、guest:30/34/35、install:11/14/15），同权重(0,1,0)时后加载的 app.css 会赢，
+    // 补偿会被 .min-h-screen / .h-screen / .mt-10 顶掉（而且不报错，只是"没生效"）。
+    // 加一层元素选择器 → (0,1,1)，与加载顺序无关。
+    html .ls-zoom-minh-screen {
+        min-height: calc(100vh / 1.1);
+    }
+
+    html .ls-zoom-h-screen {
+        height: calc(100vh / 1.1);
+    }
+
+    // 侧栏容量块上移一档（桌面）。<768px 不生效，手机端间距原样。
+    html .ls-zoom-mt-0 {
+        margin-top: 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 弹窗（components/modal.blade.php）里两处「一屏高」的规则
+// ---------------------------------------------------------------------------
+// 这两处原来是内联 style（min-height / height 各写两遍 vh、dvh），内联样式写不了 @media，
+// 所以改成类 + 规则收到这里。值与原内联逐字一致（vh 在前、dvh 在后 → 后者胜；不支持 dvh 的
+// 浏览器自动退回 100vh），桌面端再除以 1.1 补偿 zoom。
+// 桌面端用 100vh 而不是 100dvh：桌面上两者恒等（文件开头那句注释也是这么说的），而 Tailwind
+// 对「同属性两条任意值类」的先后顺序不作保证，这里只用一条更稳。
+.ls-modal-sizer {
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+.ls-modal-spacer {
+    height: 100vh;
+    height: 100dvh;
+}
+
+@media (min-width: 768px) {
+    .ls-modal-sizer {
+        min-height: calc(100vh / 1.1);
+    }
+
+    .ls-modal-spacer {
+        height: calc(100vh / 1.1);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// .container 的 max-width：阈值 ×1.1，值保持原样
+// ---------------------------------------------------------------------------
+// Tailwind 的 container 插件把 `max-width` **直接写成 screen 的值**，所以断点 ×1.1 之后它会跟着
+// 变成 844.8 / 1126.4 / 1408 / 1689.6 —— 但 max-width 是**长度**、不是阈值：
+//   · 浏览器整页 110%（参照物 B）里，`max-width:1280px` 自己就会被缩放成 1408 物理 px；
+//   · CSS zoom 下长度也会被放大 1.1 倍，所以本地值必须仍是 1280，否则会被放大 1.21 倍。
+// 实测（welcome 页、真产物 + 真 Chromium）：W=1600 时 A 的 .container 宽 1548.8 物理 px、
+// 参照物 1408 → 内容横向差 141px；W=1920 差 169px。下面四条把它掰回原值。
+// sm(640) 不用覆盖：A 在 704px 以下那个区间里 max-width 根本不 binding（width:100% 更窄），
+// 从 704 起两边都是 640 本地 px，正好一致 —— 见实现里那段推导。
+// 权重：`html .container` (0,1,1) 压过 app.css 的 `.container` (0,1,0)，与加载顺序无关
+// （common.css 是排在 app.css 前面的）。
+@media (min-width: 844.8px) {
+    html .container {
+        max-width: 768px;
+    }
+}
+
+@media (min-width: 1126.4px) {
+    html .container {
+        max-width: 1024px;
+    }
+}
+
+@media (min-width: 1408px) {
+    html .container {
+        max-width: 1280px;
+    }
+}
+
+@media (min-width: 1689.6px) {
+    html .container {
+        max-width: 1536px;
+    }
 }

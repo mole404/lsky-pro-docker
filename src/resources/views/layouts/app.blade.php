@@ -46,7 +46,14 @@
     <link rel="stylesheet" href="{{ asset('css/app.css') }}?v={{ \App\Utils::assetVersion('css/app.css') }}">
 </head>
 <body class="font-sans antialiased">
-<div class="min-h-screen bg-bg text-ink" x-data x-cloak>
+{{-- min-h-screen 的两个位置都要做桌面端补偿：默认 110% 缩放下 vh 被放大 1.1 倍，
+     不补偿就是「1.1 屏高」→ 短页面凭空多出 10% 的垂直滚动、长页面底部错位。
+     断点：这里用 common.less 的 ls-zoom-minh-screen（@media(min-width:768px) 内、带 html 前缀压过
+     .min-h-screen），而不是 Tailwind 的 md: / min-[768px]: —— md 已随"断点 ×1.1"改成 844.8px，
+     而缩放从真实视口 768px 就开；补偿必须与缩放阈值 768 严格对齐，否则 768~844.8 这段会
+     「开了缩放但没补偿」→ 1.1 屏高（Tailwind 3.0.23 也还没有 min-[768px]: 这种任意值变体）。
+     base 的 min-h-screen 原样留给手机。--}}
+<div class="min-h-screen ls-zoom-minh-screen bg-bg text-ink" x-data x-cloak>
     @include('layouts.sidebar')
     @include('layouts.header')
     <div
@@ -65,7 +72,7 @@
     >
 
     </div>
-    <x-container class="flex flex-col pt-14 pb-14 min-h-screen transition-all duration-300">
+    <x-container class="flex flex-col pt-14 pb-14 min-h-screen ls-zoom-minh-screen transition-all duration-300">
         {{ $slot }}
     </x-container>
 </div>

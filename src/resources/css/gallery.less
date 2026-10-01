@@ -1,3 +1,8 @@
+// 注意：这些断点的**阈值**已按 1.1 换算（与 tailwind.config.js 的 screens 同口径，2026-10-01）——
+// 桌面默认 110% 缩放用的是 `html{zoom:1.1}`（见 common.less），而 media query 的判定宽度仍是真实窗口宽，
+// 浏览器整页 110% 的判定宽度却是 窗口宽/1.1，所以阈值必须 ×1.1 两种模式才一致。
+// 640 不动（它低于缩放阈值 768，动了会让 <768 的真实视口换样）。
+// 规则里的值是百分比（相对自身宽度），不受缩放影响，只有阈值需要换算。
 .images-grid {
     margin: 0 auto;
 }
@@ -31,25 +36,25 @@
     }
 }
 
-@media screen and (min-width: 768px) {
+@media screen and (min-width: 844.8px) {
     .grid-sizer, .grid-item {
         width: calc(25%);
     }
 }
 
-@media screen and (min-width: 1024px) {
+@media screen and (min-width: 1126.4px) {
     .grid-sizer, .grid-item {
         width: calc(20%);
     }
 }
 
-@media screen and (min-width: 1280px) {
+@media screen and (min-width: 1408px) {
     .grid-sizer, .grid-item {
         width: calc(12.5%);
     }
 }
 
-@media screen and (min-width: 1536px) {
+@media screen and (min-width: 1689.6px) {
     .grid-sizer, .grid-item {
         width: calc(10%);
     }
