@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -49,6 +50,7 @@ use League\Flysystem\Filesystem;
  * @property-read Album $album
  * @property-read Group $group
  * @property-read Strategy $strategy
+ * @property-read Collection $tags
  */
 class Image extends Model
 {
@@ -170,6 +172,22 @@ class Image extends Model
             $builder->where('album_id', $albumId);
         }, function (Builder $builder) {
             $builder->whereNull('album_id');
+        })->when($request->query('tags'), function (Builder $builder, $tags) {
+            // fork 新增：按标签筛选，参数形状 `tags[]=<id>&tags[]=<id>`。
+            // 语义是 **AND**：传入的每一个标签都必须命中（N 个 whereHas 各自是一段
+            // exists 子查询、彼此被 AND 连接，正好就是「都要有」）。本库只有四百来张图，
+            // 这里选最直白的写法，不做子查询优化。
+            // 注意：标签按用户隔离（写入侧强制），这里无需再按 user_id 过滤 —— 外层查询来自
+            // $user->images()（或 Image 上的 user 约束），而 image_tag 只会把「某用户的图」
+            // 连到「同一个用户的标签」上（写入侧强制），所以拿别人的 tag id 只会得到空集。
+            foreach (array_unique(array_filter((array) $tags)) as $tagId) {
+                if ((int) $tagId <= 0) {
+                    continue;
+                }
+                $builder->whereHas('tags', function (Builder $query) use ($tagId) {
+                    $query->where('tags.id', (int) $tagId);
+                });
+            }
         });
     }
 
@@ -251,6 +269,12 @@ class Image extends Model
     public function strategy(): BelongsTo
     {
         return $this->belongsTo(Strategy::class, 'strategy_id', 'id');
+    }
+
+    public function tags(): BelongsToMany
+    {
+        // fork 新增：图片标签（中间表 image_tag 无时间戳）
+        return $this->belongsToMany(Tag::class, 'image_tag', 'image_id', 'tag_id');
     }
 
     public function getThumbnailPathname(): string

@@ -39,7 +39,7 @@
             <div class="flex-row hidden lg:flex">
                 <a data-operate="movements" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移动到相册</a>
                 <a data-operate="remove" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移出当前相册</a>
-                <a data-operate="permission" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">设置权限</a>
+                <a data-operate="tag" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">修改标签</a>
                 <a data-operate="detail" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
                 <a data-operate="rename" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
                 <a data-operate="delete" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
@@ -55,7 +55,7 @@
                         <x-dropdown-link data-operate="refresh" href="javascript:void(0)" @click="open = false">刷新</x-dropdown-link>
                         <x-dropdown-link data-operate="movements" class="hidden" href="javascript:void(0)" @click="open = false">移动到相册</x-dropdown-link>
                         <x-dropdown-link data-operate="remove" class="hidden" href="javascript:void(0)" @click="open = false">移出当前相册</x-dropdown-link>
-                        <x-dropdown-link data-operate="permission" class="hidden" href="javascript:void(0)" @click="open = false">设置权限</x-dropdown-link>
+                        <x-dropdown-link data-operate="tag" class="hidden" href="javascript:void(0)" @click="open = false">修改标签</x-dropdown-link>
                         <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
                         <x-dropdown-link data-operate="rename" class="hidden" href="javascript:void(0)" @click="open = false">重命名</x-dropdown-link>
                         <x-dropdown-link data-operate="delete" class="hidden" href="javascript:void(0)" @click="open = false">删除</x-dropdown-link>
@@ -85,21 +85,27 @@
                     </x-dropdown-link>
                 </x-slot>
             </x-dropdown>
+            {{-- fork：标签筛选（多选，后端 AND 语义）。这里原来是「权限」下拉，
+                 已按老师要求整体下线、换成标签 —— 只替换这一个下拉，不新增第三个，
+                 免得 <768px 时工具栏换行、把 sticky top-14 的吸顶高度撑高。
+                 标签按用户隔离，列表来自 GET user/tags，由 JS（loadTags → renderTagFilter）
+                 渲染进 #tag-filter-list；勾选任意一项立刻 resetImages({page:1, tags:[...]})。
+                 多选项沿用本页约定 min-h-[44px]，手机上点得中。--}}
             <x-dropdown direction="left">
                 <x-slot name="trigger">
-                    <a id="permission" class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
-                        <span>全部</span>
-                        <i class="fas fa-eye text-brand"></i>
+                    <a id="tag-filter" class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
+                        <span>标签</span>
+                        <i class="fas fa-tags text-brand"></i>
                     </a>
                 </x-slot>
 
                 <x-slot name="content">
-                    <x-dropdown-link href="javascript:void(0)" @click="open = false; setPermission('all')">全部
-                    </x-dropdown-link>
-                    <x-dropdown-link href="javascript:void(0)" @click="open = false; setPermission('public')">公开
-                    </x-dropdown-link>
-                    <x-dropdown-link href="javascript:void(0)" @click="open = false; setPermission('private')">私有
-                    </x-dropdown-link>
+                    <div id="tag-filter-menu">
+                        <div id="tag-filter-list" class="max-h-[50vh] overflow-y-auto"></div>
+                        <a id="tag-filter-clear" class="ls-menu-item hidden text-brand" href="javascript:void(0)" @click="open = false">清除筛选</a>
+                        {{-- 标签本身的增删改入口（新建 / 重命名 / 删除），与「相册」弹窗同一套弹窗机制 --}}
+                        <a id="tag-manage-open" class="ls-menu-item mt-1 border-t border-line text-ink-2" href="javascript:void(0)" @click="open = false">管理标签</a>
+                    </div>
                 </x-slot>
             </x-dropdown>
         </div>
@@ -137,6 +143,19 @@
         <div id="album-switch-content"></div>
     </x-modal>
 
+    {{-- fork：批量修改标签弹窗 —— 桌面工具栏的「修改标签」与手机 ⋯ 菜单里的「修改标签」共用它
+         （两套入口都要有，否则手机上无法批量打标）。内容在 methods.tag() 里渲染。--}}
+    <x-modal id="image-tags-modal">
+        <div id="image-tags-content"></div>
+    </x-modal>
+
+    {{-- fork：标签管理弹窗 —— 标签本身的「新建 / 重命名 / 删除」。
+         入口是顶部「标签」筛选下拉底部的「管理标签」；行内分区与相册弹窗一致
+         （左侧名称 + 使用数量，右侧两个常显的 44×44 按钮）。--}}
+    <x-modal id="tag-manage-modal">
+        <div id="tag-manage-content"></div>
+    </x-modal>
+
     <script type="text/html" id="images-item-tpl">
         <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
             <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
@@ -153,6 +172,11 @@
                     <p class="text-[13.5px] date" title="__human_date__">__date__</p>
                 </div>
             </div>
+            {{-- fork：卡片角标 = 这张图的标签（少量、长名截断）。右上角被 .image-selector 占着，
+                 所以贴左下；pointer-events-none 是必须的 —— .images-item 本身就是链接，
+                 角标一旦接住点击，DragSelect 的选中与「点开预览」都会被抢掉。
+                 （这里别写尖括号标签名：这段模板会被静态测试当纯文本取出来渲染。）--}}
+            <div class="image-tags pointer-events-none absolute left-0 right-0 bottom-0 z-[1] flex flex-wrap items-end gap-1 p-2">__tags__</div>
             <img alt="__name__" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
         </a>
     </script>
@@ -298,8 +322,17 @@
                     <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__sha1__</dd>
                 </div>
                 <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
-                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">权限</dt>
-                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__permission__</dd>
+                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">标签</dt>
+                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">
+                        {{-- fork：这一行原来显示「权限」，已下线换成标签 ——
+                             可以现场增删，也可以直接输入新名字回车新建（JS 渲染 + 绑定）。 --}}
+                        <div id="detail-tags" class="flex flex-wrap items-center gap-1.5"></div>
+                        <div class="mt-2 flex items-center gap-2">
+                            <input type="text" id="detail-tag-input" list="detail-tag-options" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称，回车即可添加">
+                            <button type="button" id="detail-tag-add" class="ls-btn h-11 shrink-0 px-4 sm:h-9">添加</button>
+                        </div>
+                        <datalist id="detail-tag-options"></datalist>
+                    </dd>
                 </div>
                 <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
                     <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">上传 IP</dt>
@@ -346,6 +379,79 @@
         </a>
     </script>
 
+    {{-- 批量修改标签弹窗的外壳：#image-tags-list 在手机上可滚（max-h-[50vh] + overflow-y-auto），
+         底部「取消 / 确定」沿用全局 ls-btn；输入框与按钮在 <640px 用 h-11（点击区 ≥44px），
+         ≥640px 收成 h-9 与页面其它按钮同一档。--}}
+    <script type="text/html" id="image-tags-tpl">
+        <div class="mx-auto flex w-full max-w-xl flex-col">
+            <p class="text-[16px] font-semibold leading-6 text-ink">修改标签</p>
+            <p class="mt-1 text-[13px] leading-5 text-ink-3">已选择 __count__ 张图片 · 点击标签切换「添加 / 移除」</p>
+            <div id="image-tags-list" class="mt-4 flex max-h-[50vh] w-full flex-col gap-1.5 overflow-y-auto pr-1"></div>
+            <div class="mt-3 flex items-center gap-2">
+                <input type="text" id="image-tags-new" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入新标签名称">
+                <button type="button" id="image-tags-create" class="ls-btn h-11 shrink-0 px-4 sm:h-9">新建并添加</button>
+            </div>
+            <div class="mt-4 flex justify-end gap-2">
+                <button type="button" id="image-tags-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
+                <button type="button" id="image-tags-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>确定</button>
+            </div>
+        </div>
+    </script>
+
+    {{-- 标签管理弹窗的外壳：新建标签表单（顶部）+ 标签列表容器。
+         列表行是「左侧信息区 + 右侧两个常显 44×44 按钮」，与相册弹窗完全同构。--}}
+    <script type="text/html" id="tag-manage-tpl">
+        <div class="mx-auto flex w-full max-w-xl flex-col">
+            <p class="text-[16px] font-semibold leading-6 text-ink">标签管理</p>
+            <p class="mt-1 text-[13px] leading-5 text-ink-3">标签按用户隔离，只有你自己可见；删除标签会把它从所有图片上移除。</p>
+            <div id="tag-manage-create" class="mt-4 flex w-full flex-col rounded-lg border border-line p-2">
+                <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
+                <form class="flex w-full items-center gap-2" action="{{ route('user.tag.create') }}" method="POST">
+                    <input type="text" name="name" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称">
+                    <button type="submit" class="ls-btn ls-btn-primary h-11 shrink-0 px-4 sm:h-9">新建标签</button>
+                </form>
+            </div>
+            <div id="tag-manage-list" class="mt-4 flex max-h-[50vh] w-full flex-col gap-1.5 overflow-y-auto pr-1"></div>
+        </div>
+    </script>
+
+    {{-- 标签管理里的一行：整行 ≥44px；右侧两个按钮常显（模板里不写 hidden / group-hover）。 --}}
+    <script type="text/html" id="tag-manage-item-tpl">
+        <div class="tag-manage-row flex min-h-[44px] w-full items-stretch rounded-lg border border-line bg-surface" data-id="__id__" data-json='__json__'>
+            <div class="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-1">
+                <i class="fas fa-tag w-3.5 shrink-0 text-ink-3" aria-hidden="true"></i>
+                <div class="min-w-0 flex-1 truncate text-[14px] name">__name__</div>
+                <div class="shrink-0 text-[13px] text-ink-3">__images_count__ 张</div>
+            </div>
+            <div class="tag-manage-actions flex shrink-0 items-center border-l border-line">
+                <button type="button" class="update flex h-11 w-11 items-center justify-center text-ink-2 hover:bg-surface-3 hover:text-brand" aria-label="重命名标签"><i class="fas fa-edit text-[15px]"></i></button>
+                <button type="button" class="delete flex h-11 w-11 items-center justify-center text-danger hover:bg-surface-3" aria-label="删除标签"><i class="fas fa-trash-alt text-[15px]"></i></button>
+            </div>
+        </div>
+    </script>
+
+    {{-- 标签重命名的行内表单（在行下方就地展开，与相册重命名同构）。
+         名称不写进模板 —— 由 JS 用 .val() 填，避免标签名里的引号/尖括号破坏属性。 --}}
+    <script type="text/html" id="tag-manage-edit-tpl">
+        <div id="tag-manage-edit" class="flex w-full flex-col rounded-lg border border-line p-2">
+            <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
+            <form class="flex w-full items-center gap-2" action="/user/tags/__id__" method="POST">
+                <input type="text" name="name" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称">
+                <button type="submit" class="ls-btn h-11 shrink-0 px-4 sm:h-9">确认修改</button>
+            </form>
+        </div>
+    </script>
+
+    {{-- 修改标签弹窗里的标签行：整行是一个 ≥44px 的点击区（手机点得中），
+         点一下在后端语义的「添加 → 移除 → 不变」之间循环；状态只用设计令牌表达。 --}}
+    <script type="text/html" id="image-tags-item-tpl">
+        <a href="javascript:void(0)" data-id="__id__" data-state="none" class="image-tag-row flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-ink transition-colors duration-150 hover:bg-surface-3">
+            <i class="tag-state-icon fas fa-circle w-4 shrink-0 text-ink-3 opacity-40" aria-hidden="true"></i>
+            <div class="min-w-0 flex-1 truncate text-[14px]">__name__</div>
+            <div class="tag-state-label shrink-0 text-[13px] text-ink-3">不变</div>
+        </a>
+    </script>
+
     @push('scripts')
         <script src="{{ asset('js/justified-gallery/jquery.justifiedGallery.min.js') }}"></script>
         <script src="{{ asset('js/viewer-js/viewer.min.js') }}"></script>
@@ -382,6 +488,36 @@
             const MOVEMENTS_MODAL = 'image-movements-modal';
             const DETAIL_MODAL = 'image-detail-modal';
             const ALBUM_MODAL = 'album-switch-modal';
+            // 批量修改标签弹窗（桌面工具栏 + 手机 ⋯ 菜单两个入口共用）
+            const TAGS_MODAL = 'image-tags-modal';
+            // 标签管理弹窗（标签本身的新建 / 重命名 / 删除）
+            const TAG_MANAGE_MODAL = 'tag-manage-modal';
+
+            /* ---------------- 标签（fork 新增） ----------------
+             * 标签按用户隔离：列表来自 GET user/tags，打标/移除走 PUT user/images/tags。
+             * allTags 是本页唯一的标签缓存（顶部筛选、详情卡候选、打标弹窗都用它）。
+             * -------------------------------------------------- */
+            let allTags = [];
+            let selectedTagIds = [];   // 顶部筛选选中的标签 id（多选，后端是 AND 语义）
+
+            // 标签名来自用户输入，塞进 innerHTML 之前一律先转义
+            const escapeHtml = (value) => String(value === null || value === undefined ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+
+            // 图片墙卡片角标：只显示前几个，长名字截断（角标容器是 pointer-events-none，不抢点击）
+            const cardTagsHtml = (tags) => {
+                if (! tags || ! tags.length) {
+                    return '';
+                }
+                return tags.slice(0, 3).map(tag =>
+                    '<span class="max-w-[7rem] truncate rounded-full bg-black/60 px-2 py-0.5 text-[11px] leading-4 text-white">'
+                    + escapeHtml(tag.name) + '</span>'
+                ).join('');
+            };
             const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
 
             $photos.justifiedGallery(gridConfigs);
@@ -425,6 +561,8 @@
                             .replace(/__thumb_url__/g, images[i].thumb_url)
                             .replace(/__width__/g, images[i].width)
                             .replace(/__height__/g, images[i].height)
+                            // 卡片角标 = 这张图的标签（列表接口已带 tags）
+                            .replace(/__tags__/g, cardTagsHtml(images[i].tags).replace(/\$/g, '$$$$'))
                             .replace(/__json__/g, JSON.stringify(images[i]).replace(/\$/g, '$$$$'))
                     }
 
@@ -650,10 +788,195 @@
                 $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
             };
 
-            const setPermission = function (permission) {
-                resetImages({page: 1, permission: permission})
-                $('#permission span').text({public: '公开', private: '私有', all: '全部'}[permission]);
+            // 顶部「标签」下拉的内容由这里渲染：点一下即筛选（多选 AND），不等下拉收起。
+            // 多选项沿用本页 44px 点击区约定（min-h-[44px]），手机上才点得中。
+            const renderTagFilter = () => {
+                let $list = $('#tag-filter-list');
+                if (! $list.length) {
+                    return;
+                }
+
+                let html = '';
+                if (! allTags.length) {
+                    html = '<div class="px-3.5 py-3 text-[13px] text-ink-3">暂无标签</div>';
+                } else {
+                    for (const tag of allTags) {
+                        let on = selectedTagIds.indexOf(tag.id) !== -1;
+                        html += '<a href="javascript:void(0)" data-tag-id="' + tag.id + '"'
+                            + ' class="tag-filter-item flex min-h-[44px] items-center gap-2 px-3.5 py-2 text-[13.5px] cursor-pointer '
+                            + (on ? 'text-brand font-medium' : 'text-ink-2')
+                            + ' hover:bg-surface-2 hover:text-ink">'
+                            + '<i class="fas ' + (on ? 'fa-check-square text-brand' : 'fa-square text-ink-3') + ' w-3.5 shrink-0"></i>'
+                            + '<span class="min-w-0 flex-1 truncate">' + escapeHtml(tag.name) + '</span>'
+                            + '<span class="shrink-0 text-[12px] text-ink-3">' + tag.images_count + ' 张</span>'
+                            + '</a>';
+                    }
+                }
+                $list.html(html);
+                $('#tag-filter-clear').toggleClass('hidden', selectedTagIds.length === 0);
+                $('#tag-filter span').text(selectedTagIds.length ? `标签（${selectedTagIds.length}）` : '标签');
             };
+
+            // 拉一次标签列表（页面加载时、以及增删标签之后）
+            const loadTags = () => axios.get('{{ route('user.tags') }}').then(response => {
+                if (! response.data.status) {
+                    return;
+                }
+                allTags = response.data.data.tags || [];
+                renderTagFilter();
+                renderDetailTagOptions();
+            });
+
+            // 按当前选中的标签重拉图片墙（多标签 AND；没有选中就是不筛）
+            const setTags = function () {
+                // ⚠ 这里**必须每次都显式带 tags**（清空时给空数组）：utils.infiniteScroll 是把参数
+                // $.extend 进它内部那份 data 的，只传 {page:1} 的话上一次的 tags 会残留下来 ——
+                // 表现就是「点了清除筛选，结果还是被标签筛着」。空数组会被 axios 序列化成零个参数，
+                // 所以清空时查询串里不会出现任何 tags（后端也就不用处理「空值」这种形状）。
+                resetImages({page: 1, tags: selectedTagIds.slice()});
+            };
+
+            // 勾/取消一个标签
+            const toggleTagFilter = function (id) {
+                let index = selectedTagIds.indexOf(id);
+                if (index === -1) {
+                    selectedTagIds.push(id);
+                } else {
+                    selectedTagIds.splice(index, 1);
+                }
+                renderTagFilter();
+                setTags();
+            };
+
+            $('#tag-filter-menu').off('click', '.tag-filter-item').on('click', '.tag-filter-item', function () {
+                toggleTagFilter($(this).data('tag-id'));
+            });
+
+            $('#tag-filter-clear').off('click').on('click', function () {
+                selectedTagIds = [];
+                renderTagFilter();
+                setTags();
+            });
+
+            /* ---------------- 标签管理：新建 / 重命名 / 删除（标签本身） ----------------
+             * 入口是上面筛选下拉底部的「管理标签」。行内分区照搬相册弹窗
+             * （左侧名称 + 使用数量，右侧两个常显 44×44 按钮）。
+             * 任何一处改动都会刷新三个消费方：筛选下拉、详情卡候选、图片墙（角标 + 筛选结果）。
+             * ------------------------------------------------------------------ */
+
+            // 标签变了 → 重拉标签缓存 + 重拉当前视图（角标/筛选结果都会跟着正确）
+            const refreshAfterTagChange = () => loadTags().then(() => setTags());
+
+            const renderTagManageList = () => {
+                let $list = $('#tag-manage-list');
+                if (! $list.length) {
+                    return;
+                }
+                if (! allTags.length) {
+                    $list.html('<div class="w-full py-4 text-center text-[13px] text-ink-3">暂无标签</div>');
+                    return;
+                }
+                let html = '';
+                for (const tag of allTags) {
+                    html += $('#tag-manage-item-tpl').html()
+                        .replace(/__id__/g, tag.id)
+                        .replace(/__name__/g, escapeHtml(tag.name).replace(/\$/g, '$$$$'))
+                        .replace(/__images_count__/g, tag.images_count)
+                        .replace(/__json__/g, JSON.stringify(tag).replace(/\$/g, '$$$$'));
+                }
+                $list.html(html);
+            };
+
+            const openTagManage = () => {
+                $('#tag-manage-content').html($('#tag-manage-tpl').html());
+                renderTagManageList();
+                modal.open(TAG_MANAGE_MODAL);
+
+                // 打开时静默对齐一次服务端（别的标签页刚改过也能看到最新的）
+                loadTags().then(renderTagManageList);
+
+                const $list = $('#tag-manage-list');
+
+                // 新建
+                $('#tag-manage-create form').off('submit').on('submit', function (e) {
+                    e.preventDefault();
+                    let $form = $(this);
+                    let $error = $('#tag-manage-create .error-message').html('').hide();
+                    axios.post($form.attr('action'), $form.serialize()).then(response => {
+                        if (response.data.status) {
+                            $form.get(0).reset();
+                            refreshAfterTagChange().then(renderTagManageList);
+                            toastr.success(response.data.message);
+                        } else {
+                            $error.html('<i class="fas fa-exclamation-circle"></i> ' + response.data.message).show();
+                        }
+                    });
+                });
+
+                // 重命名：点「编辑」在行下方就地展开表单（同一行再点一次收起）
+                $list.off('click', '.update').on('click', '.update', function (e) {
+                    e.stopPropagation();
+                    let $row = $(this).closest('.tag-manage-row');
+                    let openedId = $('#tag-manage-edit').data('id');
+                    $('#tag-manage-edit').remove();
+                    if (openedId !== $row.data('id')) {
+                        let $edit = $($('#tag-manage-edit-tpl').html().replace(/__id__/g, $row.data('id')));
+                        $edit.find('input[name=name]').val($row.find('.name').text());
+                        $row.after($edit);
+                    }
+                });
+
+                $list.off('submit', '#tag-manage-edit form').on('submit', '#tag-manage-edit form', function (e) {
+                    e.preventDefault();
+                    let $form = $(this);
+                    let $error = $('#tag-manage-edit .error-message').html('').hide();
+                    axios.put($form.attr('action'), $form.serialize()).then(response => {
+                        if (response.data.status) {
+                            $('#tag-manage-edit').remove();
+                            refreshAfterTagChange().then(renderTagManageList);
+                            toastr.success(response.data.message);
+                        } else {
+                            $error.html('<i class="fas fa-exclamation-circle"></i> ' + response.data.message).show();
+                        }
+                    });
+                });
+
+                // 删除：二次确认（明确说明会从所有图片上移除，且不可恢复）
+                $list.off('click', '.delete').on('click', '.delete', function (e) {
+                    e.stopPropagation();
+                    let tag = $(this).closest('.tag-manage-row').data('json') || {};
+                    Swal.fire({
+                        // 与新弹窗（x-modal）一套：不动背景页面
+                        heightAuto: false,
+                        scrollbarPadding: false,
+                        title: '确认删除该标签?',
+                        html: '删除后将从所有图片上移除标签「' + escapeHtml(tag.name) + '」，且不可恢复。',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: '确认',
+                        cancelButtonText: '取消',
+                    }).then(result => {
+                        if (! result.isConfirmed) {
+                            return;
+                        }
+                        axios.delete('/user/tags/' + tag.id).then(response => {
+                            if (response.data.status) {
+                                // 被删掉的标签如果正选中在筛选里，先摘掉，免得筛出一片空
+                                selectedTagIds = selectedTagIds.filter(id => id !== tag.id);
+                                $('#tag-manage-edit').remove();
+                                refreshAfterTagChange().then(renderTagManageList);
+                                toastr.success(response.data.message);
+                            } else {
+                                toastr.warning(response.data.message);
+                            }
+                        });
+                    });
+                });
+            };
+
+            $('#tag-manage-open').off('click').on('click', _ => openTagManage());
 
             $('#search').keydown(function (e) {
                 if (e.keyCode === 13) {
@@ -687,10 +1010,10 @@
                     operates = ['refresh'];
                 }
                 if (selected.length === 1) {
-                    operates = ['refresh', 'movements', 'permission', 'detail', 'rename', 'delete', 'deselect'];
+                    operates = ['refresh', 'movements', 'tag', 'detail', 'rename', 'delete', 'deselect'];
                 }
                 if (selected.length > 1) {
-                    operates = ['refresh', 'movements', 'permission', 'delete', 'deselect'];
+                    operates = ['refresh', 'movements', 'tag', 'delete', 'deselect'];
                 }
                 if (selected.length && selectedAlbum.id !== undefined) {
                     operates.push('remove');
@@ -753,6 +1076,131 @@
             }).on('error', _ => {
                 toastr.warning('复制失败')
             });
+
+            /* ---------------- 标签（fork 新增） ----------------
+             * 详情卡里的标签：本地态 detailImageTags 保存当前这张图的标签，
+             * 增/删成功后立刻回写弹窗与图片墙上的卡片角标，并顺手刷新标签使用数量。
+             * -------------------------------------------------- */
+            let detailImageId = null;
+            let detailImageTags = [];
+
+            // 把当前图片的标签画成一排 chip（每个 chip 带一个「移除」小按钮）
+            const renderDetailTags = () => {
+                let $box = $('#detail-tags');
+                if (! $box.length) {
+                    return;
+                }
+                if (! detailImageTags.length) {
+                    $box.html('<span class="text-[13px] text-ink-3">暂无标签</span>');
+                    return;
+                }
+                let html = '';
+                for (const tag of detailImageTags) {
+                    html += '<span class="ls-badge gap-1 bg-brand-soft text-brand">' + escapeHtml(tag.name)
+                        + '<button type="button" class="detail-tag-remove -mr-0.5 leading-none text-ink-3 hover:text-danger"'
+                        + ' data-tag-id="' + tag.id + '" aria-label="移除标签">&times;</button></span>';
+                }
+                $box.html(html);
+            };
+
+            // 详情卡输入框的候选 = 已有标签（datalist），输入框里没见过的名字回车即现场新建
+            const renderDetailTagOptions = () => {
+                let $options = $('#detail-tag-options');
+                if (! $options.length) {
+                    return;
+                }
+                $options.html(allTags.map(tag => `<option value="${escapeHtml(tag.name)}"></option>`).join(''));
+            };
+
+            // 同步图片墙上某张图的卡片角标（连同它的 data-json，右键菜单/详情读的是这份）
+            const syncCardTags = (imageId, tags) => {
+                let $item = $photos.find(`${IMAGES_ITEM}[data-id="${imageId}"]`);
+                if (! $item.length) {
+                    return;
+                }
+                let json = $item.data('json');
+                if (json) {
+                    json.tags = tags.map(tag => ({id: tag.id, name: tag.name}));
+                    $item.data('json', json).attr('data-json', JSON.stringify(json));
+                }
+                $item.find('.image-tags').html(cardTagsHtml(tags));
+            };
+
+            // 单图打标/移除（详情卡用）：成功后就地更新本地态 + 卡片角标
+            const submitImageTags = (imageId, addIds, removeIds) => {
+                let payload = {ids: [imageId]};
+                if (addIds.length) {
+                    payload.tags = addIds;
+                }
+                if (removeIds.length) {
+                    payload.remove_tags = removeIds;
+                }
+                return axios.put('{{ route('user.images.tags') }}', payload).then(response => {
+                    if (! response.data.status) {
+                        throw new Error(response.data.message);
+                    }
+
+                    let nameOf = {};
+                    for (const tag of allTags) {
+                        nameOf[tag.id] = tag.name;
+                    }
+                    for (const id of addIds) {
+                        if (! detailImageTags.some(tag => tag.id === id)) {
+                            detailImageTags.push({id: id, name: nameOf[id] || ''});
+                        }
+                    }
+                    detailImageTags = detailImageTags.filter(tag => removeIds.indexOf(tag.id) === -1);
+
+                    renderDetailTags();
+                    syncCardTags(imageId, detailImageTags);
+                    loadTags();     // 使用数量变了，顺手刷新（顶部筛选与候选同步更新）
+                    toastr.success(response.data.message);
+                }).catch(error => {
+                    toastr.warning(error.message || '设置失败');
+                });
+            };
+
+            // 详情卡里「添加」：已有同名标签就直接挂上，没有就先 POST 新建
+            const addDetailTagFromInput = () => {
+                let $input = $('#detail-tag-input');
+                let name = ($input.val() || '').trim();
+                if (! name || detailImageId === null) {
+                    return;
+                }
+
+                let exists = allTags.find(tag => tag.name === name);
+                let pending = exists ? Promise.resolve(exists.id) : axios.post('{{ route('user.tag.create') }}', {name: name})
+                    .then(response => {
+                        if (! response.data.status) {
+                            throw new Error(response.data.message);
+                        }
+                        allTags.unshift({id: response.data.data.id, name: response.data.data.name, images_count: 0});
+                        renderTagFilter();
+                        renderDetailTagOptions();
+                        return response.data.data.id;
+                    });
+
+                pending.then(tagId => {
+                    $input.val('');
+                    if (detailImageTags.some(tag => tag.id === tagId)) {
+                        return;
+                    }
+                    return submitImageTags(detailImageId, [tagId], []);
+                }).catch(error => toastr.warning(error.message || '添加失败'));
+            };
+
+            // 详情弹窗里的标签按钮/回车（委托绑在常驻容器上，弹窗内容每次重渲染都不用重绑）
+            $('#image-detail-content')
+                .off('click', '.detail-tag-remove').on('click', '.detail-tag-remove', function () {
+                    submitImageTags(detailImageId, [], [$(this).data('tag-id')]);
+                })
+                .off('click', '#detail-tag-add').on('click', '#detail-tag-add', _ => addDetailTagFromInput())
+                .off('keydown', '#detail-tag-input').on('keydown', '#detail-tag-input', function (e) {
+                    if (e.key === 'Enter' || e.keyCode === 13) {
+                        e.preventDefault();
+                        addDetailTagFromInput();
+                    }
+                });
 
             const methods = {
                 movements() {
@@ -864,47 +1312,172 @@
                         }
                     });
                 },
-                permission() {
-                    Swal.fire({
-                        // 与新弹窗（x-modal）一套：不动背景页面（heightAuto 去 swal2-height-auto，
-                        // scrollbarPadding 去 body 的 padding-right 注入 —— 否则整页会有细微位移）
-                        heightAuto: false,
-                        scrollbarPadding: false,
-                        title: '选择一个权限',
-                        text: '选择公开后所有用户都能看到这张图片',
-                        input: 'select',
-                        inputOptions: {
-                            public: '公开',
-                            private: '私有',
-                        },
-                        confirmButtonText: '确认设置',
-                        inputPlaceholder: '请选择一个权限',
-                        showCancelButton: true,
-                        inputValidator: (value) => {
-                            return new Promise((resolve) => {
-                                if (value === '') {
-                                    resolve('请选择正确的权限')
-                                } else {
-                                    resolve();
-                                }
-                            })
+                tag() {
+                    // 「修改标签」走居中卡片弹窗（x-modal），桌面工具栏与手机 ⋯ 菜单共用。
+                    // 每一行点一下在「添加 → 移除 → 不变」之间循环，底部「确定」一次性提交
+                    // （PUT user/images/tags：ids + tags[] + remove_tags[]，与后端契约一致）。
+                    let selected = ds.getSelection().map(item => $(item).data('id'));
+                    if (! selected.length) {
+                        return false;
+                    }
+
+                    $('#image-tags-content').html(
+                        $('#image-tags-tpl').html().replace(/__count__/g, selected.length)
+                    );
+
+                    const $tagList = $('#image-tags-list');
+                    const $confirm = $('#image-tags-confirm');
+                    let addIds = [];
+                    let removeIds = [];
+
+                    const refreshConfirm = () => $confirm.prop('disabled', addIds.length === 0 && removeIds.length === 0);
+
+                    // 三种状态只用设计令牌表达：添加 = 品牌色、移除 = 危险色、不变 = 默认
+                    const setRowState = ($row, state) => {
+                        $row.attr('data-state', state);
+                        $row.removeClass('border-brand bg-brand-soft text-brand border-danger text-danger border-line bg-surface-2 text-ink');
+                        $row.find('.tag-state-icon').attr('class', 'tag-state-icon fas w-4 shrink-0 ' + {
+                            add: 'fa-circle-plus text-brand',
+                            remove: 'fa-circle-minus text-danger',
+                            none: 'fa-circle text-ink-3 opacity-40',
+                        }[state]);
+                        $row.find('.tag-state-label')
+                            .attr('class', 'tag-state-label shrink-0 text-[13px] ' + (state === 'none' ? 'text-ink-3' : 'font-medium'))
+                            .toggleClass('text-brand', state === 'add')
+                            .toggleClass('text-danger', state === 'remove')
+                            .text({add: '添加', remove: '移除', none: '不变'}[state]);
+                        if (state === 'none') {
+                            $row.addClass('border-line bg-surface-2 text-ink');
+                        } else if (state === 'add') {
+                            $row.addClass('border-brand bg-brand-soft text-brand');
+                        } else {
+                            $row.addClass('border-danger bg-surface-2 text-danger');
                         }
-                    }).then(result => {
-                        if (result.isConfirmed) {
-                            let selected = ds.getSelection().map(item => $(item).data('id'));
-                            axios.put('{{ route('user.images.permission') }}', {
-                                ids: selected,
-                                permission: result.value,
-                            }).then(response => {
-                                if (response.data.status) {
-                                    ds.clearSelection();
-                                    toastr.success(response.data.message);
-                                } else {
-                                    toastr.warning(response.data.message);
-                                }
-                            });
+                    };
+
+                    const renderTags = () => {
+                        if (! allTags.length) {
+                            $tagList.html('<div class="px-1 py-3 text-center text-[13px] text-ink-3">暂无标签，可在下方新建</div>');
+                            return;
                         }
+                        let html = '';
+                        for (const tag of allTags) {
+                            html += $('#image-tags-item-tpl').html()
+                                .replace(/__id__/g, tag.id)
+                                .replace(/__name__/g, escapeHtml(tag.name).replace(/\$/g, '$$$$'));
+                        }
+                        $tagList.html(html);
+                    };
+
+                    renderTags();
+
+                    // 同一个标签不可能既「添加」又「移除」：切状态时先从两组里摘掉
+                    const pickState = (id, state) => {
+                        addIds = addIds.filter(item => item !== id);
+                        removeIds = removeIds.filter(item => item !== id);
+                        if (state === 'add') {
+                            addIds.push(id);
+                        }
+                        if (state === 'remove') {
+                            removeIds.push(id);
+                        }
+                    };
+
+                    $tagList.off('click', '.image-tag-row').on('click', '.image-tag-row', function () {
+                        let $row = $(this);
+                        let current = $row.attr('data-state');
+                        let next = {none: 'add', add: 'remove', remove: 'none'}[current || 'none'];
+                        pickState($row.data('id'), next);
+                        setRowState($row, next);
+                        refreshConfirm();
                     });
+
+                    // 现场新建标签：建好后直接置为「添加」
+                    const markRow = (id, state) => {
+                        let $row = $tagList.find(`.image-tag-row[data-id="${id}"]`);
+                        if ($row.length) {
+                            pickState(id, state);
+                            setRowState($row, state);
+                            refreshConfirm();
+                        }
+                    };
+
+                    $('#image-tags-create').off('click').on('click', function () {
+                        let $input = $('#image-tags-new');
+                        let name = ($input.val() || '').trim();
+                        if (! name) {
+                            return;
+                        }
+
+                        let exists = allTags.find(tag => tag.name === name);
+                        if (exists) {
+                            // 已经有同名标签：不重复建，直接选中它（幂等）
+                            $input.val('');
+                            markRow(exists.id, 'add');
+                            return;
+                        }
+
+                        axios.post('{{ route('user.tag.create') }}', {name: name}).then(response => {
+                            if (! response.data.status) {
+                                return toastr.warning(response.data.message);
+                            }
+                            allTags.unshift({id: response.data.data.id, name: response.data.data.name, images_count: 0});
+                            renderTagFilter();
+                            renderDetailTagOptions();
+                            $input.val('');
+                            renderTags();
+                            markRow(response.data.data.id, 'add');
+                        });
+                    });
+
+                    $('#image-tags-cancel').off('click').on('click', _ => modal.close(TAGS_MODAL));
+
+                    $confirm.off('click').on('click', function () {
+                        if (! addIds.length && ! removeIds.length) {
+                            return false;
+                        }
+
+                        let payload = {ids: selected};
+                        if (addIds.length) {
+                            payload.tags = addIds;
+                        }
+                        if (removeIds.length) {
+                            payload.remove_tags = removeIds;
+                        }
+
+                        axios.put('{{ route('user.images.tags') }}', payload).then(response => {
+                            if (! response.data.status) {
+                                return toastr.warning(response.data.message);
+                            }
+
+                            modal.close(TAGS_MODAL);
+
+                            // 就地同步这些图片的卡片角标（含刚新建的标签）
+                            let nameOf = {};
+                            for (const tag of allTags) {
+                                nameOf[tag.id] = tag.name;
+                            }
+                            ds.getSelection().map(item => $(item)).forEach($item => {
+                                let json = $item.data('json') || {};
+                                let tags = (json.tags || []).filter(tag => removeIds.indexOf(tag.id) === -1);
+                                for (const id of addIds) {
+                                    if (! tags.some(tag => tag.id === id)) {
+                                        tags.push({id: id, name: nameOf[id] || ''});
+                                    }
+                                }
+                                syncCardTags(json.id, tags);
+                            });
+
+                            toastr.success(response.data.message);
+                            // 正在按标签筛选时，结果集可能变了 —— 重新拉一次
+                            if (selectedTagIds.length) {
+                                setTags();
+                            }
+                            loadTags();
+                        });
+                    });
+
+                    modal.open(TAGS_MODAL);
                 },
                 rename(e) {
                     let item = $(e).data('json');
@@ -987,6 +1560,9 @@
                     axios.get(`/user/images/${item.id}`).then(response => {
                         if (response.data.status) {
                             let image = response.data.data.image;
+                            // 这张图的标签（详情卡里可以现场增删）
+                            detailImageId = image.id;
+                            detailImageTags = (image.tags || []).map(tag => ({id: tag.id, name: tag.name}));
                             let content = $('#image-detail-tpl').html()
                                 .replace(/__thumb_url__/g, image.thumb_url)
                                 .replace(/__album_name__/g, image.album ? image.album.name : '-')
@@ -999,11 +1575,12 @@
                                 .replace(/__height__/g, image.height)
                                 .replace(/__md5__/g, image.md5)
                                 .replace(/__sha1__/g, image.sha1)
-                                .replace(/__permission__/g, image.permission === 1 ? '公开' : '私有')
                                 .replace(/__uploaded_ip__/g, image.uploaded_ip)
                                 .replace(/__created_at__/g, image.created_at)
                             // 「详细信息」改成居中卡片弹窗（原来画进右侧抽屉）
                             $('#image-detail-content').html(content);
+                            renderDetailTags();
+                            renderDetailTagOptions();
                             modal.open(DETAIL_MODAL);
                         } else {
                             toastr.error(response.data.message);
@@ -1090,9 +1667,14 @@
                     text: '删除',
                     action: _ => methods.delete(),
                 },
-                permission: {
-                    text: '设置权限',
-                    action: _ => methods.permission(),
+                tag: {
+                    text: '修改标签',
+                    action: _ => methods.tag(),
+                },
+                // 标签本身的增删改（新建 / 重命名 / 删除）—— 与工具栏「标签」下拉里的「管理标签」同一入口
+                manageTags: {
+                    text: '管理标签',
+                    action: _ => openTagManage(),
                 },
             };
             // right click 'images scroll' container
@@ -1110,7 +1692,8 @@
                     actions.open,
                     actions.movements,
                     actions.remove,
-                    actions.permission,
+                    actions.tag,
+                    actions.manageTags,
                     actions.detail,
                     {divider: true},
                     actions.rename,
@@ -1151,8 +1734,8 @@
                     case 'rename': // 重命名
                         methods.rename(selected[0]);
                         break;
-                    case 'permission': // 设置权限
-                        methods.permission();
+                    case 'tag': // 修改标签（可增可减，支持现场新建）
+                        methods.tag();
                         break;
                     case 'detail':
                         methods.detail(selected[0]);
@@ -1166,6 +1749,9 @@
                         break;
                 }
             });
+
+            // 标签列表最后拉：此时 renderDetailTagOptions / renderTagFilter 都已定义（避免 TDZ）
+            loadTags();
         </script>
     @endpush
 </x-app-layout>

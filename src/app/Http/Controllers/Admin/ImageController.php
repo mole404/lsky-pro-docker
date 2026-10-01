@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Enums\ImagePermission;
 use App\Http\Controllers\Controller;
 use App\Models\Image;
 use App\Services\UserService;
@@ -33,8 +32,9 @@ class ImageController extends Controller
                 return false;
             })->each(function ($filter) use ($builder) {
                 match ($filter) {
-                    'is:public' => $builder->where('permission', ImagePermission::Public),
-                    'is:private' => $builder->where('permission', ImagePermission::Private),
+                    // fork：原 'is:public' / 'is:private' 两条语法已删除 —— 界面上的「图片权限」
+                    // 口径整体下线后，后台不再提供按可见性筛图的能力（手输该语法等同于未知语法，
+                    // 不产生任何筛选条件，与 is:xxx 里的其它未知值行为一致）。
                     'is:unhealthy' => $builder->where('is_unhealthy', 1),
                     'is:guest' => $builder->whereNull('user_id'),
                     'is:adminer' => $builder->whereHas('user', fn (Builder $builder) => $builder->where('is_adminer', 1)),
