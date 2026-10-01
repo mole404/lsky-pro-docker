@@ -64,7 +64,10 @@ env:
   # 于是镜像明明是对的（构建期 md5sum -c 已断言过），却被这一步判成失败。
   # 上游快照里的数据库迁移文件个数。换 pin 时若这个数变了，说明有 schema 变更，
   # 而 entrypoint 不会自动跑 migrate —— 那种情况必须人工处理，所以在 CI 里钉住提醒。
-  UPSTREAM_MIGRATION_COUNT: "10"
+  # 12 = 上游 pin 快照自带的 10 + 本 fork 标签功能新增的 2 个（2026-10-01：
+  #   2026_10_01_000001_create_tags_table / _000002_create_image_tag_table，都是新增表、不动原表）。
+  # 这两条同样要人工 migrate —— 线上升级流程里「起新镜像后立刻 php artisan migrate --force」。
+  UPSTREAM_MIGRATION_COUNT: "12"
   # 「真升级用例」（tools/upgrade-test.sh）的升级基线：**不再写死**，由脚本向 GHCR 匿名 API
   # 现查「最新的 sha-<commit> tag，且 ≠ 本次构建的 commit」当基线。
   # 为什么改（原来的写法确实会红）：这里曾硬编码 sha-cd14a3b9…，那个 tag 一旦从 GHCR 消失
