@@ -510,7 +510,7 @@ jobs:
           # 测试版内存收紧自证（2026-10-01）：
           #   ① PHP 生效的 memory_limit 必须是 64M —— 真读回 ini_get()，不是看配置文件写了没写
           #      （CLI 与 Apache 模块共用同一份 conf.d，entrypoint 在启动时把 PHP_MEMORY_LIMIT 渲染进去）；
-          #   ② MaxConnectionsPerChild 默认必须是 30 —— 真读回容器里被 entrypoint 渲染出的 mpm.conf。
+          #   ② MaxConnectionsPerChild 默认必须是 5 —— 真读回容器里被 entrypoint 渲染出的 mpm.conf。
           # 都按本仓规矩「先落文件再比较」—— 不写 `… | grep -q`：命中即退会 SIGPIPE（141），
           # 上面带了 `set -o pipefail` 会把「命中」误判成失败（本仓踩过这个坑）。
           docker exec lsky-smoke sh -c 'php -r "echo ini_get(\"memory_limit\");"' > /tmp/php-memlimit.txt 2>&1 || true
@@ -522,11 +522,11 @@ jobs:
           docker exec lsky-smoke cat /etc/apache2/conf-enabled/mpm.conf > /tmp/smoke-mpm.txt 2>&1 || true
           echo "== 容器里渲染出的 mpm.conf =="
           cat /tmp/smoke-mpm.txt 2>/dev/null || true
-          if ! grep -qx 'MaxConnectionsPerChild 30' /tmp/smoke-mpm.txt; then
-            echo "::error::MaxConnectionsPerChild 默认不是 30（容器 mpm.conf 里没有这一行）"
+          if ! grep -qx 'MaxConnectionsPerChild 5' /tmp/smoke-mpm.txt; then
+            echo "::error::MaxConnectionsPerChild 默认不是 5（容器 mpm.conf 里没有这一行）"
             exit 1
           fi
-          echo "测试版内存收紧自证通过：memory_limit=64M，MaxConnectionsPerChild=30"
+          echo "测试版内存收紧自证通过：memory_limit=64M，MaxConnectionsPerChild=5"
           docker rm -f lsky-smoke
 
           {
@@ -647,7 +647,7 @@ jobs:
             'MinSpareServers 1' \
             'MaxSpareServers 3' \
             'MaxRequestWorkers 5' \
-            'MaxConnectionsPerChild 30' \
+            'MaxConnectionsPerChild 5' \
             'KeepAlive Off' > /tmp/mpm-default.txt
           need_running lsky-mpm-a
           docker exec lsky-mpm-a cat "$MPM" > /tmp/mpm-actual.txt
@@ -678,7 +678,7 @@ jobs:
           need_running lsky-mpm-b
           docker exec lsky-mpm-b cat "$MPM"
           for line in 'StartServers 2' 'MinSpareServers 1' 'MaxSpareServers 3' \
-                      'MaxRequestWorkers 17' 'MaxConnectionsPerChild 30' 'KeepAlive Off'; do
+                      'MaxRequestWorkers 17' 'MaxConnectionsPerChild 5' 'KeepAlive Off'; do
             assert_line lsky-mpm-b "$line"
           done
           assert_no_line lsky-mpm-b '^KeepAliveTimeout'

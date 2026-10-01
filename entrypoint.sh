@@ -108,11 +108,12 @@ MPM_DEF_START_SERVERS=2
 MPM_DEF_MIN_SPARE_SERVERS=1
 MPM_DEF_MAX_SPARE_SERVERS=3
 MPM_DEF_MAX_REQUEST_WORKERS=5
-# MaxConnectionsPerChild 默认 5 → 30（测试版）：5 意味着每个 worker 只处理 5 个请求就换班，
-# 低流量站上换班（fork/退出/再 fork）的开销占比很高、白耗内存与 CPU；30 仍会周期性回收
-# （防长跑 worker 的内存碎片/潜在泄漏累积），但把无谓换班降到原来的 1/6。
+# MaxConnectionsPerChild 默认 5（2026-10-01 从 30 改回 5）：本站流量极低（约 3 请求/分钟），
+# 按这个速率每个 worker 大约 3 分钟才换一次班 —— 换班（fork/退出/再 fork）的开销在这点流量下
+# 可忽略；而换班越勤，长跑 worker 累积的内存碎片/潜在泄漏越少。低流量场景下取「最严的内存纪律」。
+# （中途试过 30：少换班对低流量站没多少收益，不如 5 稳。历史值 30。）
 # 仍然保留 APACHE_MAX_CONNECTIONS_PER_CHILD 覆盖（0 = 永不回收，合法值）。
-MPM_DEF_MAX_CONNECTIONS_PER_CHILD=30
+MPM_DEF_MAX_CONNECTIONS_PER_CHILD=5
 MPM_DEF_KEEP_ALIVE=Off
 MPM_TEMPLATE=/etc/apache2/mpm.conf.template
 MPM_TARGET=/etc/apache2/conf-enabled/mpm.conf
