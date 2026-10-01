@@ -553,6 +553,20 @@ html.dark {
     margin-right: 7px !important;
 }
 
+/* ---------------------------------------------------------------------------
+ * 去掉右键 / 长按菜单左上角的气泡尖角 —— 与上一条同样的「兜底」理由：
+ *   规则本体在 resources/css/context-js.less（产 public/css/context-js/context-js.css），
+ *   而那份在 images.blade.php 里没有版本串、会被 iOS Safari 的启发式缓存长期喂旧版，
+ *   → less 改了、产物里也去了，老师现场却还看得见。common.css 带 assetVersion（mtime），
+ *   这里放一份同选择器兜底，缓存了旧 context-js.css 的浏览器也会被这条覆盖掉。
+ * 选择器严格限定在 .dropdown-context（= context-js.js 生成的右键/长按菜单，
+ * 顶栏下拉是 .ls-menu，不受影响）；只让伪元素不生成，尺寸/圆角/阴影/定位/滚动关闭全不动。
+ * ------------------------------------------------------------------------- */
+.dropdown-context:before,
+.dropdown-context:after {
+    content: none !important;
+}
+
 // ---------------------------------------------------------------- fork：侧栏高度跟随真实可视视口
 // 手机地址栏可见时 100vh 比「真正看得见的区域」高，侧栏底部（容量使用区）会被推到可视区之外，
 // 地址栏一收起才冒出来（老师反馈「地址栏在的时候不显示」）。
