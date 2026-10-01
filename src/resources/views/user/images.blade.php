@@ -433,7 +433,6 @@
                 <i class="tag-state-icon fas fa-square w-4 shrink-0 text-ink-3" aria-hidden="true"></i>
                 <div class="min-w-0 flex-1 truncate text-[14px] name">__name__</div>
                 <div class="shrink-0 text-[13px] text-ink-3"><span class="images-count">__images_count__</span> 张</div>
-                <div class="tag-state-label shrink-0 text-[13px] text-ink-3"></div>
             </a>
             <div class="tag-row-actions flex shrink-0 items-center border-l border-line">
                 <button type="button" class="update flex h-11 w-11 items-center justify-center text-ink-2 hover:bg-surface-3 hover:text-brand" aria-label="重命名标签"><i class="fas fa-edit text-[15px]"></i></button>
@@ -934,23 +933,16 @@
                         let pendingRemove = removeIds.indexOf(id) !== -1;
                         let partial = ! checked && ! pendingRemove && someHave(id) && ! allHave(id);
 
+                        // 行内只留左边那个勾表达状态（老师要求：不要「已有 / 移除」这类字样，太误导）
                         let icon = 'fa-square text-ink-3';
-                        let label = '';
-                        let labelCls = 'text-ink-3';
                         if (checked) {
                             icon = 'fa-check-square text-brand';
-                            label = hasSelection ? '已有' : '';
-                            labelCls = pendingAdd ? 'text-brand font-medium' : 'text-ink-3';
                         } else if (pendingRemove) {
                             icon = 'fa-square text-danger';
-                            label = '移除';
-                            labelCls = 'text-danger font-medium';
                         } else if (partial) {
                             icon = 'fa-minus-square text-brand';
-                            label = '部分有';
                         }
                         $row.find('.tag-state-icon').attr('class', 'tag-state-icon fas w-4 shrink-0 ' + icon);
-                        $row.find('.tag-state-label').attr('class', 'tag-state-label shrink-0 text-[13px] ' + labelCls).text(label);
                         if (pendingAdd) {
                             $row.addClass('border-brand bg-brand-soft');
                         } else if (pendingRemove) {
@@ -1273,53 +1265,6 @@
             });
 
             // 单击（没拖动）不改变勾选 —— 见上面 ②
-            let pressSel = null;
-            let pressFrom = null;
-            let pressMoved = false;
-            let pressCircle = null;
-            // 用捕获阶段的原生监听：DragSelect 会给每张可选卡片挂 click/mousedown 并在自己的处理里
-            // 停传播，挂在冒泡阶段（jQuery 的 $(document).on）会被它拦掉，实测那些处理根本收不到。
-            document.addEventListener('mousedown', e => {
-                if (! $(e.target).closest(IMAGES_GRID).length) {
-                    return;
-                }
-                pressSel = ds.getSelection().slice();
-                pressFrom = {x: e.clientX, y: e.clientY};
-                pressMoved = false;
-                // 只有按在右上角小圆勾上才算「要勾选」
-                pressCircle = $(e.target).closest('.image-selector').length ? e.target : null;
-            }, true);
-            document.addEventListener('mousemove', e => {
-                if (pressFrom && (Math.abs(e.clientX - pressFrom.x) > 3 || Math.abs(e.clientY - pressFrom.y) > 3)) {
-                    pressMoved = true;
-                }
-            }, true);
-            document.addEventListener('mouseup', () => {
-                const sel = pressSel;
-                const circle = pressCircle;
-                const moved = pressMoved;
-                pressSel = null;
-                pressFrom = null;
-                pressMoved = false;
-                pressCircle = null;
-                // 手机上 DragSelect 是停掉的、这条逻辑不参与（勾选仍走 .image-selector 的 click）
-                if (sel === null || moved || utils.isMobile()) {
-                    return;
-                }
-                // 目标选中集合一次算好（幂等，可以反复盖）：
-                //   按下前有什么就还原成什么；如果按的是小圆勾，再把这张图加/去掉。
-                const card = circle ? $(circle).closest(IMAGES_ITEM).get(0) : null;
-                const want = () => (! card ? sel
-                    : (sel.indexOf(card) === -1 ? sel.concat([card]) : sel.filter(item => item !== card)));
-                const apply = () => {
-                    ds.setSelection(want());     // 单击 → 还原按下前的选中（点图片不会顺手勾上）
-                    bindOperates();
-                };
-                // 库在 mouseup、click、以及下一帧 rAF 里都可能「点哪个选哪个」，连盖两拍才稳
-                setTimeout(apply, 0);
-                requestAnimationFrame(() => setTimeout(apply, 0));
-            }, true);
-
             // 兜底：万一库没收到 mouseup（拖到窗口外等），松手也要解锁，别让界面卡在拖动状态
             document.addEventListener('mouseup', () => {
                 if (ds.Interaction && ds.Interaction.isInteracting) {
@@ -1393,13 +1338,9 @@
                 }, 320);
             });
 
-            // 手机上 DragSelect 被 ds.stop() 停了、Interaction:end 不会再来，所以这条 click 路径留给手机；
-            // 桌面走上面那套（单击不改变勾选、只有小圆勾才切换），两条路径同时生效会对同一张图拨两次。
             $photos.on('click', '.image-selector', function () {
-                if (utils.isMobile()) {
-                    ds.toggleSelection($(this).closest('a'));
-                    bindOperates();
-                }
+                ds.toggleSelection($(this).closest('a'));
+                bindOperates();
             })
 
             /* ---------------- 卡片角标开关（显示图片标签） ---------------- */
