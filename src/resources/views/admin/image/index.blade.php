@@ -139,24 +139,18 @@
                 </dl>
                 <dl>
                     <div class="bg-surface-2 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                        <dt class="text-sm font-medium text-ink-2">权限</dt>
-                        <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__permission__</dd>
-                    </div>
-                </dl>
-                <dl>
-                    <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                         <dt class="text-sm font-medium text-ink-2">不健康的</dt>
                         <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__is_unhealthy__</dd>
                     </div>
                 </dl>
                 <dl>
-                    <div class="bg-surface-2 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                         <dt class="text-sm font-medium text-ink-2">上传 IP</dt>
                         <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__uploaded_ip__</dd>
                     </div>
                 </dl>
                 <dl>
-                    <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <div class="bg-surface-2 px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                         <dt class="text-sm font-medium text-ink-2">上传时间</dt>
                         <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__created_at__</dd>
                     </div>
@@ -283,14 +277,6 @@
                 <td class="px-3 py-2 text-sm">匹配上传 IP 为 UPLOAD_IP 的图片</td>
             </tr>
             <tr>
-                <td class="px-3 py-2 text-ink-2 text-sm">is:public</td>
-                <td class="px-3 py-2 text-sm">匹配公开的图片</td>
-            </tr>
-            <tr>
-                <td class="px-3 py-2 text-ink-2 text-sm">is:private</td>
-                <td class="px-3 py-2 text-sm">匹配私有的图片</td>
-            </tr>
-            <tr>
                 <td class="px-3 py-2 text-ink-2 text-sm">is:unhealthy</td>
                 <td class="px-3 py-2 text-sm">匹配不健康的图片</td>
             </tr>
@@ -371,7 +357,6 @@
                     .replace(/__sha1__/g, image.sha1)
                     .replace(/__width__/g, image.width)
                     .replace(/__height__/g, image.height)
-                    .replace(/__permission__/g, image.permission === {{ \App\Enums\ImagePermission::Public }} ? '<i class="fas fa-eye text-danger"></i> 公开' : '<i class="fas fa-eye-slash text-green-500"></i> 私有')
                     .replace(/__is_unhealthy__/g, image.is_unhealthy ? '<span class="text-danger"><i class="fas fa-exclamation-triangle"></i> 是</span>' : '否')
                     .replace(/__uploaded_ip__/g, image.uploaded_ip)
                     .replace(/__created_at__/g, image.created_at);

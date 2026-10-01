@@ -1,6 +1,7 @@
 /*
  * 「移动到相册 / 详细信息」两个新弹窗的收尾（去哨兵、去横线、统一排版字号）+ 右键菜单里
- * 「删除 / 重命名 / 设置权限」三个旧弹窗（sweetalert2）与新弹窗统一观感 —— 回归测试。
+ * 「删除 / 重命名」两个旧弹窗（sweetalert2）与新弹窗统一观感 —— 回归测试。
+ * （原来的第三个 Swal 弹窗「设置权限」已随图片权限口径一起下线，改成标签的 x-modal。）
  *
  * 与另外两套的关系：
  *   · images-modal.test.mjs      —— 新弹窗的静态契约（钩子、字段顺序、请求 payload）
@@ -168,16 +169,20 @@ console.log('\n[② 排版] 新弹窗：标题 15~16px semibold / 标签 13px / 
 }
 
 // ---------------------------------------------------------------- ③ sweetalert2 皮肤
-console.log('\n[③ 旧弹窗] 三个确认框改用与新弹窗同一套皮肤（改的只有样式，功能/确认流程一字未动）');
+console.log('\n[③ 旧弹窗] 两个确认框改用与新弹窗同一套皮肤（改的只有样式，功能/确认流程一字未动）');
 {
-    check('三个旧弹窗的实现还在原地（methods.remove/rename/permission 走 Swal.fire）',
+    // fork：原来这里是「删除 / 重命名 / 设置权限」三个 Swal 弹窗；「设置权限」已按老师要求
+    // 连同「公开/私有」口径一起下线（换成了标签，走 x-modal 而不是 Swal），剩这两个照旧。
+    check('剩下的两个旧弹窗实现还在原地（methods.delete/rename 走 Swal.fire）',
         blade.includes("title: '确认要删除选中的图片？'")
-        && blade.includes("title: '请输入图片名称'")
-        && blade.includes("title: '选择一个权限'"));
+        && blade.includes("title: '请输入图片名称'"));
+    check('「设置权限」那个 Swal 弹窗已彻底下线（公开/私有 文案一个不剩）',
+        !blade.includes('选择一个权限') && !blade.includes('设置权限') && !blade.includes("input: 'select'")
+        && !blade.includes('公开') && !blade.includes('私有'));
     check('确认框选项没被改（没塞 customClass 之类，纯靠 CSS 统一）', !blade.includes('customClass'));
-    check('校验/提交流程一字未改（inputValidator 的 Promise + showValidationMessage + preConfirm）',
-        blade.includes('inputValidator: (value) => {') && blade.includes("Swal.showValidationMessage('服务异常，请稍后重试。')")
-        && blade.includes('inputValue: item.filename') && blade.includes("input: 'select'"));
+    check('校验/提交流程一字未改（preConfirm + showValidationMessage + inputValue）',
+        blade.includes('inputValue: item.filename') && blade.includes('preConfirm: (value) => {')
+        && blade.includes("Swal.showValidationMessage('服务异常，请稍后重试。')"));
 
     check('皮肤在同一份 common.less 里升级（没有另起一套文件）',
         fs.readdirSync(path.join(SRC, 'resources', 'css')).filter((f) => /swal/i.test(f)).length === 0);
