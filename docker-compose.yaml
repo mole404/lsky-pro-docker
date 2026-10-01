@@ -11,7 +11,7 @@ services:
       # ---- Apache MPM（并发/内存占用）：不写就用镜像内置的低配默认值 ----
       # 逐项覆盖：写哪个改哪个，没写的保持默认。默认见 README「Apache MPM」一节：
       #   StartServers 2 / MinSpareServers 1 / MaxSpareServers 3 /
-      #   MaxRequestWorkers 5 / MaxConnectionsPerChild 5 / KeepAlive Off
+      #   MaxRequestWorkers 5 / MaxConnectionsPerChild 30 / KeepAlive Off
       # 例：并发大一点、子进程处理 5000 个请求后回收（0 = 永不回收，合法但内存只涨不落）
       # - APACHE_MAX_REQUEST_WORKERS=25
       # - APACHE_MAX_CONNECTIONS_PER_CHILD=5000
@@ -25,6 +25,13 @@ services:
       # - APACHE_MIN_SPARE_SERVERS=1
       # - APACHE_MAX_SPARE_SERVERS=3
       # 写错值只会把那一项退回默认值 + 日志警告，不会让容器起不来。
+      #
+      # ---- PHP memory_limit（测试版默认 64M）：不写就用镜像默认 64M ----
+      # 运行期覆盖、**不用重建镜像**。只接受 <数字>[KMG] 形状（如 256M / 1G），
+      # 脏值只忽略这一项并警告，不会让容器起不来。
+      # ⚠ 上传/表单上限仍是 100M（post_max_size / upload_max_filesize）：处理大图若撞到
+      #    64M 上限，把它抬高（或调低那两个上传上限）。
+      # - PHP_MEMORY_LIMIT=256M
     volumes:
       - $PWD/web:/var/www/html/
     ports:

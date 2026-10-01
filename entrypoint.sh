@@ -108,7 +108,11 @@ MPM_DEF_START_SERVERS=2
 MPM_DEF_MIN_SPARE_SERVERS=1
 MPM_DEF_MAX_SPARE_SERVERS=3
 MPM_DEF_MAX_REQUEST_WORKERS=5
-MPM_DEF_MAX_CONNECTIONS_PER_CHILD=5
+# MaxConnectionsPerChild 默认 5 → 30（测试版）：5 意味着每个 worker 只处理 5 个请求就换班，
+# 低流量站上换班（fork/退出/再 fork）的开销占比很高、白耗内存与 CPU；30 仍会周期性回收
+# （防长跑 worker 的内存碎片/潜在泄漏累积），但把无谓换班降到原来的 1/6。
+# 仍然保留 APACHE_MAX_CONNECTIONS_PER_CHILD 覆盖（0 = 永不回收，合法值）。
+MPM_DEF_MAX_CONNECTIONS_PER_CHILD=30
 MPM_DEF_KEEP_ALIVE=Off
 MPM_TEMPLATE=/etc/apache2/mpm.conf.template
 MPM_TARGET=/etc/apache2/conf-enabled/mpm.conf
@@ -272,6 +276,68 @@ if [ "$MPM_WRITTEN" = "yes" ]; then
     echo "[lsky] Apache MPM 已写入 $MPM_TARGET：$mpm_summary"
 else
     echo "[lsky] Apache MPM 未写入（原因见上一行警告），原计划生效值：$mpm_summary"
+fi
+
+# ---------------------------------------------------------------- PHP memory_limit（可运行时覆盖，默认 64M）
+# 现状（先量后改）：PHP 编译期默认 128M，但镜像里 docker-php-upload.ini 只设上传项、
+# （上游）memory-limit.ini 设的是 512M —— 生效值是 512M。本段把收紧后的 memory_limit 收进
+# zz-lsky-hardening.ini（文件名 zz- 前缀 → conf.d 里排最后 → 覆盖前面所有同名项），
+# 并支持用环境变量 PHP_MEMORY_LIMIT 在**运行期**渲染进去：在 compose 里改一个 env 就能回
+# 128M/256M，**不用重建镜像**（与上面 MPM / 端口两段完全同一套路：临时文件 + mv、失败只警告）。
+# 默认 64M 的理由：本机（1 vCPU / 965MB）内存是瓶颈；Lsky 单请求实际远用不到 64M，
+# 需要做大图处理/批量时用 PHP_MEMORY_LIMIT 临时抬高即可。
+# 脏值处理原则同上：只忽略这一项并警告，绝不让容器启动失败。
+# ⚠ 注意：上传/表单上限仍是 100M（post_max_size / upload_max_filesize，见 docker-php-upload.ini）；
+#   处理大图若撞到 64M 上限，用 PHP_MEMORY_LIMIT 抬高（或调低那两个上传上限）。
+PHP_DEF_MEMORY_LIMIT=64M
+PHP_HARDENING_INI=/usr/local/etc/php/conf.d/zz-lsky-hardening.ini
+
+php_warn() { echo "[lsky] 警告：PHP $*" >&2; }
+
+# 合法形状：<数字>[KMG]（大小写不敏感），例如 64M / 256M / 1G。其它一律视为脏值。
+# 归一化：数字原样 + 单个大写单位字母（1g → 1G）。
+php_mem_limit() { # $1=变量名 $2=值 $3=默认值
+    if [[ "$2" =~ ^([0-9]+)([KMGkmg])$ ]]; then
+        printf '%s%s' "${BASH_REMATCH[1]}" "$(printf '%s' "${BASH_REMATCH[2]}" | tr '[:lower:]' '[:upper:]')"
+        return 0
+    fi
+    php_warn "$1=\"$2\" 不是 <数字>[KMG] 形状（如 64M / 256M / 1G），已忽略该项并沿用默认值 $3" >&2
+    printf '%s' "$3"
+}
+
+# 注意用 ${VAR-DEF}（不是 :-）：变量**未设**才静默取默认值；显式设成空串是配置错误，
+# 交给 php_mem_limit 打警告并兜底（日志里能看出是"写了空值"而不是"没写"）。
+PHP_MEMORY_LIMIT_VAL=$(php_mem_limit PHP_MEMORY_LIMIT "${PHP_MEMORY_LIMIT-$PHP_DEF_MEMORY_LIMIT}" "$PHP_DEF_MEMORY_LIMIT")
+
+# 渲染进 zz-lsky-hardening.ini：保留 expose_php / display_errors 等既有行，**只替换 memory_limit 这一项**。
+# 幂等：重启时先删掉旧的 memory_limit 行再追加，不会越写越多行。
+php_ini_render() {
+    local tmp
+    # 目标被目录占住时 `mv 文件 目录` 会静默假成功还返回 0 —— 先挡掉
+    if [ -d "$PHP_HARDENING_INI" ]; then
+        php_warn "$PHP_HARDENING_INI 已存在且是目录（预期是文件），放弃写入"
+        return 1
+    fi
+    [ -f "$PHP_HARDENING_INI" ] || return 1
+    tmp=$(mktemp) || return 1
+    grep -v '^[[:space:]]*memory_limit[[:space:]]*=' "$PHP_HARDENING_INI" > "$tmp" 2>/dev/null || true
+    printf 'memory_limit=%s\n' "$PHP_MEMORY_LIMIT_VAL" >> "$tmp" || { rm -f "$tmp"; return 1; }
+    mv "$tmp" "$PHP_HARDENING_INI" || { rm -f "$tmp"; return 1; }
+    return 0
+}
+
+PHP_INI_WRITTEN=no
+if php_ini_render; then
+    PHP_INI_WRITTEN=yes
+else
+    php_warn "渲染 $PHP_HARDENING_INI 失败，沿用镜像里已有的 memory_limit"
+fi
+
+PHP_MEMORY_SUMMARY="memory_limit=$PHP_MEMORY_LIMIT_VAL（PHP_MEMORY_LIMIT 可覆盖，默认 $PHP_DEF_MEMORY_LIMIT）"
+if [ "$PHP_INI_WRITTEN" = "yes" ]; then
+    echo "[lsky] PHP $PHP_MEMORY_SUMMARY 已写入 $PHP_HARDENING_INI"
+else
+    echo "[lsky] PHP $PHP_MEMORY_SUMMARY 未写入（原因见上一行警告），实际沿用镜像里已有的值"
 fi
 
 IMAGE_MARKER=/var/www/lsky/.code-revision

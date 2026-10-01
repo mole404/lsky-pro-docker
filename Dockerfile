@@ -21,6 +21,9 @@
 #      （/etc/apache2/conf-enabled/zz-lsky-hardening.conf：ServerTokens Prod + ServerSignature Off），
 #      两处都带构建期断言；CI 的「Verify published image」再对真实响应头断言一次。
 #   7. 认证类 POST 加路由级节流（src/routes/auth.php：login/register/forgot-password/confirm-password）
+#   8. 测试版内存收紧（2026-10-01）：PHP memory_limit 收到 64M（可运行时用 env PHP_MEMORY_LIMIT
+#      覆盖，entrypoint 渲染进上面的 hardening ini）、opcache memory_consumption 128→64、
+#      Apache MaxConnectionsPerChild 默认 5→30。详见各段注释与 CI「Verify published image」的新断言。
 #
 # 构建：docker build -t lsky-pro-docker .
 # ---------------------------------------------------------------------------
@@ -285,6 +288,18 @@ RUN printf '%s\n' \
 # （2026-09-28 换 8.3 时 CI 实测：builder 阶段 composer install 直接失败，
 #  报 league/flysystem-ftp requires ext-ftp）。它是 Lsky 的 FTP 存储驱动要用的扩展，
 # 不能依赖"从基镜像继承"。CI 里也加了 ftp 的硬断言。
+#
+# opcache（测试版收紧，先量后改）：原值 memory_consumption=128 / max_accelerated_files=10000。
+#   实测（2026-10-01，本机真容器 Apache 进程内 opcache_get_status）：
+#     · 真实负载（安装页 + 登录/注册/首页等通跑一轮）预热集合 = 827 个脚本 / 已用 25.0MB；
+#     · 全树编译（把 /var/www/lsky 下 10842 个 .php 全部塞进缓存）上限 = 9949 个脚本 / 255.9MB
+#       （在 256MB 上限处被截断 —— 这是"理论上限"，没有任何单次请求会走到）。
+#   真实使用约 25MB，故 memory_consumption 收到 64（≈实测 2.6 倍，且不低于 64）：
+#   够用又有余量，比原来的 128 省 64MB 共享内存（本机 965MB，内存是瓶颈）。
+#   max_accelerated_files 保持 10000 —— 已远超实测预热集合（827）的 12 倍；哈希表本身只占 KB 级，
+#   调低没有收益、调高没有意义（64MB 的脚本缓存也装不下全树）。这组值下 opcache 不会因容量不足频繁重启。
+#   validate_timestamps 保持 1（显式写死，防基镜像默认变化）：单机热更新靠它 —— 卷里代码一改，
+#   带 mtime 校验的请求就会重新编译；关掉它换镜像后要重启容器才生效。
 RUN apt-get update && \
     apt-get install -y gettext && \
     apt-get clean && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/*  && \
@@ -301,9 +316,10 @@ RUN apt-get update && \
     echo 'opcache.enable=1'; \
     echo 'opcache.interned_strings_buffer=8'; \
     echo 'opcache.max_accelerated_files=10000'; \
-    echo 'opcache.memory_consumption=128'; \
+    echo 'opcache.memory_consumption=64'; \
     echo 'opcache.save_comments=1'; \
     echo 'opcache.revalidate_freq=1'; \
+    echo 'opcache.validate_timestamps=1'; \
     } > /usr/local/etc/php/conf.d/opcache-recommended.ini; \
     \
     echo 'apc.enable_cli=1' >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini; \
@@ -323,17 +339,27 @@ RUN apt-get update && \
 #     display_errors=0 → 运行期错误不往 HTTP 响应里吐（Laravel 自己的错误处理/日志不受影响）。
 #   文件名用 zz- 前缀：conf.d 里的 ini 按**文件名 ASCII 序**加载、后加载的覆盖先前的，
 #   zz- 排最后 = 以后基镜像或扩展安装器再加什么 ini，都盖不掉这两项（顺序就是这里的关键）。
-#   只改镜像的 PHP 配置，不碰应用代码，也不动现有那几份 ini（upload / opcache / memory）。
-#   构建期自证：用 php -r **真读回 ini_get()** 断言已是关闭态 —— 不是 grep 配置文件里有没有那两行
-#   （那只证明"文件写了"，证明不了"PHP 真的读到了"）。判定用 filter_var(FILTER_VALIDATE_BOOL)，
-#   兼容 Off / false / 0 / 空串 几种写法；CLI 与 Apache 模块用的是同一份 /usr/local/etc/php/conf.d。
+#   本次（测试版）追加 memory_limit=64M：先读现状 —— PHP 编译期默认 128M，而镜像里
+#   （上游）memory-limit.ini 写的是 512M，所以**原来的生效值是 512M**。把 64M 放进这份
+#   zz- 文件即可生效（排最后、覆盖 memory-limit.ini），不必去改那份上游 ini。
+#   默认 64M 而不是写死：entrypoint.sh 运行期会把 PHP_MEMORY_LIMIT（默认 64M）渲染进这一项，
+#   在 compose 里改一个 env 就能回 128M/256M、不用重建镜像（脏值只忽略该项并警告）。
+#   其余 ini 未动：upload（100M 上传上限）保持原样；opcache-recommended.ini 的
+#   memory_consumption 本次从 128 收到 64（依据见上面 opcache 段的实测注释）。
+#   构建期自证：用 php -r **真读回 ini_get()** 断言已是目标值 —— 不是 grep 配置文件里有没有那几行
+#   （那只证明"文件写了"，证明不了"PHP 真的读到了"）。expose_php/display_errors 判定用
+#   filter_var(FILTER_VALIDATE_BOOL)，兼容 Off / false / 0 / 空串 几种写法；memory_limit 直接比对
+#   字符串 "64M"。CLI 与 Apache 模块用的是同一份 /usr/local/etc/php/conf.d。
 # ---------------------------------------------------------------------------
 RUN printf '%s\n' \
+        '; fork 加固（F23 + 测试版）：不泄露版本号 / 错误不直出 / 收紧内存上限' \
         'expose_php=0' \
         'display_errors=0' \
+        'memory_limit=64M' \
         > /usr/local/etc/php/conf.d/zz-lsky-hardening.ini \
     && test -f /usr/local/etc/php/conf.d/zz-lsky-hardening.ini \
-    && php -r 'foreach (["expose_php", "display_errors"] as $k) { if (filter_var(ini_get($k), FILTER_VALIDATE_BOOL)) { fwrite(STDERR, "ini 加固自证失败：".$k." 仍开着 (".var_export(ini_get($k), true).")".PHP_EOL); exit(1); } echo $k."=".var_export(ini_get($k), true)." 已关闭".PHP_EOL; }'
+    && php -r 'foreach (["expose_php", "display_errors"] as $k) { if (filter_var(ini_get($k), FILTER_VALIDATE_BOOL)) { fwrite(STDERR, "ini 加固自证失败：".$k." 仍开着 (".var_export(ini_get($k), true).")".PHP_EOL); exit(1); } echo $k."=".var_export(ini_get($k), true)." 已关闭".PHP_EOL; }' \
+    && php -r '$m = ini_get("memory_limit"); if ($m !== "64M") { fwrite(STDERR, "memory_limit 自证失败：读回 ".var_export($m, true)."，期望 64M（zz-lsky-hardening.ini 是否被别的 ini 覆盖？）".PHP_EOL); exit(1); } echo "memory_limit=".$m."（entrypoint 可用 PHP_MEMORY_LIMIT 运行期覆盖）".PHP_EOL;'
 
 # F21：不再随镜像发货证书。
 # 原来这里是 `COPY ./ssl /etc/ssl` —— 把仓库里那对 Debian snakeoil 证书（ssl/certs + ssl/private，
