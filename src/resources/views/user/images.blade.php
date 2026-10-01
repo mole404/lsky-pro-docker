@@ -118,7 +118,12 @@
                         {{-- 卡片角标开关：控制图库里图片上的标签显不显示，状态记在本地（默认显示） --}}
                         <a id="tag-badge-toggle" class="ls-menu-item flex items-center justify-between gap-3 border-t border-line text-ink-2" href="javascript:void(0)" @click="open = false">
                             <span>显示图片标签</span>
-                            <i id="tag-badge-toggle-icon" class="fas fa-toggle-on text-brand" aria-hidden="true"></i>
+                            {{-- 自己画的开关：两态形状完全一样，只变颜色与滑块位置（不用 FontAwesome 的
+                                 fa-toggle-on/off —— 那两个字形一粗一细，切起来画风不统一）。 --}}
+                            <span id="tag-badge-switch" aria-hidden="true"
+                                  class="relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full bg-brand transition-colors duration-150">
+                                <span class="tag-badge-knob absolute left-[2px] h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform duration-150"></span>
+                            </span>
                         </a>
                     </div>
                 </x-slot>
@@ -1242,6 +1247,28 @@
                     pinDsBoxes();
                 });
             };
+            /* 让 DragSelect 的「判定矩形」= 用户看到的那只框。
+             * 库把这个矩形缓存起来（尺寸按 clientWidth × zoom 算），在缩放文档里既比实际大 1.1 倍，
+             * 纵向还随页面滚动跑偏 —— 实测滚动 0 时偏 (20,14)，滚动 500 时偏 (18,63)，
+             * 于是「框住上面这行」却选中了下面一整行（老师截图那个现象）。
+             * 直接把它的 rect 接到 .ds-selector 的实时矩形上：判定区与画出来的框永远重合。 */
+            try {
+                Object.defineProperty(ds.Selector, 'rect', {
+                    configurable: true,
+                    get() {
+                        const el = document.querySelector('.ds-selector');
+                        if (! el) {
+                            return {top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0};
+                        }
+                        const box = el.getBoundingClientRect();
+                        return {top: box.top, left: box.left, bottom: box.bottom,
+                                right: box.right, width: box.width, height: box.height};
+                    },
+                });
+            } catch (e) {
+                console.warn('ds selector rect override skipped:', e);
+            }
+
             // 库每次改自己的盒子（拖动中每帧都改）都会触发这里，跟着折算一次
             new MutationObserver(mutations => {
                 for (const m of mutations) {
@@ -1349,9 +1376,12 @@
             // 角标是每次翻页重新生成的，所以用容器上的类控制，不去改每张卡片的 DOM。
             const applyTagBadgeVisibility = (show) => {
                 $photos.toggleClass('image-tags-off', ! show);
-                $('#tag-badge-toggle-icon')
-                    .toggleClass('fa-toggle-on text-brand', show)
-                    .toggleClass('fa-toggle-off text-ink-3', ! show);
+                $('#tag-badge-switch')
+                    .toggleClass('bg-brand', show)
+                    .toggleClass('bg-line', ! show)
+                    .attr('aria-checked', show ? 'true' : 'false');
+                $('#tag-badge-switch .tag-badge-knob')
+                    .toggleClass('translate-x-[14px]', show);      // 开：滑块滑到右边（32 - 14 - 2*2 = 14）
             };
             let showImageTags = localStorage.getItem(TAG_BADGE_KEY) !== '0';
             applyTagBadgeVisibility(showImageTags);

@@ -211,7 +211,8 @@ console.log('\n[A. 静态] 「显示图片标签」开关 + 框选修复');
 {
     check('开关在标签下拉里（#tag-badge-toggle + 文案 + 图标钩子）',
         blade.includes('id="tag-badge-toggle"') && blade.includes('显示图片标签')
-        && blade.includes('id="tag-badge-toggle-icon"'));
+        && blade.includes('id="tag-badge-switch"') && blade.includes('tag-badge-knob')
+        && ! blade.includes('tag-badge-toggle-icon'));   // 旧的图标钩子整个换掉了
     check('开关状态记在本地、默认打开（localStorage）',
         blade.includes("const TAG_BADGE_KEY = 'lsky.show_image_tags'")
         && /localStorage\.getItem\(TAG_BADGE_KEY\) !== '0'/.test(blade)
@@ -296,7 +297,8 @@ function boot({ gridItems = 1, putStatus = true, postStatus = true, swalConfirme
         <a id="tag-filter" href="javascript:void(0)"><span>标签</span><i class="fas fa-tags"></i></a>
         <div id="tag-filter-menu"><div id="tag-filter-list"></div>
             <a id="tag-filter-clear" class="ls-menu-item hidden text-brand" href="javascript:void(0)" x-data>清除筛选</a>
-            <a id="tag-badge-toggle" href="javascript:void(0)" x-data><span>显示图片标签</span><i id="tag-badge-toggle-icon" class="fas fa-toggle-on"></i></a>
+            <a id="tag-badge-toggle" href="javascript:void(0)" x-data><span>显示图片标签</span>
+                <span id="tag-badge-switch" class="bg-brand"><span class="tag-badge-knob translate-x-[14px]"></span></span></a>
             </div>
         <div id="images-scroll"><div id="images-grid">${items.join('')}</div></div>
         <div id="image-detail-modal" class="hidden"><div id="image-detail-content"></div></div>
@@ -693,12 +695,14 @@ console.log('\n[B. 行为] 「显示图片标签」开关');
 
     check('默认开着：网格没有 .image-tags-off，图标是 toggle-on',
         ! $('#images-grid').hasClass('image-tags-off')
-        && $('#tag-badge-toggle-icon').attr('class').includes('fa-toggle-on'));
+        && $('#tag-badge-switch').hasClass('bg-brand') && ! $('#tag-badge-switch').hasClass('bg-line')
+        && $('#tag-badge-switch .tag-badge-knob').hasClass('translate-x-[14px]'));
 
     $('#tag-badge-toggle').trigger('click');
     check('点一下 → 关掉：网格加类 + 图标变 toggle-off + 写进本地',
         $('#images-grid').hasClass('image-tags-off')
-        && $('#tag-badge-toggle-icon').attr('class').includes('fa-toggle-off')
+        && $('#tag-badge-switch').hasClass('bg-line') && ! $('#tag-badge-switch').hasClass('bg-brand')
+        && ! $('#tag-badge-switch .tag-badge-knob').hasClass('translate-x-[14px]')
         && window.localStorage.getItem('lsky.show_image_tags') === '0');
 
     $('#tag-badge-toggle').trigger('click');
