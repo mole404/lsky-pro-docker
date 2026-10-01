@@ -381,7 +381,41 @@ window.context = window.context || (function () {
         };
     }
 
-    // 主菜单是 <body> 下的绝对定位元素，top/left 用的是**页面坐标**
+    // 主菜单是 <body> 下的绝对定位元素，它的 left/top/max-height 是**元素本地长度**；
+    // 桌面端 html{zoom:1.1}（common.less）会让这棵树里的长度在渲染时再乘一次 zoom，
+    // 而 MouseEvent 的 pageX/clientX、getBoundingClientRect、documentElement.clientWidth
+    // 用的都是**视口物理 px** —— 两套单位差一个 zoom。写 style 前除以它即可对齐。
+    // 运行时读实际生效的 zoom（不写死 1.1）：取不到 / "normal" → fallback 1，手机端（<768px
+    // 不命中该 @media）读到的就是 1，全部换算退化为原样，观感零变化。
+    function zoomFactor() {
+        try {
+            const z = parseFloat(window.getComputedStyle(document.documentElement).zoom);
+            return (isFinite(z) && z > 0) ? z : 1;
+        } catch (e) {
+            return 1;
+        }
+    }
+
+    // 菜单的真实盒子（视口物理 px）。display:none 时量不出尺寸 → 临时显形量一次，
+    // 量完原样还原（只动 display/visibility，不碰定位）。
+    function measureBox($el) {
+        const node = $el.get(0);
+        let rect = node.getBoundingClientRect();
+        if (! rect.width || ! rect.height) {
+            const prevDisplay = node.style.display, prevVisibility = node.style.visibility;
+            node.style.display = 'block';
+            node.style.visibility = 'hidden';
+            rect = node.getBoundingClientRect();
+            node.style.display = prevDisplay;
+            node.style.visibility = prevVisibility;
+        }
+        return rect;
+    }
+
+    // 主菜单是 <body> 下的绝对定位元素，top/left 用的是**页面坐标**。
+    // 夹取全部在**元素本地单位**里做：凡是物理 px 的量（viewportSize / outerWidth /
+    // outerHeight / getBoundingClientRect）都先除以实际 zoom，写回 style 的也就是本地值。
+    // zoom === 1 时每一步都退化成改动前的算式（逐字节同样的结果）→ <768px 手机端零变化。
     function clampMenu($el) {
         if (! $el || ! $el.length || ! $el.get(0) || ! $el.get(0).parentNode) {
             return;
@@ -389,25 +423,21 @@ window.context = window.context || (function () {
 
         const margin = EDGE_MARGIN;
         const vp = viewportSize();
-        const node = $el.get(0);
+        const z = zoomFactor();
 
-        let w = $el.outerWidth(), h = $el.outerHeight();
-        if (! w || ! h) {
-            // 还藏在 display:none 里量不出尺寸 → 临时显形量一次，量完原样还原（只动 display/visibility）
-            const prevDisplay = node.style.display, prevVisibility = node.style.visibility;
-            node.style.display = 'block';
-            node.style.visibility = 'hidden';
-            w = $el.outerWidth();
-            h = $el.outerHeight();
-            node.style.display = prevDisplay;
-            node.style.visibility = prevVisibility;
-        }
+        // 先看 DOM 里的真实盒子（物理 px，含 display:none 的临时显形测量），再换算成本地长度
+        const box = measureBox($el);
+        let w = box.width / z, h = box.height / z;
         if (! w || ! h) {
             return;                       // 真量不到就别乱动定位
         }
 
+        // 视口 / 滚动量换算到元素本地单位
+        const vw = vp.w / z, vh = vp.h / z, sx = vp.sx / z, sy = vp.sy / z;
+        const m = margin / z;
+
         // 比视口还高（手机上常见）→ 内部滚动，而不是被裁掉
-        const maxHeight = vp.h - margin * 2;
+        const maxHeight = vh - m * 2;
         if (h > maxHeight) {
             $el.css({maxHeight: Math.round(maxHeight) + 'px', overflowY: 'auto'});
             h = maxHeight;
@@ -415,20 +445,20 @@ window.context = window.context || (function () {
 
         let left = parseFloat($el.css('left'));
         let top = parseFloat($el.css('top'));
-        left = isNaN(left) ? (vp.sx + margin) : left;
-        top = isNaN(top) ? (vp.sy + margin) : top;
+        left = isNaN(left) ? (sx + m) : left;
+        top = isNaN(top) ? (sy + m) : top;
 
-        if (left + w > vp.sx + vp.w - margin) {
-            left = vp.sx + vp.w - margin - w;
+        if (left + w > sx + vw - m) {
+            left = sx + vw - m - w;
         }
-        if (left < vp.sx + margin) {
-            left = vp.sx + margin;
+        if (left < sx + m) {
+            left = sx + m;
         }
-        if (top + h > vp.sy + vp.h - margin) {
-            top = vp.sy + vp.h - margin - h;
+        if (top + h > sy + vh - m) {
+            top = sy + vh - m - h;
         }
-        if (top < vp.sy + margin) {
-            top = vp.sy + margin;
+        if (top < sy + m) {
+            top = sy + m;
         }
 
         $el.css({left: Math.round(left) + 'px', top: Math.round(top) + 'px'});
@@ -465,6 +495,8 @@ window.context = window.context || (function () {
         }
 
         // ② 横向兜底：两边都不够时用内联 left 把子菜单夹进视口（坐标相对父 li）
+        //    rect/liRect/vp 都是视口物理 px；写回的 left 是元素本地长度 → 除以 zoom。
+        const z = zoomFactor();
         const liRect = $li.get(0).getBoundingClientRect();
         let shiftX = 0;
         if (rect.right > vp.w - margin) {
@@ -474,7 +506,7 @@ window.context = window.context || (function () {
             shiftX = margin - rect.left;
         }
         if (shiftX) {
-            $sub.css({left: Math.round((rect.left - liRect.left) + shiftX) + 'px'});
+            $sub.css({left: Math.round(((rect.left - liRect.left) + shiftX) / z) + 'px'});
             rect = node.getBoundingClientRect();
         }
 
@@ -488,14 +520,14 @@ window.context = window.context || (function () {
             shiftY = margin - rect.top;
         }
         if (shiftY) {
-            $sub.css({top: Math.round((isNaN(baseTop) ? 0 : baseTop) + shiftY) + 'px'});
+            $sub.css({top: Math.round((isNaN(baseTop) ? 0 : baseTop) + shiftY / z) + 'px'});
         }
 
         // ④ 比视口还高 → 内部滚动
         rect = node.getBoundingClientRect();
         const maxHeight = vp.h - margin * 2;
         if (rect.height > maxHeight) {
-            $sub.css({maxHeight: Math.round(maxHeight) + 'px', overflowY: 'auto'});
+            $sub.css({maxHeight: Math.round(maxHeight / z) + 'px', overflowY: 'auto'});
         }
     }
 
@@ -999,23 +1031,28 @@ window.context = window.context || (function () {
 
             let $dd = $("#dropdown-" + id);
 
+            // fork 补丁：菜单是 <body> 下的绝对定位元素，left/top 是**元素本地长度**，会被
+            // html{zoom} 再乘一次；而 pageX/pageY 是视口物理 px。写 style 前除以实际生效的
+            // zoom（zoomFactor，取不到则 1）→ 菜单左上角与鼠标点对齐。（<768px 无 zoom，退化为原值。）
+            const z = zoomFactor();
+
             if (typeof options.above == 'boolean' && options.above) {
                 $dd.addClass('dropdown-context-up').css({
-                    top: pageY - 20 - $('#dropdown-' + id).height(),
-                    left: pageX - 13
+                    top: (pageY - 20 - $('#dropdown-' + id).height()) / z,
+                    left: (pageX - 13) / z
                 }).fadeIn(options.fadeSpeed);
             } else if (typeof options.above == 'string' && options.above === 'auto') {
                 $dd.removeClass('dropdown-context-up');
                 let autoH = $dd.height() + 12;
                 if ((pageY + autoH) > $('html').height()) {
                     $dd.addClass('dropdown-context-up').css({
-                        top: pageY - 20 - autoH,
-                        left: pageX - 13
+                        top: (pageY - 20 - autoH) / z,
+                        left: (pageX - 13) / z
                     }).fadeIn(options.fadeSpeed);
                 } else {
                     $dd.css({
-                        top: pageY + 10,
-                        left: pageX - 13
+                        top: (pageY + 10) / z,
+                        left: (pageX - 13) / z
                     }).fadeIn(options.fadeSpeed);
                 }
             }
