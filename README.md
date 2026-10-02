@@ -31,7 +31,7 @@ services:
     ports:
       - "127.0.0.1:8089:8089"                 # 宿主端口:容器端口（WEB_PORT）
     volumes:
-      - /root/lsky-pro/data:/var/www/html     # 站点数据全在这个目录里
+      - $PWD/data:/var/www/html               # 站点数据全在这个目录里（$PWD = 你执行 compose 时所在的目录）
     environment:
       - WEB_PORT=8089
 ```
@@ -41,12 +41,13 @@ services:
 ```bash
 docker run -d --name lsky-pro --restart unless-stopped \
     -p 127.0.0.1:8089:8089 \
-    -v /root/lsky-pro/data:/var/www/html \
+    -v "$PWD/data:/var/www/html" \
     -e WEB_PORT=8089 \
     ghcr.io/mole404/lsky-pro-docker:latest
 ```
 
-容器挂载卷路径可按你的实际情况改（上例是 `/root/lsky-pro/data`）。
+容器挂载卷路径可按你的实际情况改（上例是 `$PWD/data`，`$PWD` 就是你执行命令时所在目录）。
+两个注意点：**别在 compose 文件里写 `~`**（不经过 shell 不会展开，会被当成字面量目录名）；路径里的目录不用先建，`docker compose up` 会自动创建。
 上面把端口只绑到 `127.0.0.1`：生产环境推荐这样，再在前面放一层 Nginx 反代来终结 TLS，容器本身不用直接对外。
 
 ### 首次安装

@@ -69,9 +69,11 @@
                             <div class="col-span-6">
                                 <label for="connection" class="block text-sm font-medium text-ink">数据库类型</label>
                                 <x-select id="connection" name="connection">
+                                    {{-- fork：默认选 SQLite —— 镜像自带驱动、开箱即用，也是本 fork 线上与 README 的口径。
+                                         （上游把 MySQL 排第一；本 fork 面向自用/低配，默认 SQLite 更合适。） --}}
+                                    <option value="sqlite">SQLite 3.8.8+</option>
                                     <option value="mysql">MySQL 5.7+</option>
                                     <option value="pgsql">PostgreSQL 9.6+</option>
-                                    <option value="sqlite">SQLite 3.8.8+</option>
                                     <option value="sqlsrv">SQL Server 2017+</option>
                                 </x-select>
                                 <p class="mt-2 text-sm text-danger hidden"></p>
@@ -158,6 +160,11 @@
             $(this).siblings('p').text(message).addClass('hidden');
         }
     });
+
+    // fork：上面这个 change 处理器同时负责「按数据库类型显示/隐藏连接字段」。
+    // 页面加载时主动触发一次 —— 否则默认选中的 SQLite 旁边还挂着 MySQL 那套字段
+    // （127.0.0.1 / 3306 / root），看着像选错了，页面上也不会出现 SQLite 的说明文字。
+    $('#connection').trigger('change');
 
     $('#install').click(function () {
         if ($(this).attr('disabled')) {
