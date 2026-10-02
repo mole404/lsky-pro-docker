@@ -229,6 +229,9 @@ console.log('\n[A. 静态] 「显示图片标签」开关 + 框选修复');
         /\$photos\.on\('jg\.complete jg\.resize'/.test(blade)
         && /ds\.Interaction\.init\(\);/.test(blade)
         && !/justifiedGallery\('norewind'\)[\s\S]{0,200}?ds\.Interaction\.init\(\)/.test(blade));
+    check('缩放倍数用「布局÷视觉」比值算，不读 getComputedStyle 的 zoom（浏览器页面缩放下才不跑偏）',
+        /const dsZoom = \(\) => \{[\s\S]{0,400}?getBoundingClientRect\(\)\.width[\s\S]{0,200}?offsetWidth/.test(blade)
+        && ! /getComputedStyle\(document\.documentElement\)\.zoom/.test(blade));
     check('桌面缩放（html zoom:1.1）下把 DragSelect 的盒子按 zoom 折算钉回真实位置',
         blade.includes('pinDsBoxes') && blade.includes('dsPinned')
         && blade.includes("attributeFilter: ['style']") && blade.includes('ds.SelectorArea._rect = undefined'));
