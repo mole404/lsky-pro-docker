@@ -19,6 +19,24 @@ on:
       # 同时保留 test/* 模式：历史分支名与以后带后缀的测试分支仍能触发构建。
       - test
       - 'test/*'
+    # 只跳过「纯文档改动」的推送（README / LICENSE / .gitignore 这类：不进镜像、也不被构建或自证读取的文件）。
+    #
+    # 语义（GitHub 官方）：**只有本次推送的所有改动文件都命中下面列表时**才跳过构建；
+    # 只要碰到任何一个代码文件，照旧完整构建。所以这是 fail-open 设计 —— 拿不准时一定构建，不会漏掉该有的构建。
+    #
+    # 背景（2026-10-02 加）：此前任何 push 都会跑完整构建：约 10 分钟 runner + 一个约 1GB 的新镜像版本
+    #   （GHCR 版本就是这么堆到 100+ 个的），改个 README 也会把 :latest 顶成新 manifest ——
+    #   而镜像其实只 COPY src/ + 3 个 *.template + entrypoint.sh，README 根本不进镜像，应用内容一字未变
+    #   （digest 不同只是因为构建把 commit SHA 烤进了 build-arg / 标签）。
+    #
+    # ⚠️ 不要往这里加（都是真构建输入，加了会漏构建）：
+    #    src/**、Dockerfile、.dockerignore、*.template、entrypoint.sh、
+    #    .github/workflows/**、test/**（构建前跑 jsdom 行为测试）、tools/**（升级自证）、
+    #    osv-scanner.toml（依赖门禁白名单）、patches/**（偏差清单，自证引用）。
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
   # 只用于「试构建」：临时换 PHP 版本验证兼容性，不改仓库里的默认值。
   # 留空 = 用 Dockerfile 里的 ARG PHP_VERSION。
   #
