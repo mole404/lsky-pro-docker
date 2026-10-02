@@ -6,7 +6,7 @@
 
 > 这是自维护镜像（非官方）。由于上游开源版停更，应用源码 vendored 在本仓库 `src/` 里，构建不联网拉上游。
 
-镜像地址：`ghcr.io/mole404/lsky-pro-docker:latest`
+本仓库镜像地址：`ghcr.io/mole404/lsky-pro-docker:latest`
 
 ---
 
