@@ -73,6 +73,10 @@ class UserController extends Controller
             DB::transaction(function () use ($user) {
                 $user->images()->update(['user_id' => null]);
                 $user->albums()->delete();
+                // fork：标签与其关联行一并清理（SQLite 未启用外键级联，级联删除不可靠）。
+                // 这些图已归为游客图片，它们身上的标签随属主一起消失。
+                DB::table('image_tag')->whereIn('tag_id', $user->tags()->pluck('id'))->delete();
+                $user->tags()->delete();
                 $user->delete();
             });
         }

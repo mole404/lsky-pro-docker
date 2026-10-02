@@ -614,11 +614,6 @@
                             <td class="px-3 py-2 whitespace-nowrap">排序方式，newest=最新，earliest=最早，utmost=最大，least=最小</td>
                         </tr>
                         <tr>
-                            <td class="px-3 py-2 whitespace-nowrap">permission</td>
-                            <td class="px-3 py-2 whitespace-nowrap">String</td>
-                            <td class="px-3 py-2 whitespace-nowrap">权限，public=公开的，private=私有的</td>
-                        </tr>
-                        <tr>
                             <td class="px-3 py-2 whitespace-nowrap">album_id</td>
                             <td class="px-3 py-2 whitespace-nowrap">Integer</td>
                             <td class="px-3 py-2 whitespace-nowrap">相册 ID</td>

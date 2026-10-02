@@ -253,7 +253,11 @@ console.log('\n[详细信息] 弹窗路径 + 字段顺序（上传时间第一�
     t.methods.detail($('.images-item').get(0));
     await sleep(20);
 
-    check('请求走原接口（/user/images/:id）', calls.gets.length === 1 && calls.gets[0] === '/user/images/7', JSON.stringify(calls.gets));
+    // 页面初始化会先拉一次标签列表（GET user/tags；blade 里的 route() 在这份测试里被桩成 '/stub'），
+    // 详情本身仍走原来那条接口 —— 这里断言的是「详情请求还是 /user/images/:id，且只发一次」。
+    check('请求走原接口（/user/images/:id）',
+        calls.gets.filter((u) => u === '/user/images/7').length === 1 && calls.gets.at(-1) === '/user/images/7',
+        JSON.stringify(calls.gets));
     check('渲染进 #image-detail-content 并打开 #image-detail-modal',
         $('#image-detail-content').text().includes('beach.jpg')
         && calls.modalOpen.includes('image-detail-modal'), JSON.stringify(calls.modalOpen));
@@ -263,7 +267,7 @@ console.log('\n[详细信息] 弹窗路径 + 字段顺序（上传时间第一�
     check('字段一个不少（12 项，与改前一致）', labels.length === 12, labels.join(' / '));
     check('顺序：上传时间 第一、图片名称 第二', labels[0] === '上传时间' && labels[1] === '图片名称', labels.join(' / '));
     check('其余字段保持原有相对顺序',
-        JSON.stringify(labels.slice(2)) === JSON.stringify(['相册名称', '使用策略', '图片原始名称', '图片大小', '图片类型', '尺寸', 'MD5', 'SHA-128', '权限', '上传 IP']),
+        JSON.stringify(labels.slice(2)) === JSON.stringify(['相册名称', '使用策略', '图片原始名称', '图片大小', '图片类型', '尺寸', 'MD5', 'SHA-128', '标签', '上传 IP']),
         labels.slice(2).join(' / '));
     check('小缩略图用的是 thumb_url', $('#image-detail-content img').attr('src') === IMAGE.thumb_url);
     check('值是渲染后的真实内容（不是占位符）',

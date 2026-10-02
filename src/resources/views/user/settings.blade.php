@@ -69,13 +69,6 @@
                                 <x-fieldset-radio id="pasted_action_waiting" name="configs[pasted_action]" value="{{ \App\Enums\PastedAction::Waiting }}" :checked="Auth::user()->configs->get('pasted_action') == \App\Enums\PastedAction::Waiting">等待上传</x-fieldset-radio>
                             </x-fieldset>
                         </div>
-
-                        <div class="col-span-6">
-                            <x-fieldset title="图片默认权限" faq="设置上传的图片默认的权限(公开还是私有，公开的图片所有用户都可见，你也可以通过图片管理单独设置权限)">
-                                <x-fieldset-radio id="default_permission_private" name="configs[default_permission]" value="{{ \App\Enums\ImagePermission::Private }}" :checked="Auth::user()->configs->get('default_permission') == \App\Enums\ImagePermission::Private">私有</x-fieldset-radio>
-                                <x-fieldset-radio id="default_permission_public" name="configs[default_permission]" value="{{ \App\Enums\ImagePermission::Public }}" :checked="Auth::user()->configs->get('default_permission') == \App\Enums\ImagePermission::Public">公开</x-fieldset-radio>
-                            </x-fieldset>
-                        </div>
                     </div>
                     <div class="px-4 py-3 text-right sm:px-6">
                         <x-button>保存设置</x-button>

@@ -38,6 +38,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property-read Group $group
  * @property-read \Illuminate\Database\Eloquent\Collection $albums
  * @property-read \Illuminate\Database\Eloquent\Collection $images
+ * @property-read \Illuminate\Database\Eloquent\Collection $tags
  */
 class User extends Authenticatable implements MustVerifyEmail
 {
@@ -126,5 +127,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function images(): HasMany
     {
         return $this->hasMany(Image::class, 'user_id', 'id');
+    }
+
+    public function tags(): HasMany
+    {
+        // fork 新增：按用户隔离的图片标签
+        return $this->hasMany(Tag::class, 'user_id', 'id');
     }
 }
