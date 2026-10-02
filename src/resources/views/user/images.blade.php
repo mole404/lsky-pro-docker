@@ -535,35 +535,33 @@
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
 
-            /* 安卓 Chromium：触摸抬手后浏览器还会补发一发 click。滑完图的那发补发 click 是多余的，
-             * 而且会和紧接着的轻点挨得近、被浏览器拼成 dblclick ⇒ 误触发看图控件的「双击放大」。
-             * （老师实测：本来要双击才放大，出问题时点一下就放大；诊断面板计数里 dblclick×5。）
-             * 处理：只吞掉「手指挥动过（位移 >10px）」之后紧跟的那发 click/dblclick —— 真正的双击
-             * 是两下不动的轻点，不受影响，双击放大保留。 */
+            /* 安卓 Chromium：看图控件自己有"模拟双击"逻辑（viewerjs handlers.js:424-451）——
+             * 两次落在**图片上**的抬手间隔 <500ms，它就 setTimeout 后自己派发一个 dblclick，
+             * 于是放大。真机打点证实：老师连续滑图时凭空出现 dblclick×23 ⇒ 一放大，图片就不再
+             * "刚好一屏"，控件判定"不能切图"（isSwitchable 为假）⇒ 大多数切图失败。
+             * 处理：只要这一下手指挥动过（起点→终点位移 >10px，是滑图不是轻点），就把它后面
+             * 900ms 内落进看图区域的 click/dblclick 拦掉 —— 真正的双击是两下不动的轻点，不受影响。
+             * 注意必须用 touchstart/touchend 的坐标差，**不能**靠 touchmove：安卓上控件在指针
+             * 处理里 preventDefault 之后 touchmove 可能根本收不到（上一版就是这么失效的）。 */
             (function () {
                 let fromViewer = false;
-                let moved = false;
                 let startX = 0;
                 let startY = 0;
                 let swallowUntil = 0;
                 const inViewer = (el) => el instanceof Element && !!el.closest('.viewer-container');
                 document.addEventListener('touchstart', (e) => {
                     fromViewer = inViewer(e.target);
-                    moved = false;
                     const t = e.changedTouches && e.changedTouches[0];
                     if (t) { startX = t.clientX; startY = t.clientY; }
                 }, true);
-                document.addEventListener('touchmove', (e) => {
-                    if (!fromViewer || moved) return;
-                    const t = e.changedTouches && e.changedTouches[0];
-                    if (t && (Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10)) {
-                        moved = true;
+                document.addEventListener('touchend', (e) => {
+                    if (fromViewer) {
+                        const t = e.changedTouches && e.changedTouches[0];
+                        if (t && (Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10)) {
+                            swallowUntil = Date.now() + 900;
+                        }
                     }
-                }, true);
-                document.addEventListener('touchend', () => {
-                    if (fromViewer && moved) swallowUntil = Date.now() + 500;
                     fromViewer = false;
-                    moved = false;
                 }, true);
                 ['click', 'dblclick'].forEach((type) => {
                     document.addEventListener(type, (e) => {
