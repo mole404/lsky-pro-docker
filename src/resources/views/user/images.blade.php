@@ -533,7 +533,53 @@
                     + escapeHtml(tag.name) + '</span>'
                 ).join('');
             };
-            const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
+            const viewer = new Viewer(document.getElementById('images-grid'), {
+                url: 'data-original',
+                // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
+                // 控件重建画布/缩略图条 ⇒ iOS 整个界面左偏、安卓缩略图全空，见后续修复记录）
+                loop: false,
+            });
+
+            /* 双击放大：库里的「模拟双击」（handlers.js:424-451）只看两次抬手的间隔（硬编码 500ms），
+             * 完全不检查中间有没有拖动 ⇒ 连续拖动两下也会被当成双击放大。这里在外面收口（不改库）：
+             *   1. 抬手时用「起点→终点」的位移判断这一下是轻点还是拖动。阈值 30px 的依据是实测：
+             *      真滑动位移 130~300px（中位 214px），轻点抖动一般 <15px，30px 正好把两者分开。
+             *   2. 是拖动 ⇒ 立刻清掉库的 imageClicked，让拖动永远不能充当"第一次轻点"；
+             *      若这一下之前已经有"第一次轻点"了（imageClicked 曾被置位），说明是"轻点+拖动"，
+             *      那发 50ms 后要派发的合成 dblclick 也一并拦掉。
+             *   3. 两次都不动的轻点 ⇒ 真双击，放行；并按老师要求把有效期从 500ms 收到 300ms
+             *      （300ms 后清掉库的 imageClicked，等效于缩短双击判定窗口）。
+             * 注意必须用 touchstart/touchend 的坐标差，**不能**靠 touchmove：安卓上控件在指针处理里
+             * preventDefault 之后 touchmove 可能根本收不到。 */
+            (function () {
+                const TAP_SLOP = 30;      // 超过它就当"拖动"
+                const TAP_WINDOW = 300;   // 等效双击窗口（老师定）
+                let startX = 0;
+                let startY = 0;
+                let tapTimer = 0;
+                let swallowDblUntil = 0;
+                const isViewer = (el) => el instanceof Element && !!el.closest('.viewer-container');
+                document.addEventListener('touchstart', (e) => {
+                    const t = e.changedTouches && e.changedTouches[0];
+                    if (t) { startX = t.clientX; startY = t.clientY; }
+                }, true);
+                document.addEventListener('touchend', (e) => {
+                    const t = e.changedTouches && e.changedTouches[0];
+                    if (!t || !isViewer(e.target)) return;
+                    const moved = Math.abs(t.clientX - startX) > TAP_SLOP
+                        || Math.abs(t.clientY - startY) > TAP_SLOP;
+                    clearTimeout(tapTimer);
+                    if (moved) {
+                        if (viewer.imageClicked) swallowDblUntil = Date.now() + 150;   // 轻点+拖动 ≠ 双击
+                        viewer.imageClicked = false;
+                    } else if (viewer.imageClicked) {
+                        tapTimer = setTimeout(() => { viewer.imageClicked = false; }, TAP_WINDOW);
+                    }
+                }, true);
+                document.addEventListener('dblclick', (e) => {
+                    if (Date.now() < swallowDblUntil && isViewer(e.target)) e.stopPropagation();
+                }, true);
+            })();
 
             /* 修 Viewer.js 的「闩锁」bug（真机打点 + 源码逐行核对 + jsdom 复现确认）：
              *   others.js:216-223  change() 里
