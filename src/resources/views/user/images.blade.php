@@ -533,11 +533,7 @@
                     + escapeHtml(tag.name) + '</span>'
                 ).join('');
             };
-            const viewer = new Viewer(document.getElementById('images-grid'), {
-                url: 'data-original',
-                // 仅安卓关闭"触摸捏合缩放"：见上方注释（安卓上单指会被错记成两指）
-                zoomOnTouch: !/Android/i.test(navigator.userAgent),
-            });
+            const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
 
             /* 桌面 110% 缩放下看图控件（Viewer.js）的整体偏移：**不在这里用 JS 打补丁**。
              * 真因：<html>{zoom:1.1} 让 Viewer 内部「以为的 1px」只有屏幕上的 1/1.1 ——
@@ -551,12 +547,6 @@
              * （教训：第三方控件遇到根节点 zoom，就把它那层缩回去，别逐条路径打补丁。） */
 
 
-            /* 安卓 Chromium 上看大图的手势会被误判：实测该环境下 Viewer 的手势状态里，
-             * 单指常被记成"两个指针"（用户侧的观感就是「单指被判成双指」），于是它的
-             * `Object.keys(pointers).length > 1` 成立、动作被派成 ACTION_ZOOM（捏合缩放），
-             * 表现为切图极难触发、放大与拖动都不稳。iOS 上不会出现，官方演示页在安卓上也正常，
-             * 说明是这台环境下的事件重复计数。处理：只在安卓关掉"触摸捏合缩放"，
-             * 让单指只可能被解释成平移/切图（放大仍可用工具栏的 ± 与双击）。 */
             $photos.justifiedGallery(gridConfigs);
 
             let albumsInfinite = null;
