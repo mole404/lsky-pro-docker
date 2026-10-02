@@ -57,16 +57,6 @@ docker run -d --name lsky-pro --restart unless-stopped \
 
 ---
 
-## 升级
-
-```bash
-cd 容器挂载目录
-docker compose pull
-docker compose up -d
-```
-
----
-
 ## 常见配置
 
 ### 端口
