@@ -54,7 +54,7 @@ docker run -d --name lsky-pro --restart unless-stopped \
 1. 容器首次部署后访问 `http://<主机>:8089/`，会自动跳到安装向导，**更推荐设置反代访问**。
 2. 按向导填写数据库（默认 SQLite，路径可留空）与管理员账号密码。
 
-### 已安装过开源版 Lsky-Pro？ 从上游开源版 Lsky-Pro V2.1 升级
+### 正在使用开源版 Lsky-Pro V2.1？ 从上游开源版无损升级
 
 1. **完整备份数据目录（必做）**
 2. docker stop 旧容器名（如 lsky-pro）
