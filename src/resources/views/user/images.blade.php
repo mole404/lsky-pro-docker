@@ -563,7 +563,6 @@
                             + 'UA 尾: …' + navigator.userAgent.slice(-40) + '\n'
                             + 'ontouchstart=' + ('ontouchstart' in window)
                             + '  maxTouchPoints=' + navigator.maxTouchPoints
-                            + '  hoverNone=' + matchMedia('(hover: none)').matches
                             + '  coarse=' + matchMedia('(pointer: coarse)').matches + '\n'
                             + 'viewer 容器数=' + document.querySelectorAll('.viewer-container').length
                             + '  大图=' + (im ? Math.round(im.getBoundingClientRect().width) + '×'
