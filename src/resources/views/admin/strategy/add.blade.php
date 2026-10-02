@@ -11,7 +11,8 @@
                         <div class="col-span-6">
                             <label class="block">
                                 <span class="text-ink">选择角色组</span>
-                                <x-select name="groups[]" class="block w-full mt-1 form-multiselect" multiple>
+                                {{-- 多选框默认只有两行高，第二行就看不清（老师反馈）→ 显式给足高度 --}}
+                                <x-select name="groups[]" class="block w-full mt-1 min-h-[8rem] form-multiselect" multiple>
                                     @foreach(\App\Models\Group::query()->get() as $group)
                                     <option value="{{ $group->id }}">{{ $group->name }}</option>
                                     @endforeach

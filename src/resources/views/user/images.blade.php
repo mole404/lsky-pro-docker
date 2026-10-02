@@ -117,12 +117,14 @@
                         <a id="tag-filter-clear" class="ls-menu-item hidden text-brand" href="javascript:void(0)" @click="open = false">清除筛选</a>
                         {{-- 卡片角标开关：控制图库里图片上的标签显不显示，状态记在本地（默认显示） --}}
                         <a id="tag-badge-toggle" class="ls-menu-item flex items-center justify-between gap-3 border-t border-line text-ink-2" href="javascript:void(0)" @click="open = false">
-                            <span>显示图片标签</span>
+                            {{-- 文字墨迹天生比行中心高 ~1.5px（实测 237.69 vs 239.18），旁边放个居中的开关就显出来了，
+                                 所以把文字墨迹压到行中心、和开关对齐（开关本来就在 +0.5px 内）。--}}
+                            <span class="relative top-[1.5px]">显示图片标签</span>
                             {{-- 自己画的开关：两态形状完全一样，只变颜色与滑块位置（不用 FontAwesome 的
                                  fa-toggle-on/off —— 那两个字形一粗一细，切起来画风不统一）。 --}}
                             <span id="tag-badge-switch" aria-hidden="true"
-                                  class="relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full bg-brand transition-colors duration-150">
-                                <span class="tag-badge-knob absolute left-[2px] h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform duration-150"></span>
+                                  class="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-brand transition-colors duration-150">
+                                <span class="tag-badge-knob absolute left-[2px] h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-150"></span>
                             </span>
                         </a>
                     </div>
@@ -1381,7 +1383,7 @@
                     .toggleClass('bg-line', ! show)
                     .attr('aria-checked', show ? 'true' : 'false');
                 $('#tag-badge-switch .tag-badge-knob')
-                    .toggleClass('translate-x-[14px]', show);      // 开：滑块滑到右边（32 - 14 - 2*2 = 14）
+                    .toggleClass('translate-x-[12px]', show);      // 开：滑块滑到右边（28 - 12 - 2*2 = 12）
             };
             let showImageTags = localStorage.getItem(TAG_BADGE_KEY) !== '0';
             applyTagBadgeVisibility(showImageTags);
