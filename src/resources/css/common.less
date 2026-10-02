@@ -659,6 +659,15 @@ html.dark {
     }
 }
 
+// 触摸端手势：看图控件靠 pointer 事件驱动。浏览器一旦认定手指在做「滚动/缩放」，就会发
+// pointercancel 把它的手势中途收走（表现：切图/拖动半途停住、之后再点一下图反而放大了）。
+// 库只在 .viewer-container 上声明了 touch-action:none，画布层仍是 auto —— 补上，
+// 让手势全程交给控件，浏览器不插手。触摸端和桌面端都适用，故写在 @media 之外。
+.viewer-container .viewer-canvas,
+.viewer-container .viewer-canvas > img {
+    touch-action: none;
+}
+
 // ---------------------------------------------------------------------------
 // 弹窗（components/modal.blade.php）里两处「一屏高」的规则
 // ---------------------------------------------------------------------------
