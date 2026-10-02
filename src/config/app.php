@@ -213,6 +213,6 @@ return [
     |
     */
 
-    'version' => 'v3.1',
+    'version' => 'v3.2',
     'author'  => 'mole404',
 ];
