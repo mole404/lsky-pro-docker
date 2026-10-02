@@ -535,6 +535,42 @@
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
 
+            /* 修 Viewer.js 的「闩锁」bug（真机打点 + 源码逐行核对 + jsdom 复现确认）：
+             *   others.js:216-223  change() 里
+             *       case ACTION_SWITCH: {
+             *         this.action = 'switched';                       // ← 第一次 pointermove 就先上闩
+             *         if (|offsetX| > 1 && |offsetX| > |offsetY|) { … this.view(index) }
+             *   上闩之后 action 成了字符串 'switched'，而外层 switch 没有这个分支 ⇒ 之后
+             *   每一次 pointermove 全部落空：不切图、不平移、不放大 =「纹丝不动」。
+             *   判据又只看开头那次采样，真手指刚落下天然带纵向抖动（dy ≥ dx）⇒ 大多数手势
+             *   一开始就被闩死，偶尔开头偏横向才成功 —— 这就是「大多数失败、少数成功、无规律」。
+             * 从外面把闩松开：手势期间发现 action 变成那个闩值，就恢复成刚才那个动作值，
+             * 后续采样继续参与判定（切图判据看的是"最近一次位移"，所以横滑一定能切到）。
+             * 不改 viewer.min.js（压缩产物，改了没法维护）。 */
+            (function () {
+                let inViewer = false;
+                let lastAction = null;
+                let switchAction = null;
+                const isViewer = (el) => el instanceof Element && !!el.closest('.viewer-container');
+                document.addEventListener('pointerdown', (e) => {
+                    inViewer = isViewer(e.target);
+                    lastAction = null;
+                }, true);
+                document.addEventListener('pointermove', (e) => {
+                    if (!inViewer) return;
+                    const a = viewer.action;
+                    if (a === 'switched') {
+                        // 学到切图动作的真值后，把闩松开
+                        if (!switchAction && lastAction) switchAction = lastAction;
+                        if (switchAction && viewer.action !== switchAction) viewer.action = switchAction;
+                    } else if (a) {
+                        lastAction = a;      // 手势开始时 Viewer 刚算出来的动作值
+                    }
+                }, true);
+                document.addEventListener('pointerup', () => { inViewer = false; }, true);
+                document.addEventListener('pointercancel', () => { inViewer = false; }, true);
+            })();
+
             /* 安卓 Chromium：看图控件自己有"模拟双击"逻辑（viewerjs handlers.js:424-451）——
              * 两次落在**图片上**的抬手间隔 <500ms，它就 setTimeout 后自己派发一个 dblclick，
              * 于是放大。真机打点证实：老师连续滑图时凭空出现 dblclick×23 ⇒ 一放大，图片就不再
