@@ -1153,9 +1153,30 @@
             });
         </script>
         <script>
+            /* ---- 页面缩放必须告诉 DragSelect（fork 修复，这是"框选判定整体偏右下"的真因）----
+             * 页面 <html> 带着 common.less 的 zoom:1.1。DragSelect **自带**缩放支持（zoom 选项，
+             * 内部 _zoom 就是为它准备的），但不传就会按"无缩放"算：
+             *   实测它的「内部判定框」= 用户看到的那只框 × 1.1 + 偏移(-28, +55)，
+             *   尺寸大 10%（411×312 → 452×343），位置偏差随滚动量增大 ——
+             *   于是"框住上一行、下面一整行却被选中"、"误差随滚动变大"（老师报的正是这个）。
+             * 之前 fork 里叠的那层手工补偿（把内联坐标除以 zoom 再写回去）是**第二个补偿**，
+             * 与库自身的算法互相打架，已整体删除 —— 交给库自己算。
+             * 倍数用「视觉尺寸 ÷ 布局尺寸」的比值求，不读 getComputedStyle(html).zoom：
+             * 浏览器自身的页面缩放（Ctrl+±）也会折进那个值里，读数会偏大。 */
+            const dsPageZoom = () => {
+                const el = document.querySelector(IMAGES_SCROLL);
+                if (! el) {
+                    return 1;
+                }
+                const visual = el.getBoundingClientRect().width;
+                const layout = el.offsetWidth;
+                return (visual > 0 && layout > 0) ? visual / layout : 1;
+            };
+
             const ds = new DragSelect({
                 area: $(IMAGES_SCROLL).get(0),
                 keyboardDrag: false,
+                zoom: dsPageZoom(),
             });
 
             /* ---------------- 框选失效的真因与修法（fork 修复） ----------------
@@ -1173,130 +1194,98 @@
             $photos.on('jg.complete jg.resize', () => {
                 try {
                     ds.Interaction.init();
-                    schedulePin();          // 排版改了高度，盒子也要跟着重新钉一次（见下）
+                    // 顺手让库的缓存矩形失效（它就是当初"拖不动"的元凶：构造时图片没渲染，量到几十像素）
+                    ds.Area && (ds.Area._rect = undefined);
+                    ds.SelectorArea && (ds.SelectorArea._rect = undefined);
                 } catch (e) {
                     console.warn('ds re-measure skipped:', e);
                 }
             });
 
-            /* ---- DragSelect 坐标与点选修正（fork 修复，对应老师报的 3 条）-----------------
-             * ① 桌面缩放冲突：common.less 给 <html> 加了 zoom:1.1，而 DragSelect 把
-             *    .ds-selector-area（position:fixed）和 .ds-selector（选择框）的坐标按「视觉像素」
-             *    写进内联样式 —— 浏览器在这个缩放文档里会再乘一次 zoom，于是它的命中矩形整体右移/下移
-             *    （实测区域真实 (282,120) 被它当成 (310,132)，正好 ×1.1）。症状就是老师看到的：
-             *    最左侧一条窄带拖不动、起点像是偏右、点图片会勾到右邻那张、选择框比手画的圈大 10%。
-             *    修法：盯着这两个元素的内联样式，按 zoom 折算回布局单位再写回去。
-             * ② 点图片不该改勾选：DragSelect 在 mousedown 那一刻就按命中结果选中卡片，所以「点图片 = 勾上它」。
-             *    这里记住按下前的选中，松手时若几乎没移动（算单击）就还原；真拖了就不还原（框选结果保留）。
-             * ------------------------------------------------------------------------- */
-            /* 缩放倍数取「布局尺寸 ÷ 视觉尺寸」的比值 —— 只由 CSS 的 html{zoom:1.1} 决定。
-             * 故意**不读** getComputedStyle(html).zoom：浏览器自身的页面缩放（Ctrl+±，老师那台机很
-             * 可能不是 100%）也可能被折进那个值里，这里就会除以一个偏大的倍数 → 盒子在页面上整体
-             * 偏移（实测老师环境里误差能到半个行高以上：框住上一行、下面一整行被选中）。
-             * 比值法天然免疫页面缩放：getBoundingClientRect 与 offsetWidth 都在 CSS 像素里量。 */
-            const dsZoom = () => {
-                const el = document.querySelector(IMAGES_SCROLL);
-                if (! el) {
-                    return 1;
-                }
-                const visual = el.getBoundingClientRect().width;
-                const layout = el.offsetWidth;
-                return (visual > 0 && layout > 0) ? visual / layout : 1;
+            /* ---- 自己记选择框：让"库的判定矩形"与"屏幕上那只框"都绑到原始指针坐标上 ----
+             * 真因（实测，别再走回头路）：
+             *  页面 = <html>{zoom:1.1} + 整页滚动。DragSelect 内部把**布局单位**的滚动量混进了
+             *  **视觉**指针坐标里，算出的判定框 = 真实框 ×1.1 + 随滚动增大的偏移
+             *  （滚动 670 时偏 (28,−55) 量级；误差 ≈ scroll×(1−1/zoom)，所以"不滚动就不偏"）。
+             *  它的 zoom 选项只影响尺寸、不修指针坐标 —— 喂给它 zoom:1.1 也没用（实测照旧 ×1.1）。
+             *  于是"框住上一行、下面一整行被选中"，而且框越大偏得越离谱。
+             * 之前的错法：覆盖 Selector.rect 时读 .ds-selector 的实时矩形 —— 那正是库刚写进去的
+             *  错误值，等于把错误读了两遍（验收因此假绿）。
+             * 正解：clientX/clientY 与 getBoundingClientRect() 同属**视觉**坐标，这里按原始指针
+             *  路径自己记框，然后 ① 覆盖 Selector.rect 给库判定用 ② 每帧把屏幕上的框也摆到同一处。
+             * ------------------------------------------------------------------------ */
+            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0};
+            let dsRaf = 0;
+            const dsBoxRect = () => {
+                const l = Math.min(dsBox.x0, dsBox.x1), t = Math.min(dsBox.y0, dsBox.y1);
+                const r = Math.max(dsBox.x0, dsBox.x1), b = Math.max(dsBox.y0, dsBox.y1);
+                return {left: l, top: t, right: r, bottom: b, width: r - l, height: b - t};
             };
-            // 记录「我们自己写进去的值」，避免观察器把自己的写入再折算一次
-            const dsPinned = new WeakMap();
-            const pinWrite = (el, want) => {
-                const mark = dsPinned.get(el) || {};
-                for (const key in want) {
-                    // 按数值比较（CSSOM 读回来是四舍五入过的，字符串比不出来）：
-                    //   已经是目标值 → 跳过；等于我们上一轮写的值 → 也跳过。
-                    // 不这么做会被反复除以 zoom，越折越小（实测框会缩到三分之一）。
-                    const target = parseFloat(want[key]);
-                    const cur = parseFloat(el.style[key]);
-                    if (! isNaN(cur) && Math.abs(cur - target) < 0.02) {
-                        continue;
-                    }
-                    if (! isNaN(cur) && mark[key] !== undefined && Math.abs(cur - mark[key]) < 0.02) {
-                        continue;
-                    }
-                    mark[key] = target;
-                    el.style[key] = target + 'px';
+            const dsPaint = () => {
+                if (! dsBox.on) {
+                    dsRaf = 0;
+                    return;
                 }
-                dsPinned.set(el, mark);
-            };
-            const pinDsBoxes = () => {
-                const z = dsZoom();
+                const z = dsPageZoom() || 1;
                 const area = document.querySelector(IMAGES_SCROLL);
-                if (z === 1 || ! area) {
-                    return;
-                }
                 const wrap = document.querySelector('.ds-selector-area');
-                if (wrap) {
-                    const r = area.getBoundingClientRect();     // 视觉坐标；除以 zoom 才是布局单位
-                    pinWrite(wrap, {
-                        left: r.left / z + 'px', top: r.top / z + 'px',
-                        width: r.width / z + 'px', height: r.height / z + 'px',
-                    });
-                    ds.SelectorArea._rect = undefined;          // 让库按新位置重算缓存矩形
-                }
                 const box = document.querySelector('.ds-selector');
-                if (box && getComputedStyle(box).display !== 'none') {
-                    const want = {};
-                    for (const key of ['left', 'top', 'width', 'height']) {
-                        const cur = parseFloat(box.style[key]);
-                        if (isNaN(cur)) {
-                            return;
-                        }
-                        want[key] = cur / z + 'px';
-                    }
-                    pinWrite(box, want);
+                const ar = area ? area.getBoundingClientRect() : null;
+                if (wrap && ar) {
+                    // 外壳：库也把它摆错（内联 281.59 渲染成 310）→ 按区域矩形重铺
+                    wrap.style.left = (ar.left / z) + 'px';
+                    wrap.style.top = (ar.top / z) + 'px';
+                    wrap.style.width = (ar.width / z) + 'px';
+                    wrap.style.height = (ar.height / z) + 'px';
                 }
+                if (box && ar && getComputedStyle(box).display !== 'none') {
+                    const r = dsBoxRect();
+                    // 框是外壳的子元素 → 坐标必须相对区域原点，否则会再叠一层外壳的偏移（实测差 310px）
+                    box.style.left = ((r.left - ar.left) / z) + 'px';
+                    box.style.top = ((r.top - ar.top) / z) + 'px';
+                    box.style.width = (r.width / z) + 'px';
+                    box.style.height = (r.height / z) + 'px';
+                }
+                dsRaf = requestAnimationFrame(dsPaint);
             };
-            let pinScheduled = false;
-            const schedulePin = () => {
-                if (pinScheduled) {
+            // 必须用**捕获阶段**：DragSelect 在 mousedown 的冒泡阶段就做判定，
+            // 注册在后的话它那一刻读到的是"还没开始的空框" → 单击卡片不会勾选（实测 0 张）。
+            document.addEventListener('mousedown', e => {
+                if (e.button !== 0 || ! e.target || ! e.target.closest) {
                     return;
                 }
-                pinScheduled = true;
-                requestAnimationFrame(() => {
-                    pinScheduled = false;
-                    pinDsBoxes();
-                });
-            };
-            /* 让 DragSelect 的「判定矩形」= 用户看到的那只框。
-             * 库把这个矩形缓存起来（尺寸按 clientWidth × zoom 算），在缩放文档里既比实际大 1.1 倍，
-             * 纵向还随页面滚动跑偏 —— 实测滚动 0 时偏 (20,14)，滚动 500 时偏 (18,63)，
-             * 于是「框住上面这行」却选中了下面一整行（老师截图那个现象）。
-             * 直接把它的 rect 接到 .ds-selector 的实时矩形上：判定区与画出来的框永远重合。 */
+                if (! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM)) {
+                    return;
+                }
+                dsBox.on = true;
+                dsBox.x0 = dsBox.x1 = e.clientX;
+                dsBox.y0 = dsBox.y1 = e.clientY;
+                if (! dsRaf) {
+                    dsRaf = requestAnimationFrame(dsPaint);
+                }
+            }, true);
+            document.addEventListener('mousemove', e => {
+                if (! dsBox.on) {
+                    return;
+                }
+                dsBox.x1 = e.clientX;
+                dsBox.y1 = e.clientY;
+            }, true);
+            document.addEventListener('mouseup', () => {
+                dsBox.on = false;
+            }, true);
+            // 库判定用的矩形 = 原始指针坐标下的框（与卡片矩形同属视觉坐标，比较才成立）
             try {
                 Object.defineProperty(ds.Selector, 'rect', {
                     configurable: true,
                     get() {
-                        const el = document.querySelector('.ds-selector');
-                        if (! el) {
-                            return {top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0};
-                        }
-                        const box = el.getBoundingClientRect();
-                        return {top: box.top, left: box.left, bottom: box.bottom,
-                                right: box.right, width: box.width, height: box.height};
+                        return dsBox.on ? dsBoxRect()
+                                        : {left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0};
                     },
                 });
             } catch (e) {
                 console.warn('ds selector rect override skipped:', e);
             }
-
-            // 库每次改自己的盒子（拖动中每帧都改）都会触发这里，跟着折算一次
-            new MutationObserver(mutations => {
-                for (const m of mutations) {
-                    const cls = m.target.classList;
-                    if (cls && (cls.contains('ds-selector') || cls.contains('ds-selector-area'))) {
-                        schedulePin();
-                        return;
-                    }
-                }
-            }).observe(document.body, {subtree: true, attributes: true, attributeFilter: ['style']});
-            $(window).on('scroll resize', schedulePin);
-            $(document).on('lsky:sidebar-toggled', schedulePin);
 
             // 让图片不再被浏览器当成可拖拽元素：否则按在图片上拖动会起原生拖拽，
             // mousemove 被 drag 事件吃掉 —— 选择框不跟随、松手也不结束互动（实测「锁定不释放」）。
