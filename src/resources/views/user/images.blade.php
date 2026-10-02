@@ -535,6 +535,68 @@
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
 
+            /* === 临时诊断读数：只在网址带 ?dbg=1 时出现，用于定位安卓看大图手势问题，事后删除 === */
+            if (location.search.indexOf('dbg=1') >= 0) {
+                (function () {
+                    const panel = document.createElement('div');
+                    panel.id = 'hermes-dbg';
+                    panel.style.cssText = 'position:fixed;left:0;top:0;right:0;max-height:26vh;overflow:auto;'
+                        + 'z-index:2147483647;background:rgba(0,0,0,.86);color:#7CFC00;font:11px/1.32 monospace;'
+                        + 'padding:6px 8px;white-space:pre-wrap;word-break:break-all;';
+                    const head = document.createElement('div');
+                    const body = document.createElement('div');
+                    panel.appendChild(head);
+                    panel.appendChild(body);
+                    (document.body || document.documentElement).appendChild(panel);
+
+                    let rows = [];
+                    const n = {};
+                    const name = (t) => {
+                        if (!t || !t.tagName) return '?';
+                        const c = String(t.className || '').split(' ')[0];
+                        return c ? '.' + c : (t.id ? '#' + t.id : t.tagName.toLowerCase());
+                    };
+                    const render = () => {
+                        const im = document.querySelector('.viewer-canvas img');
+                        const c = document.querySelector('.viewer-container');
+                        head.textContent = 'dbg · 地址带 ?dbg=1 时的诊断读数 · 点本面板清空\n'
+                            + 'UA 尾: …' + navigator.userAgent.slice(-40) + '\n'
+                            + 'ontouchstart=' + ('ontouchstart' in window)
+                            + '  maxTouchPoints=' + navigator.maxTouchPoints
+                            + '  hoverNone=' + matchMedia('(hover: none)').matches
+                            + '  coarse=' + matchMedia('(pointer: coarse)').matches + '\n'
+                            + 'viewer 容器数=' + document.querySelectorAll('.viewer-container').length
+                            + '  大图=' + (im ? Math.round(im.getBoundingClientRect().width) + '×'
+                                + Math.round(im.getBoundingClientRect().height) : '无')
+                            + '  容器=' + (c ? Math.round(c.getBoundingClientRect().width) + '×'
+                                + Math.round(c.getBoundingClientRect().height) : '无') + '\n';
+                        body.textContent = rows.slice(-20).join('\n') + '\n—— 计数 —— '
+                            + Object.keys(n).sort().map((k) => k + '×' + n[k]).join('  ');
+                    };
+                    ['touchstart', 'touchend', 'touchcancel', 'pointerdown', 'pointerup',
+                     'pointercancel', 'click', 'dblclick'].forEach((type) => {
+                        document.addEventListener(type, (e) => {
+                            n[type] = (n[type] || 0) + 1;
+                            const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]);
+                            const id = t ? 'touchId=' + t.identifier
+                                : (e.pointerId !== undefined ? 'ptrId=' + e.pointerId + '/' + e.pointerType : '');
+                            const xy = t ? Math.round(t.clientX) + ',' + Math.round(t.clientY)
+                                : Math.round(e.clientX) + ',' + Math.round(e.clientY);
+                            rows.push('[capture] ' + type + ' ' + name(e.target) + ' ' + id + ' @' + xy);
+                            render();
+                        }, true);
+                        document.addEventListener(type, (e) => {
+                            rows.push('   └[bubble] ' + type + ' 最终 prevented=' + e.defaultPrevented);
+                            render();
+                        }, false);
+                    });
+                    panel.addEventListener('click', () => { rows = []; render(); });
+                    render();
+                    setInterval(render, 700);
+                })();
+            }
+            /* === 临时诊断读数 结束 === */
+
             /* 桌面 110% 缩放下看图控件（Viewer.js）的整体偏移：**不在这里用 JS 打补丁**。
              * 真因：<html>{zoom:1.1} 让 Viewer 内部「以为的 1px」只有屏幕上的 1/1.1 ——
              *   它按视觉尺寸（window.innerWidth = 1280）算居中与适配，却把结果当【布局值】
