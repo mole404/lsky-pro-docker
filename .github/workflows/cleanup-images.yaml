@@ -1,0 +1,69 @@
+name: Cleanup old image versions (manual)
+
+# 用途：手工清理 GHCR 里过期的镜像版本，只留 `:latest` 与最近几次构建。
+#
+# 为什么需要它：每次构建都会留下一个不可变的 `sha-<commit>` 版本（约 1GB/个）。
+#   仓库是公开的，包存储不额外收费，但版本堆多了 GHCR 页面很乱、回滚时也容易看错目标。
+#
+# 安全设计：
+#   · 只有 workflow_dispatch（手工触发）—— push / PR 都不会碰到它；
+#   · `latest` 对应的版本永远保留（ignore-versions 顶一道，min-versions-to-keep 再顶一道：
+#     latest 总是最新那个版本，而最新 3 个版本永远保留）；
+#   · 只动本仓库自己发布的包（包名写死），不碰别的包；
+#   · 默认 dry = true：先只列出计划、不真删，确认无误再改成 false 跑第二遍。
+#
+# 用法：Actions → Cleanup old image versions (manual) → Run workflow
+#   keep：至少保留多少个版本（默认 3，含 latest 那个）
+#   dry ：true = 只列出计划不删；false = 真删
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: '至少保留的版本数（latest 永远保留）'
+        default: '3'
+        required: true
+      dry:
+        description: 'true = 只列计划不删；false = 真删'
+        default: 'true'
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 列出当前所有版本（时间 / tags / id）
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::group::当前版本列表"
+          gh api "/user/packages/container/lsky-pro-docker/versions?per_page=100" \
+            --jq '.[] | "\(.created_at)  tags=[\((.metadata.container.tags // []) | join(","))]  id=\(.id)"' \
+            | sort | tee /tmp/versions.txt
+          echo "共 $(wc -l < /tmp/versions.txt) 个版本"
+          echo "::endgroup::"
+          echo "本次设置：至少保留 ${{ inputs.keep }} 个版本；dry=${{ inputs.dry }}"
+
+      - name: 清理（保留 latest 与最近 ${{ inputs.keep }} 个版本）
+        if: inputs.dry == 'false'
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: 'lsky-pro-docker'
+          package-type: 'container'
+          min-versions-to-keep: ${{ inputs.keep }}
+          ignore-versions: '^latest$'
+          token: ${{ github.token }}
+
+      - name: 清理后剩余版本
+        if: inputs.dry == 'false'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "/user/packages/container/lsky-pro-docker/versions?per_page=100" \
+            --jq '.[] | "\(.created_at)  tags=[\((.metadata.container.tags // []) | join(","))]"' | sort
