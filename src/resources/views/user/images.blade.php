@@ -588,6 +588,16 @@
 
                     let rows = [];
                     const n = {};
+                    /* 打点回站点：请求会落进服务器的访问日志，阿罗娜远程就能读到（只在 ?dbg=1 时打点） */
+                    const SID = Math.random().toString(36).slice(2, 8);
+                    let seq = 0;
+                    const ping = (text) => {
+                        try {
+                            seq += 1;
+                            fetch('/dbg-' + SID + '/' + seq + '/' + encodeURIComponent(text),
+                                {mode: 'no-cors', keepalive: true, cache: 'no-store'});
+                        } catch (e) { /* 打点失败不影响使用 */ }
+                    };
                     const name = (t) => {
                         if (!t || !t.tagName) return '?';
                         const c = String(t.className || '').split(' ')[0];
@@ -608,6 +618,7 @@
                                 + Math.round(c.getBoundingClientRect().height) : '无') + '\n';
                         body.textContent = rows.slice(-20).join('\n') + '\n—— 计数 —— '
                             + Object.keys(n).sort().map((k) => k + '×' + n[k]).join('  ');
+                        panel.scrollTop = panel.scrollHeight;   // 自动停在最新一行（面板不接收触摸，没法手滚）
                     };
                     ['touchstart', 'touchend', 'touchcancel', 'pointerdown', 'pointerup',
                      'pointercancel', 'click', 'dblclick'].forEach((type) => {
@@ -619,6 +630,7 @@
                             const xy = t ? Math.round(t.clientX) + ',' + Math.round(t.clientY)
                                 : Math.round(e.clientX) + ',' + Math.round(e.clientY);
                             rows.push('[capture] ' + type + ' ' + name(e.target) + ' ' + id + ' @' + xy);
+                            ping(type + ' ' + name(e.target) + ' ' + id + ' @' + xy);
                             render();
                         }, true);
                         document.addEventListener(type, (e) => {
