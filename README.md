@@ -1,4 +1,6 @@
-基于 [Lsky Pro](https://github.com/lsky-org/lsky-pro) 开源版大幅改动，全面面向个人自用优化，但仍保留多用户支持，**支持从上游开源版 Lsky-Pro V2.1 无损升级。**  
+基于 [Lsky Pro](https://github.com/lsky-org/lsky-pro) 开源版大幅改动，全面面向个人自用优化，但仍保留多用户支持。  
+
+**支持从上游开源版 Lsky-Pro V2.1 无损升级。**  
 **适配 iOS 图片长按，UI 全面焕新，适配亮色/暗色模式，升级 PHP 8.3 依赖，新增图片标签功能，去除画廊，去除图片公开/私有设置。**  
 
 > 这是自维护镜像（非官方）。应用源码 vendored 在本仓库 `src/` 里，构建不联网拉上游。
