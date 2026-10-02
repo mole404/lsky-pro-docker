@@ -434,14 +434,44 @@ auto_migrate() {
     fi
 
     # ③ 真的有 pending 才备份 + 迁移（否则每次重启都白备份一份库，纯属糟蹋磁盘）
-    status=$(runuser -u www-data -- sh -c 'cd /var/www/html && php artisan migrate:status' 2>&1) || true
-    case "$status" in
-        *Pending*|*pending*) pending=1 ;;
-        *)                   pending=0 ;;
-    esac
-    if [ "$pending" -eq 0 ]; then
-        echo "[lsky] 自动迁移检查完成：没有待执行的迁移"
-        return 0
+    #    · SQLite：直接**只读**比对「盘上的迁移文件」vs「记账表里的行」——
+    #      刻意不走 Laravel：站点自己的 bootstrap/cache/config.php 一旦是坏的/外来的，
+    #      任何 artisan 命令都会报 "Target class [files] does not exist"（CI 的真升级用例
+    #      里那个哨兵配置缓存就是这么把 migrate:status 打死的，实测踩到）。
+    #    · 其它库：走 migrate:status（纯只读查询）。
+    if [ "$conn" = "sqlite" ]; then
+        pending=$(runuser -u www-data -- php -r '
+            $dir = "/var/www/html/database/migrations";
+            $p   = $argv[1];
+            $ran = [];
+            try {
+                $db = new PDO("sqlite:file:" . $p . "?mode=ro", null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                foreach ($db->query("SELECT migration FROM migrations") as $r) { $ran[$r[0]] = true; }
+            } catch (Throwable $e) { echo "-1"; exit; }
+            $n = 0;
+            foreach (glob($dir . "/*.php") as $f) {
+                if (!isset($ran[basename($f, ".php")])) { $n++; }
+            }
+            echo (string) $n;
+        ' "$dbpath" 2>/dev/null) || pending=-1
+        case "$pending" in ''|*[!0-9]*) pending=-1 ;; esac
+        if [ "$pending" -lt 0 ]; then
+            echo "[lsky] 警告：读不出 SQLite 的迁移记账表，跳过自动迁移（站点不受影响）"
+            return 0
+        fi
+        [ "$pending" -eq 0 ] && { echo "[lsky] 自动迁移检查完成：没有待执行的迁移"; return 0; }
+        echo "[lsky] 检测到 $pending 条待执行迁移"
+    else
+        status=$(runuser -u www-data -- sh -c 'cd /var/www/html && php artisan migrate:status' 2>&1) || true
+        case "$status" in
+            *Pending*|*pending*) pending=1 ;;
+            *)                   pending=0 ;;
+        esac
+        if [ "$pending" -eq 0 ]; then
+            echo "[lsky] 自动迁移检查完成：没有待执行的迁移"
+            return 0
+        fi
+        echo "[lsky] 检测到待执行的迁移"
     fi
 
     # 迁移前备份（仅 SQLite 三件套；保留最近 3 份。MySQL/Postgres 请自行确保有备份）

@@ -557,6 +557,9 @@ echo "  ✓ 数据面快照（含整份 md5 清单）逐字节相同"
 #   所以那段证明不了「真老站点会自动补表」。这一段专门构造真站点形状：
 #     ① 建 migrations 记账表并写入上游那 10 条（= 2022-08 的 v2.1 站点就是这么记账的）
 #     ② 把卷里那两个 fork 迁移文件删掉（模拟「镜像里的新迁移还没进卷」这个原始坑）
+#     ③ 把上面用过的哨兵 bootstrap/cache/config.php 挪开：它是**故意写坏**的，任何 artisan
+#        命令都会被它打成 "Target class [files] does not exist"；而真站点的配置缓存要么
+#        不存在、要么是有效的。不挪开就测不出「真站点能自动迁移」这件事。
 #   然后重启新镜像，断言：迁移文件被自动补进卷、两张新表被自动建好、**哨兵数据一字未变**。
 echo "== 4b) 自动迁移用例：v2.1 形状老站点 → 新镜像（无需人工干预）=="
 docker run --rm -i -v "$VOL":/var/www/html --entrypoint sh "$NEW_REF" > "$LOGDIR/phase4b-seed.out" 2>&1 <<'EOSH'
@@ -564,6 +567,8 @@ set -eu
 cd /var/www/html
 # ② 删掉卷里那两个 fork 迁移文件（模拟「新迁移还没进卷」；镜像里那份干净树仍在）
 rm -f database/migrations/2026_10_01_*.php
+# ③ 挪开故意写坏的哨兵配置缓存（见上面第 ③ 条说明）
+rm -f bootstrap/cache/config.php
 # ① 建记账表并写入上游 10 条：v2.1 站点就是这样被 Laravel 记账的
 php -r '
 $p = "/var/www/html/database/database.sqlite";
