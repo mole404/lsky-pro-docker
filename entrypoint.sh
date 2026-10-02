@@ -359,6 +359,165 @@ invalidate_runtime_caches() {
     rm -f /var/www/html/bootstrap/cache/packages.php /var/www/html/bootstrap/cache/services.php
 }
 
+# ---------------------------------------------------------------- 自动补迁移（fork 专属，2026-10-02）
+# 为什么需要它：上面的同步分支**故意排除 ./database**（保护线上 SQLite 文件），于是镜像里
+#   新增的迁移文件永远进不了卷 —— 卷里 database/migrations/ 一直是老那份，用户按 README
+#   只做 `pull && up -d` 时新表不会出现（`php artisan migrate` 报 Nothing to migrate）→ 新功能 500。
+#   于是「从上游 v2.1 / 旧版镜像升级上来」原来必须人工拷迁移文件再手跑 migrate。
+#
+# 现在自动做掉（每次启动跑一遍；幂等，无待办时秒回）：
+#   ① 只把**缺失**的迁移文件补进卷（逐个判存在再 cp -p，绝不覆盖用户自己改过的那份）
+#   ② 守卫：只有 `php artisan migrate:status` 能正常跑（= 真 Laravel 站点、库里有 migrations
+#      记账表）才继续 —— 空卷 / 手搓库 / 非标安装一律跳过，绝不自作主张建表
+#   ③ 迁移前备份：只对 SQLite（database.sqlite + -wal + -shm 三件套），保留最近 3 份；
+#      MySQL / Postgres 请自行确保有备份，这里不动它
+#   ④ 一律以 www-data 身份执行 —— root 跑会把 -wal / -shm 造成 root 属主，站点就写不进库了
+#   ⑤ 最后把 database/ 属主归一化
+#
+# ⚠️ 铁律：**任何失败都只打日志，绝不 exit / 非 0 返回给调用点**。
+#    本脚本是 `set -eu`，一旦非 0 冒泡出去容器就起不来，配合 `restart: unless-stopped`
+#    会变成无限重启 —— 迁移失败不该让整站停摆。失败时下次启动会自动重试。
+# 开关：AUTO_MIGRATE=0 关闭（默认开）。
+auto_migrate() {
+    local APP=/var/www/html SRC=/var/www/lsky
+    local added=0 f b stamp out rc=0 conn dbpath probe pending status
+
+    if [ "${AUTO_MIGRATE-1}" = "0" ]; then
+        echo "[lsky] AUTO_MIGRATE=0：跳过自动补迁移"
+        return 0
+    fi
+    [ -d "$APP/database/migrations" ] || return 0
+
+    # ① 守卫（先确认卷里是「真装好的站点」，再谈动任何东西）：
+    #    · SQLite 走**只读**探测（`file:...?mode=ro`）—— 不启 Laravel、不写库文件；
+    #    · 其它数据库（MySQL/Postgres）读 .env 后走 migrate:status（纯只读查询）。
+    #    判据 = migrations 记账表存在且已有记录；空卷 / 手搓库 / 非标安装一律跳过。
+    conn=$(sed -n 's/^[[:space:]]*DB_CONNECTION[[:space:]]*=[[:space:]]*//p' "$APP/.env" 2>/dev/null | tail -1 | tr -d '"'"'" | tr -d ' ')
+    conn=${conn:-sqlite}
+    if [ "$conn" = "sqlite" ]; then
+        dbpath=$(sed -n 's/^[[:space:]]*DB_DATABASE[[:space:]]*=[[:space:]]*//p' "$APP/.env" 2>/dev/null | tail -1 | tr -d '"'"'" | tr -d ' ')
+        case "$dbpath" in
+            "")   dbpath="$APP/database/database.sqlite" ;;
+            /*)   : ;;
+            *)    dbpath="$APP/$dbpath" ;;
+        esac
+        probe=$(runuser -u www-data -- php -r '
+            $p = $argv[1];
+            if (!is_file($p)) { echo "-1"; exit; }
+            try {
+                $db = new PDO("sqlite:file:" . $p . "?mode=ro", null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                echo (string) $db->query("SELECT COUNT(*) FROM migrations")->fetchColumn();
+            } catch (Throwable $e) { echo "-1"; }
+        ' "$dbpath" 2>/dev/null) || probe=-1
+        case "$probe" in ''|*[!0-9]*) probe=-1 ;; esac
+        if [ "$probe" -lt 1 ]; then
+            echo "[lsky] 跳过自动迁移：卷里的 SQLite 还没有装好的站点（读不到 migrations 记账表）"
+            return 0
+        fi
+    elif ! runuser -u www-data -- sh -c 'cd /var/www/html && php artisan migrate:status' >/dev/null 2>&1; then
+        echo "[lsky] 跳过自动迁移：读不到 Laravel 迁移记账表（非标准安装）"
+        return 0
+    fi
+
+    # ② 确认是真站点之后，才把**缺失**的迁移文件补进卷
+    #    （逐个判存在再 cp -p：保时间戳，且绝不覆盖用户自己改过的那份）
+    for f in "$SRC"/database/migrations/*.php; do
+        [ -e "$f" ] || continue
+        b=$(basename "$f")
+        if [ ! -e "$APP/database/migrations/$b" ]; then
+            cp -p "$f" "$APP/database/migrations/$b" 2>/dev/null && added=$((added + 1)) || true
+        fi
+    done
+    if [ "$added" -gt 0 ]; then
+        chown www-data:www-data "$APP"/database/migrations/*.php 2>/dev/null || true
+        echo "[lsky] 自动补入 $added 个新迁移文件到 database/migrations"
+    fi
+
+    # ③ 真的有 pending 才备份 + 迁移（否则每次重启都白备份一份库，纯属糟蹋磁盘）
+    #    · SQLite：直接**只读**比对「盘上的迁移文件」vs「记账表里的行」——
+    #      刻意不走 Laravel：站点自己的 bootstrap/cache/config.php 一旦是坏的/外来的，
+    #      任何 artisan 命令都会报 "Target class [files] does not exist"（CI 的真升级用例
+    #      里那个哨兵配置缓存就是这么把 migrate:status 打死的，实测踩到）。
+    #    · 其它库：走 migrate:status（纯只读查询）。
+    if [ "$conn" = "sqlite" ]; then
+        pending=$(runuser -u www-data -- php -r '
+            $dir = "/var/www/html/database/migrations";
+            $p   = $argv[1];
+            $ran = [];
+            try {
+                $db = new PDO("sqlite:file:" . $p . "?mode=ro", null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                foreach ($db->query("SELECT migration FROM migrations") as $r) { $ran[$r[0]] = true; }
+            } catch (Throwable $e) { echo "-1"; exit; }
+            $n = 0;
+            foreach (glob($dir . "/*.php") as $f) {
+                if (!isset($ran[basename($f, ".php")])) { $n++; }
+            }
+            echo (string) $n;
+        ' "$dbpath" 2>/dev/null) || pending=-1
+        case "$pending" in ''|*[!0-9]*) pending=-1 ;; esac
+        if [ "$pending" -lt 0 ]; then
+            echo "[lsky] 警告：读不出 SQLite 的迁移记账表，跳过自动迁移（站点不受影响）"
+            return 0
+        fi
+        [ "$pending" -eq 0 ] && { echo "[lsky] 自动迁移检查完成：没有待执行的迁移"; return 0; }
+        echo "[lsky] 检测到 $pending 条待执行迁移"
+    else
+        status=$(runuser -u www-data -- sh -c 'cd /var/www/html && php artisan migrate:status' 2>&1) || true
+        case "$status" in
+            *Pending*|*pending*) pending=1 ;;
+            *)                   pending=0 ;;
+        esac
+        if [ "$pending" -eq 0 ]; then
+            echo "[lsky] 自动迁移检查完成：没有待执行的迁移"
+            return 0
+        fi
+        echo "[lsky] 检测到待执行的迁移"
+    fi
+
+    # 迁移前备份（仅 SQLite 三件套；保留最近 3 份。MySQL/Postgres 请自行确保有备份）
+    if [ "$conn" = "sqlite" ] && [ -f "$dbpath" ]; then
+        stamp=$(date +%Y%m%d-%H%M%S)
+        if mkdir -p "$APP/database/backups/$stamp" 2>/dev/null; then
+            cp -p "$dbpath" "$APP/database/backups/$stamp/" 2>/dev/null || true
+            for f in "$dbpath-wal" "$dbpath-shm"; do
+                [ -e "$f" ] && cp -p "$f" "$APP/database/backups/$stamp/" 2>/dev/null
+            done
+            echo "[lsky] 迁移前已备份 SQLite → database/backups/$stamp/"
+            ls -1dt "$APP"/database/backups/*/ 2>/dev/null | tail -n +4 | while read -r b; do
+                rm -rf "$b" 2>/dev/null || true
+            done
+        fi
+    else
+        echo "[lsky] 非 SQLite 数据库：迁移前不自动备份，请自行确认已有备份"
+    fi
+
+    # ④ 降权跑迁移（--force：生产环境必须显式确认）
+    #    用 `php /var/www/html/artisan`（绝对路径）：artisan 自己按 __DIR__ 解析 base path，
+    #    因此不必 cd，也少一层 `sh -c` 的失败面；输出一律打出来，空输出也要留痕（便于定位）。
+    rc=0
+    out=$(runuser -u www-data -- php /var/www/html/artisan migrate --force 2>&1) || rc=$?
+    if [ -n "$out" ]; then
+        echo "$out" | sed 's/^/    [migrate] /'
+    else
+        echo "    [migrate] （命令没有任何输出，退出码 $rc）"
+        command -v runuser >/dev/null 2>&1 && echo "    [probe] runuser=$(command -v runuser)" || echo "    [probe] runuser 不在 PATH 里"
+        runuser -u www-data -- php -v 2>&1 | head -2 | sed 's/^/    [probe] /'
+        runuser -u www-data -- php /var/www/html/artisan --version 2>&1 | head -6 | sed 's/^/    [probe] /'
+        [ -d /var/www/html/storage/logs ] || echo "    [probe] 卷里没有 storage/logs 目录（Laravel 写日志会失败）"
+        ls -la /var/www/html/database/ 2>&1 | head -6 | sed 's/^/    [probe] /'
+    fi
+    if [ "$rc" -ne 0 ]; then
+        echo "[lsky] 警告：自动迁移未成功（退出码 $rc）。站点照常启动，请看上面的迁移输出；"
+        echo "[lsky]       修好后重启容器会自动重试（迁移前已备份 SQLite，在 database/backups/ 里）。"
+    else
+        echo "[lsky] 自动迁移完成：上面的迁移已应用（新表就绪）"
+    fi
+
+    # ⑤ 属主归一化（含 migrate 可能新建的 -wal / -shm）
+    chown -R www-data:www-data "$APP/database" 2>/dev/null || true
+    return 0
+}
+
 if [ ! -e '/var/www/html/public/index.php' ]; then
     # ---------------------------------------------------------------- 空卷：首次部署
     # 与上游逐字一致地全量播种。
@@ -437,5 +596,11 @@ fi
 # 只删我们自己放过的那一个文件（目录空了再删目录），其余一律不碰。
 rm -f /var/www/html/public/images/default-avatar.svg 2>/dev/null || true
 rmdir /var/www/html/public/images 2>/dev/null || true
+
+# ---------------------------------------------------------------- 自动补迁移（fork 专属，2026-10-02）
+# 放在最后：此时代码已同步完、属主已归 www-data。它就是「从上游 v2.1 / 旧版镜像升级上来
+# 不用再手工拷迁移文件 + 手跑 migrate」的那一步（详见 auto_migrate 上方注释）。
+# 兜一层 `||` 是刻意的：本脚本 set -eu，函数万一非 0 冒泡出去会让容器直接起不来。
+auto_migrate || echo "[lsky] 警告：自动迁移步骤异常（不影响启动，详见上方日志）"
 
 exec "$@"
