@@ -229,12 +229,20 @@ console.log('\n[A. 静态] 「显示图片标签」开关 + 框选修复');
         /\$photos\.on\('jg\.complete jg\.resize'/.test(blade)
         && /ds\.Interaction\.init\(\);/.test(blade)
         && !/justifiedGallery\('norewind'\)[\s\S]{0,200}?ds\.Interaction\.init\(\)/.test(blade));
-    check('缩放倍数用「布局÷视觉」比值算，不读 getComputedStyle 的 zoom（浏览器页面缩放下才不跑偏）',
-        /const dsZoom = \(\) => \{[\s\S]{0,400}?getBoundingClientRect\(\)\.width[\s\S]{0,200}?offsetWidth/.test(blade)
+    // 真因：页面 <html> 有 zoom:1.1，但构造 DragSelect 时没把 zoom 传给它 → 库内部算的判定框
+    // = 真实框 ×1.1 + 偏移（实测宽松 10%、随滚动越偏越大）。必须传，且不能再叠自己的补偿。
+    check('构造 DragSelect 时把页面缩放传给它（否则判定框整体偏右下）',
+        /new DragSelect\(\{[\s\S]{0,300}?zoom:\s*dsPageZoom\(\)/.test(blade)
+        && /const dsPageZoom = \(\) => \{[\s\S]{0,400}?getBoundingClientRect\(\)\.width[\s\S]{0,200}?offsetWidth/.test(blade)
         && ! /getComputedStyle\(document\.documentElement\)\.zoom/.test(blade));
-    check('桌面缩放（html zoom:1.1）下把 DragSelect 的盒子按 zoom 折算钉回真实位置',
-        blade.includes('pinDsBoxes') && blade.includes('dsPinned')
-        && blade.includes("attributeFilter: ['style']") && blade.includes('ds.SelectorArea._rect = undefined'));
+    check('判定框改由原始指针坐标驱动（clientX/Y），不再读库写在元素上的矩形（那会把错误读两遍）',
+        /e\.clientX/.test(blade) && /e\.clientY/.test(blade)
+        && /get\(\)\s*\{[\s\S]{0,200}?dsBoxRect\(\)/.test(blade)
+        // getter 里绝不能出现"读 .ds-selector 的实时矩形"——那正是上一版假绿的原因
+        && ! /get\(\)\s*\{[\s\S]{0,300}?document\.querySelector\('\.ds-selector'\)/.test(blade));
+    check('画框按页面缩放折算写回（内联是布局单位，浏览器还要再乘一次 zoom）',
+        /box\.style\.left = \(\(r\.left - ar\.left\) \/ z\)/.test(blade)
+        && /wrap\.style\.left = \(ar\.left \/ z\)/.test(blade));
     check('禁掉图片原生拖拽（-webkit-user-drag + dragstart 兜底）—— 否则拖动会「锁定不释放」',
         blade.includes('-webkit-user-drag: none') && /\$photos\.on\('dragstart'/.test(blade));
     check('（已按老师要求回滚）点图片本身照旧参与勾选：不做任何「单击回滚」，小圆勾 click 全平台生效',
