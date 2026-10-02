@@ -549,6 +549,82 @@ if ! diff -u "$SNAP_BEFORE" "$SNAP_AFTER" > "$LOGDIR/snapshot.diff" 2>&1; then
 fi
 echo "  ✓ 数据面快照（含整份 md5 清单）逐字节相同"
 
+# ---------------------------------------------------------------------------
+# 断言④ 自动迁移用例：从「v2.1 形状的老站点」升上来时，新表由 entrypoint 自动补上（2026-10-02 新增）
+#
+# 为什么单独来一段：上面 1~4 段用的卷是**手搓库**（没有 Laravel 的 migrations 记账表），
+#   新版 entrypoint 的守卫会**正确地跳过**自动迁移（这正是它对非标安装该有的态度）——
+#   所以那段证明不了「真老站点会自动补表」。这一段专门构造真站点形状：
+#     ① 建 migrations 记账表并写入上游那 10 条（= 2022-08 的 v2.1 站点就是这么记账的）
+#     ② 把卷里那两个 fork 迁移文件删掉（模拟「镜像里的新迁移还没进卷」这个原始坑）
+#   然后重启新镜像，断言：迁移文件被自动补进卷、两张新表被自动建好、**哨兵数据一字未变**。
+echo "== 4b) 自动迁移用例：v2.1 形状老站点 → 新镜像（无需人工干预）=="
+docker run --rm -i -v "$VOL":/var/www/html --entrypoint sh "$NEW_REF" > "$LOGDIR/phase4b-seed.out" 2>&1 <<'EOSH'
+set -eu
+cd /var/www/html
+# ② 删掉卷里那两个 fork 迁移文件（模拟「新迁移还没进卷」；镜像里那份干净树仍在）
+rm -f database/migrations/2026_10_01_*.php
+# ① 建记账表并写入上游 10 条：v2.1 站点就是这样被 Laravel 记账的
+php -r '
+$p = "/var/www/html/database/database.sqlite";
+$db = new PDO("sqlite:".$p);
+$db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$db->exec("CREATE TABLE IF NOT EXISTS migrations (migration TEXT PRIMARY KEY, batch INTEGER)");
+$st = $db->prepare("INSERT OR IGNORE INTO migrations (migration, batch) VALUES (?, 1)");
+foreach (glob("/var/www/lsky/database/migrations/*.php") as $f) {
+    $n = basename($f, ".php");
+    if (strpos($n, "2026_10_01") === 0) { continue; }   // 只记账上游那 10 条
+    $st->execute([$n]);
+}
+echo "MIGRATIONS_SEEDED=".$db->query("SELECT COUNT(*) FROM migrations")->fetchColumn().PHP_EOL;
+echo "VOLUME_MIGRATION_FILES=".count(glob("/var/www/html/database/migrations/*.php")).PHP_EOL;
+'
+EOSH
+grep -E 'MIGRATIONS_SEEDED|VOLUME_MIGRATION_FILES' "$LOGDIR/phase4b-seed.out" | sed 's/^/    /'
+
+docker rm -f "$NEW_C" >/dev/null
+docker run -d --name "$NEW_C" -v "$VOL":/var/www/html \
+    -p "127.0.0.1:${HOST_PORT}:8089" -e WEB_PORT=8089 "$NEW_REF" >/dev/null
+auto_ready=0
+for i in $(seq 1 60); do
+    docker logs "$NEW_C" > "$LOGDIR/phase4b-new.log" 2>&1 || true
+    if grep -qE '自动迁移完成|自动迁移检查完成|自动迁移未成功' "$LOGDIR/phase4b-new.log"; then auto_ready=1; break; fi
+    sleep 2
+done
+[ "$auto_ready" = 1 ] || { echo "::error::自动迁移 120 秒内没有收尾（没打『自动迁移完成/检查完成』）"; tail -40 "$LOGDIR/phase4b-new.log"; exit 1; }
+grep -E '自动补入|自动迁移|迁移前已备份' "$LOGDIR/phase4b-new.log" | sed 's/^/    /'
+grep -q '自动迁移完成' "$LOGDIR/phase4b-new.log" \
+    || { echo "::error::自动迁移没报成功（老站点的新表应当被自动补上）"; exit 1; }
+grep -q '自动补入 2 个新迁移文件' "$LOGDIR/phase4b-new.log" \
+    || { echo "::error::没有把缺失的迁移文件自动补进卷"; exit 1; }
+
+docker run --rm -i -v "$VOL":/var/www/html --entrypoint sh "$NEW_REF" > "$LOGDIR/phase4b-out.out" 2>&1 <<'EOSH'
+set -eu
+cd /var/www/html
+php -r '
+$db = new PDO("sqlite:/var/www/html/database/database.sqlite");
+$db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$tabs = [];
+foreach ($db->query("SELECT name FROM sqlite_master WHERE type=\"table\"") as $r) { $tabs[] = $r[0]; }
+echo "HAS_TAGS=".(in_array("tags", $tabs) ? "yes" : "no").PHP_EOL;
+echo "HAS_IMAGE_TAG=".(in_array("image_tag", $tabs) ? "yes" : "no").PHP_EOL;
+echo "MIGRATIONS_ROWS=".$db->query("SELECT COUNT(*) FROM migrations")->fetchColumn().PHP_EOL;
+'
+echo "VOLUME_MIGRATION_FILES=$(ls database/migrations/*.php 2>/dev/null | wc -l | tr -d ' ')"
+echo "AUTO_BACKUPS=$(ls -d database/backups/*/ 2>/dev/null | wc -l | tr -d ' ')"
+php database/.upgrade-probe.php
+EOSH
+sed -n '1,/DB_FIRST_USER/p' "$LOGDIR/phase4b-out.out" | grep -v '^$' | sed 's/^/    /'
+assert_eq "$LOGDIR/phase4b-out.out" HAS_TAGS        "yes" "tags 表被自动建好（无需人工 migrate）"
+assert_eq "$LOGDIR/phase4b-out.out" HAS_IMAGE_TAG   "yes" "image_tag 表被自动建好"
+assert_eq "$LOGDIR/phase4b-out.out" MIGRATIONS_ROWS "12"  "记账表涨到 12 条（上游 10 + fork 2）"
+assert_eq "$LOGDIR/phase4b-out.out" VOLUME_MIGRATION_FILES "12" "缺失的迁移文件被自动补进卷"
+assert_eq "$LOGDIR/phase4b-out.out" DB_ROWS         "$(key "$SNAP_BEFORE" DB_ROWS)"        "哨兵行数没变"
+assert_eq "$LOGDIR/phase4b-out.out" DB_FINGERPRINT  "$(key "$SNAP_BEFORE" DB_FINGERPRINT)" "哨兵数据指纹逐字节不变"
+dbk=$(key "$LOGDIR/phase4b-out.out" AUTO_BACKUPS)
+[ "${dbk:-0}" -ge 1 ] || { echo "::error::迁移前没有自动备份 SQLite（AUTO_BACKUPS=$dbk）"; exit 1; }
+echo "  ✓ 迁移前自动备份了 SQLite（AUTO_BACKUPS=$dbk）"
+
 echo "== 5) 清理 =="
 cleanup
 
