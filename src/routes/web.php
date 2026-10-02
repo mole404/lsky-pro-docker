@@ -61,6 +61,11 @@ Route::group(['middleware' => ['auth']], function () {
         Route::put('images/permission', [ImageController::class, 'permission'])->name('user.images.permission');
         Route::put('images/rename', [ImageController::class, 'rename'])->name('user.images.rename');
         Route::put('images/movement', [ImageController::class, 'movement'])->name('user.images.movement');
+        Route::put('images/tags', [ImageController::class, 'tagImages'])->name('user.images.tags');
+        Route::get('tags', [ImageController::class, 'tags'])->name('user.tags');
+        Route::post('tags', [ImageController::class, 'createTag'])->name('user.tag.create');
+        Route::put('tags/{id}', [ImageController::class, 'updateTag'])->name('user.tag.update');
+        Route::delete('tags/{id}', [ImageController::class, 'deleteTag'])->name('user.tag.delete');
         Route::get('albums', [AlbumController::class, 'albums'])->name('user.albums');
         Route::post('albums', [AlbumController::class, 'create'])->name('user.album.create');
         Route::put('albums/{id}', [AlbumController::class, 'update'])->name('user.album.update');

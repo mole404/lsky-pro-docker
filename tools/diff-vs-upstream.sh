@@ -91,6 +91,8 @@ src/resources/css/app.css
 src/resources/css/common.less
 #   src/resources/css/context-js.less
 src/resources/css/context-js.less
+#   src/resources/css/gallery.less
+src/resources/css/gallery.less
 #   src/resources/js/app.js
 src/resources/js/app.js
 #   src/resources/js/stores/sidebar.js
@@ -211,6 +213,8 @@ src/public/css/app.css
 src/public/css/common.css
 #   src/public/css/context-js/context-js.css
 src/public/css/context-js/context-js.css
+#   src/public/css/gallery.css
+src/public/css/gallery.css
 #   src/public/css/fontawesome.css
 src/public/css/fontawesome.css
 #   src/public/js/app.js
@@ -255,6 +259,31 @@ src/routes/auth.php
 #     且 HTTPS 判定不受影响（正常用户解析结果与改动前完全一致）。]
 #   src/app/Http/Middleware/TrustProxies.php
 src/app/Http/Middleware/TrustProxies.php
+
+# [10 fork 标签功能（按用户隔离的图片标签）+ 原「图片权限」界面临口下线]
+#   标签：新增 tags / image_tag 两张表与 Tag 模型、Image/User 的关联、GET|POST|PUT|DELETE
+#   user/tags 与 PUT user/images/tags 五个端点，图片列表新增 tags[] 多值 AND 筛选；
+#   界面侧原「图片权限」口径整体下线（图库页的权限按钮/筛选/详情行换成标签、
+#   用户设置页不再有「图片默认权限」这一项、后台图片页与接口文档的相关行删除），
+#   连带把 UserSettingRequest 里 configs.default_permission 从 required 放宽成 nullable
+#   （表单不再提交这一项，不放宽则「保存设置」直接 422）。permission 列与后端接口按产品决策保留。
+#   src/app/Http/Controllers/User/ImageController.php
+src/app/Http/Controllers/User/ImageController.php
+#   src/app/Models/User.php
+src/app/Models/User.php
+#   src/app/Http/Requests/UserSettingRequest.php
+src/app/Http/Requests/UserSettingRequest.php
+#   src/app/Http/Controllers/Admin/ImageController.php
+#   （后台搜索的 'is:public' / 'is:private' 两条语法随「图片权限」口径下线一起删除；
+#     ImagePermission 的引用同时摘掉，其余搜索语法原样保留）
+src/app/Http/Controllers/Admin/ImageController.php
+#   src/app/Services/UserService.php
+#   src/app/Http/Controllers/Admin/UserController.php
+#   （删图片 / 删用户时显式清理 image_tag 与 tags —— 本仓 SQLite 未启用 PRAGMA foreign_keys，
+#     迁移注释声明的「关联行由应用代码显式删除」必须在应用层落实，否则残留行无声累积。
+#     自检脚本：tools/check-tag-integrity.php）
+src/app/Services/UserService.php
+src/app/Http/Controllers/Admin/UserController.php
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单
