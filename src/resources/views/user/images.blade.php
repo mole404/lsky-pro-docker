@@ -117,9 +117,9 @@
                         <a id="tag-filter-clear" class="ls-menu-item hidden text-brand" href="javascript:void(0)" @click="open = false">清除筛选</a>
                         {{-- 卡片角标开关：控制图库里图片上的标签显不显示，状态记在本地（默认显示） --}}
                         <a id="tag-badge-toggle" class="ls-menu-item flex items-center justify-between gap-3 border-t border-line text-ink-2" href="javascript:void(0)" @click="open = false">
-                            {{-- 文字墨迹天生比行中心高 ~1.5px（实测 237.69 vs 239.18），旁边放个居中的开关就显出来了，
-                                 所以把文字墨迹压到行中心、和开关对齐（开关本来就在 +0.5px 内）。--}}
-                            <span class="relative top-[1.5px]">显示图片标签</span>
+                            {{-- 之前按 canvas 字体度量把文字压低了 1.5px，实测过头（像素法：文字比行中心低 1.49px，
+                                 反倒显得开关偏上）→ 撤回，恢复成自然行高。现在文字/开关都在行中心 ±0.2px 内。--}}
+                            <span>显示图片标签</span>
                             {{-- 自己画的开关：两态形状完全一样，只变颜色与滑块位置（不用 FontAwesome 的
                                  fa-toggle-on/off —— 那两个字形一粗一细，切起来画风不统一）。 --}}
                             <span id="tag-badge-switch" aria-hidden="true"
@@ -923,7 +923,8 @@
                 // 每一行按状态上色/换图标；标签名一律转义后再进 innerHTML
                 const renderRows = () => {
                     if (! allTags.length) {
-                        $list.html('<div class="w-full py-4 text-center text-[13px] text-ink-3">暂无标签，可在下方新建</div>');
+                        // 空态跟菜单项一样厚（原来 py-4 比别的行高一倍，肉眼看整块偏下）
+                        $list.html('<div class="w-full py-2 text-center text-[13px] leading-5 text-ink-3">暂无标签，可在下方新建</div>');
                         return;
                     }
                     let html = '';
@@ -1188,7 +1189,20 @@
              * ② 点图片不该改勾选：DragSelect 在 mousedown 那一刻就按命中结果选中卡片，所以「点图片 = 勾上它」。
              *    这里记住按下前的选中，松手时若几乎没移动（算单击）就还原；真拖了就不还原（框选结果保留）。
              * ------------------------------------------------------------------------- */
-            const dsZoom = () => parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+            /* 缩放倍数取「布局尺寸 ÷ 视觉尺寸」的比值 —— 只由 CSS 的 html{zoom:1.1} 决定。
+             * 故意**不读** getComputedStyle(html).zoom：浏览器自身的页面缩放（Ctrl+±，老师那台机很
+             * 可能不是 100%）也可能被折进那个值里，这里就会除以一个偏大的倍数 → 盒子在页面上整体
+             * 偏移（实测老师环境里误差能到半个行高以上：框住上一行、下面一整行被选中）。
+             * 比值法天然免疫页面缩放：getBoundingClientRect 与 offsetWidth 都在 CSS 像素里量。 */
+            const dsZoom = () => {
+                const el = document.querySelector(IMAGES_SCROLL);
+                if (! el) {
+                    return 1;
+                }
+                const visual = el.getBoundingClientRect().width;
+                const layout = el.offsetWidth;
+                return (visual > 0 && layout > 0) ? visual / layout : 1;
+            };
             // 记录「我们自己写进去的值」，避免观察器把自己的写入再折算一次
             const dsPinned = new WeakMap();
             const pinWrite = (el, want) => {
