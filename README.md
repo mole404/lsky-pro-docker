@@ -56,8 +56,8 @@ docker run -d --name lsky-pro --restart unless-stopped \
 
 ### 正在使用开源版 Lsky-Pro V2.1？ 从上游开源版无损升级
 
-1. **完整备份数据目录（必做）**
-2. docker stop 旧容器名（如 lsky-pro）
+1. docker stop 旧容器名（如 lsky-pro）
+2. **完整备份数据目录（必做，别嫌麻烦）**
 3. docker rm 旧容器名（如 lsky-pro）
 4. 根据旧版镜像数据挂载路径，编辑新镜像挂载卷路径，新版与上游旧版读取路径完全相同，**务必确保挂载卷与旧版一致，挂载错误进去会报500（数据不会丢）**
 5. 挂载卷路径设置完成后，拉取本仓库镜像部署即可完成升级
