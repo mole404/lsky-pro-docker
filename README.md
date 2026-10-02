@@ -2,22 +2,19 @@
 
 把 [Lsky Pro](https://github.com/lsky-org/lsky-pro) 图床打包成**一条命令就能跑起来、配置和数据都收在一个目录里**的 Docker 镜像。
 
-用途很直白：你有自己的服务器，想要一个能传图、能管图、能对外分享链接的私人图床，但不想为了它去折腾 PHP 版本、依赖、数据库、证书这一串东西。
-
 > 这是自维护镜像（非官方）。应用源码 vendored 在本仓库 `src/` 里，构建不联网拉上游。
 
 镜像地址：`ghcr.io/mole404/lsky-pro-docker:latest`
-（每次构建同时发布一个不可变的 `ghcr.io/mole404/lsky-pro-docker:sha-<完整 commit>`）
 
 ---
 
-## 这个镜像能给你什么
+## 特性
 
 - **开箱即用**：默认用 SQLite，不需要额外跑一个数据库服务；容器起来后浏览器打开就是安装向导。
 - **数据 = 一个目录**：配置、数据库、上传的图片全在同一个卷里 —— 备份这个目录就等于备份了整个图床，换机器解压回去就能继续用。
 - **版本可追溯**：每次构建都会发布一个永不变化的 `sha-<commit>` 镜像，随时能回到任意历史版本，不怕"最新版翻车回不去"。
-- **低配机器友好**：默认的 Web 服务并发参数是按小内存服务器调过的，也都可以用环境变量单项覆盖。
-- **安全上做过一轮加固**：登录/注册等认证接口有限流，不采信客户端伪造的转发头，移除了 SVG 上传，并升级了一批带 CVE 的依赖。
+- **低配友好**：默认的 Web 服务并发参数是按小内存服务器调过的，也都可以用环境变量单项覆盖。
+- **安全加固**：登录/注册等认证接口有限流，不采信客户端伪造的转发头，移除了 SVG 上传，并升级了一批带 CVE 的依赖。
 - **界面清爽**：整套前端重做过，简洁风格 + 亮色/暗色/跟随系统。
 - **图库功能**：支持**图片标签** —— 给单张或多张图片打标、在图片墙上按标签筛选、卡片上直接显示标签；标签按用户隔离，互相看不见。
 
@@ -25,7 +22,7 @@
 
 ## 快速开始
 
-`compose.yaml`：
+Docker Compose：
 
 ```yaml
 services:
@@ -67,44 +64,6 @@ docker run -d --name lsky-pro --restart unless-stopped \
 docker compose pull
 docker compose up -d          # 不需要 --force-recreate
 ```
-
-只要镜像的 digest 变了，compose 就会自己重建容器。入口脚本会把新版本代码同步进卷，并清掉编译视图缓存；`.env` / `database/` / `storage/` 这些站点数据保持不动。
-
-**想稳妥一点，就把版本钉死**：把 `image:` 那行换成某个 `sha-<完整 commit>` tag，它就永远拉那个版本，升级与否完全由你决定；想升级再改成新的 sha —— 这也正是回滚的用法。
-
-> `:latest` 只在 master 分支的构建通过镜像自证后才会被指过去；测试分支的构建只产出 `sha-` 镜像，不会影响 `latest`。
-
----
-
-## 备份与恢复
-
-### 备份
-
-备份**整个卷目录**，别只抓 `database.sqlite` 一个文件：
-
-```bash
-docker compose stop lsky-pro
-tar -C /root/lsky-pro/data -czf ~/lsky-backup-$(date +%F-%H%M).tar.gz .
-docker compose start lsky-pro
-```
-
-为什么要整目录：数据库开了 WAL 模式，写入过程中的新数据会短暂落在同目录的 `database.sqlite-wal` 伴生文件里，只拷主文件可能拿到不一致的快照。先停容器再打包最稳。
-
-卷里哪些是数据、哪些是可替换代码：
-
-- **丢了不可再生，务必备份**：`.env`（配置与密钥）、`database/`（SQLite 数据库）、`storage/`（上传的图片、日志、会话）、`bootstrap/cache/`、`public/thumbnails/`、`public/i`（本地存储策略的目录）、`installed.lock`（已安装标记）。
-- **可重建，不用备份**：`app/`、`config/`、`resources/`、`routes/`、`public/js`、`public/css`、`vendor/` 等 —— 它们就是镜像里的代码，换镜像时入口脚本会同步回去。
-
-### 恢复
-
-```bash
-docker compose stop lsky-pro
-mkdir -p /root/lsky-pro/data
-tar -C /root/lsky-pro/data -xzf ~/lsky-backup-YYYY-MM-DD-HHMM.tar.gz
-docker compose up -d
-```
-
-属主不用管：入口脚本每次启动都会把整个卷的属主和权限理顺。换机器迁移 = 把归档解到新机器的卷目录 + 复用同一份 `compose.yaml`。
 
 ---
 
