@@ -637,6 +637,20 @@ html.dark {
     html .ls-zoom-mt-0 {
         margin-top: 0;
     }
+
+    // 看图控件（Viewer.js，见 user/images.blade.php 的 new Viewer）的外壳。
+    // 它是 position:fixed + inset:0 的「一屏大」盒子，但在 zoom:1.1 下 inset 版只铺到屏幕的
+    // 1/1.1（实测 1280 屏只铺到 1163.6）⇒ 右侧/底部约 116×52px 的遮罩盖不住，那一带能看到
+    // 没变暗的图库。改成显式 100% 后实测渲染出来正好铺满屏幕（布局 1164 / 视觉 1280）。
+    // 注意不能用 100vw：zoom 下它反而渲染成 1408（溢出 10%）。<768px 无 zoom，只写在桌面这条 @media 里。
+    // （图片本身的居中另有修法：Viewer 用视觉屏幕宽算、却把结果当布局值写进 margin —— 在 blade 里
+    //   viewer 的 viewed 事件上校正，见 user/images.blade.php 的 fitViewerToZoom。）
+    html .viewer-container {
+        right: auto;
+        bottom: auto;
+        width: 100%;
+        height: 100%;
+    }
 }
 
 // ---------------------------------------------------------------------------
