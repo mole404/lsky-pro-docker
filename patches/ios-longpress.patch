@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/resources/js/context-js.js
 #   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/public/js/context-js/context-js.js
-#   2a0bc064bad792b4ec1f076ff8097ac4  src/resources/views/user/images.blade.php
+#   0f5d1ff2b77864aab2f5816c758ba4c3  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
