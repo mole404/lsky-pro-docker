@@ -9,6 +9,20 @@ class TagRequest extends FormRequest
      *
      * @return array
      */
+    /**
+     * fork：校验前先去掉首尾空白。
+     * 只输入空格时 trim 后为空串，会被下面的 required 拦下（否则会建出一个空名标签）。
+     *
+     * @return void
+     */
+    protected function prepareForValidation()
+    {
+        $name = $this->input('name');
+        if (is_scalar($name)) {
+            $this->merge(['name' => trim((string) $name)]);
+        }
+    }
+
     public function rules()
     {
         return [
