@@ -535,13 +535,50 @@
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
 
+            /* 安卓 Chromium：触摸抬手后浏览器还会补发一发 click。滑完图的那发补发 click 是多余的，
+             * 而且会和紧接着的轻点挨得近、被浏览器拼成 dblclick ⇒ 误触发看图控件的「双击放大」。
+             * （老师实测：本来要双击才放大，出问题时点一下就放大；诊断面板计数里 dblclick×5。）
+             * 处理：只吞掉「手指挥动过（位移 >10px）」之后紧跟的那发 click/dblclick —— 真正的双击
+             * 是两下不动的轻点，不受影响，双击放大保留。 */
+            (function () {
+                let fromViewer = false;
+                let moved = false;
+                let startX = 0;
+                let startY = 0;
+                let swallowUntil = 0;
+                const inViewer = (el) => el instanceof Element && !!el.closest('.viewer-container');
+                document.addEventListener('touchstart', (e) => {
+                    fromViewer = inViewer(e.target);
+                    moved = false;
+                    const t = e.changedTouches && e.changedTouches[0];
+                    if (t) { startX = t.clientX; startY = t.clientY; }
+                }, true);
+                document.addEventListener('touchmove', (e) => {
+                    if (!fromViewer || moved) return;
+                    const t = e.changedTouches && e.changedTouches[0];
+                    if (t && (Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10)) {
+                        moved = true;
+                    }
+                }, true);
+                document.addEventListener('touchend', () => {
+                    if (fromViewer && moved) swallowUntil = Date.now() + 500;
+                    fromViewer = false;
+                    moved = false;
+                }, true);
+                ['click', 'dblclick'].forEach((type) => {
+                    document.addEventListener(type, (e) => {
+                        if (Date.now() < swallowUntil && inViewer(e.target)) e.stopPropagation();
+                    }, true);
+                });
+            })();
+
             /* === 临时诊断读数：只在网址带 ?dbg=1 时出现，用于定位安卓看大图手势问题，事后删除 === */
             if (location.search.indexOf('dbg=1') >= 0) {
                 (function () {
                     const panel = document.createElement('div');
                     panel.id = 'hermes-dbg';
                     panel.style.cssText = 'position:fixed;left:0;top:0;right:0;max-height:26vh;overflow:auto;'
-                        + 'z-index:2147483647;background:rgba(0,0,0,.86);color:#7CFC00;font:11px/1.32 monospace;'
+                        + 'pointer-events:none;z-index:2147483647;background:rgba(0,0,0,.86);color:#7CFC00;font:11px/1.32 monospace;'
                         + 'padding:6px 8px;white-space:pre-wrap;word-break:break-all;';
                     const head = document.createElement('div');
                     const body = document.createElement('div');
