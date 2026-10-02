@@ -492,9 +492,19 @@ auto_migrate() {
     fi
 
     # ④ 降权跑迁移（--force：生产环境必须显式确认）
-    out=$(runuser -u www-data -- sh -c 'cd /var/www/html && php artisan migrate --force' 2>&1) || rc=$?
+    #    用 `php /var/www/html/artisan`（绝对路径）：artisan 自己按 __DIR__ 解析 base path，
+    #    因此不必 cd，也少一层 `sh -c` 的失败面；输出一律打出来，空输出也要留痕（便于定位）。
+    rc=0
+    out=$(runuser -u www-data -- php /var/www/html/artisan migrate --force 2>&1) || rc=$?
     if [ -n "$out" ]; then
         echo "$out" | sed 's/^/    [migrate] /'
+    else
+        echo "    [migrate] （命令没有任何输出，退出码 $rc）"
+        command -v runuser >/dev/null 2>&1 && echo "    [probe] runuser=$(command -v runuser)" || echo "    [probe] runuser 不在 PATH 里"
+        runuser -u www-data -- php -v 2>&1 | head -2 | sed 's/^/    [probe] /'
+        runuser -u www-data -- php /var/www/html/artisan --version 2>&1 | head -6 | sed 's/^/    [probe] /'
+        [ -d /var/www/html/storage/logs ] || echo "    [probe] 卷里没有 storage/logs 目录（Laravel 写日志会失败）"
+        ls -la /var/www/html/database/ 2>&1 | head -6 | sed 's/^/    [probe] /'
     fi
     if [ "$rc" -ne 0 ]; then
         echo "[lsky] 警告：自动迁移未成功（退出码 $rc）。站点照常启动，请看上面的迁移输出；"
