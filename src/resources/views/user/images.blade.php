@@ -535,85 +535,16 @@
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
 
-            /* ---------------- 看图控件在桌面 110% 缩放下整体右偏（fork 修复，真浏览器实测） ------
-             * 现象：左键打开大图，图片整体偏右（1280 宽下约 +64px），竖直方向同理偏下。
-             * 真因：<html> 上有 zoom:1.1 ⇒ 布局空间只有屏幕的 1/1.1（1280 屏 → 布局 1164）。
-             *   Viewer 内部按「视觉屏幕宽 1280」算居中，算出的 margin-left（327.386）被当
-             *   【布局值】写进内联样式 ⇒ 渲染时浏览器又乘 1.1 ⇒ 多顶出去
-             *   (1280 − 1280/1.1) / 2 ≈ 58 布局 px（渲染 64px）。
-             *   实测（1280×577）：左留白 360.1 / 右 232.1（差 +128）；校正后 296.4 / 295.8（差 +0.6）。
-             * 修法：Viewer 自己算完之后（viewed 事件）用【布局单位】的屏幕尺寸重算一次 margin。
-             *   z 用「视觉 ÷ 布局」的比值求，不读 getComputedStyle().zoom —— 浏览器自身的页面
-             *   缩放（Ctrl+±）也会折进那个值里。手机端 z=1 ⇒ 公式退化成原值，零影响。
-             * 只挂在 viewed（切换/首次展示新图）上：用户自己放大平移走 zoomed，不会被这里动到。
-             * ------------------------------------------------------------------------------ */
-            const viewerPageZoom = () => {
-                const de = document.documentElement;
-                const visual = de.getBoundingClientRect().width;
-                const layout = de.offsetWidth;
-                return (visual > 0 && layout > 0) ? visual / layout : 1;
-            };
-
-            // Viewer 的 DOM 里除了大图还有缩略图列表的 <img>（实测 30~39px 那种），
-            // 所以按「面积最大的那张」来取当前展示的大图。
-            const pickViewerImage = () => {
-                let best = null, bestArea = 0;
-                document.querySelectorAll('.viewer-container img').forEach((im) => {
-                    const area = im.offsetWidth * im.offsetHeight;
-                    if (area > bestArea) {
-                        bestArea = area;
-                        best = im;
-                    }
-                });
-                return best;
-            };
-
-            const fitViewerToZoom = () => {
-                const z = viewerPageZoom();
-                if (z <= 1.0001) {
-                    return;                      // 手机 / 无缩放：原样
-                }
-                const img = pickViewerImage();
-                if (! img || ! img.offsetWidth || ! img.offsetHeight) {
-                    return;
-                }
-                const w = img.offsetWidth, h = img.offsetHeight;   // 布局单位
-                const vpW = window.innerWidth / z, vpH = window.innerHeight / z;
-                // 只在「整图适配」状态下校正：用户自己放大/平移后图会超过布局视口，
-                // 那时 margin 由 Viewer 按他的操作在写，别去跟他的手打架。
-                if (w > vpW + 1 || h > vpH + 1) {
-                    return;
-                }
-                // 只在值真的变化时写：下面用 MutationObserver 盯 style，写回去会再触发一次回调，
-                // 不比较的话会自激成死循环。
-                const wantLeft = Math.max(0, (vpW - w) / 2) + 'px';
-                const wantTop = Math.max(0, (vpH - h) / 2) + 'px';
-                if (img.style.marginLeft !== wantLeft) {
-                    img.style.marginLeft = wantLeft;
-                }
-                if (img.style.marginTop !== wantTop) {
-                    img.style.marginTop = wantTop;
-                }
-            };
-
-            /* 触发点为什么这么挂：Viewer 是「图片 load 之后」才写内联 margin 的（实测大图从 R2
-             * 异步加载，1~3 秒都不一定），定时轮询一次不可靠；而本仓库内置的 viewer.min.js 是压缩
-             * 产物、实例上拿不到 .on()（用它页面直接报 viewer.on is not a function）。
-             * 也试过 MutationObserver 盯 .viewer-container 的 style —— 但 Viewer 会重建/替换自己的
-             * DOM，观察器盯到的可能是被丢弃的节点，实测校正没落地。
-             * 所以：每次点击后连续校正约 4 秒（Viewer 的写入会被下一帧覆盖，谁最后写谁算；校正幂等，
-             * 且带「整图适配」护栏，不会跟用户自己的放大/平移打架）。 */
-            document.addEventListener('click', () => {
-                const raf = window.requestAnimationFrame || ((fn) => window.setTimeout(fn, 16));
-                let frames = 0;
-                const tick = () => {
-                    fitViewerToZoom();
-                    if (++frames < 240) {          // ≈4s
-                        raf(tick);
-                    }
-                };
-                raf(tick);
-            }, true);
+            /* 桌面 110% 缩放下看图控件（Viewer.js）的整体偏移：**不在这里用 JS 打补丁**。
+             * 真因：<html>{zoom:1.1} 让 Viewer 内部「以为的 1px」只有屏幕上的 1/1.1 ——
+             *   它按视觉尺寸（window.innerWidth = 1280）算居中与适配，却把结果当【布局值】
+             *   写进内联样式（布局空间只有 1164），渲染时浏览器又乘 1.1 ⇒
+             *   ① 图片整体偏右下（1280 宽下约 +64px）；
+             *   ② 按视觉算出的适配尺寸偏大，图片会盖住下方导航条/缩略图，且放大后拖不动。
+             * 正解在外壳上做**反向缩放**（common.less 的 `html .viewer-container { zoom: ... }`）：
+             *   让 Viewer 的子坐标系与屏幕 1:1，它自己的居中/适配/平移数学就全对了 ——
+             *   点开、键盘 ←→ 切图、滚轮放大、拖拽平移都不必再各修一遍。
+             * （教训：第三方控件遇到根节点 zoom，就把它那层缩回去，别逐条路径打补丁。） */
 
 
             $photos.justifiedGallery(gridConfigs);
