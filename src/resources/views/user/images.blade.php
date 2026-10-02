@@ -346,7 +346,7 @@
                              可以现场增删，也可以直接输入新名字回车新建（JS 渲染 + 绑定）。 --}}
                         <div id="detail-tags" class="flex flex-wrap items-center gap-1.5"></div>
                         <div class="mt-2 flex items-center gap-2">
-                            <input type="text" id="detail-tag-input" list="detail-tag-options" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称，回车即可添加">
+                            <input type="text" id="detail-tag-input" list="detail-tag-options" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称，回车即可添加" maxlength="64">
                             <button type="button" id="detail-tag-add" class="ls-btn h-11 shrink-0 px-4 sm:h-9">添加</button>
                         </div>
                         <datalist id="detail-tag-options"></datalist>
@@ -407,7 +407,7 @@
             <p class="mt-1 text-[13px] leading-5 text-ink-3">__hint__</p>
             {{-- 新建标签放在首行（老师要求）：进窗口第一眼就能建新标签 --}}
             <div class="mt-3 flex items-center gap-2">
-                <input type="text" id="image-tags-new" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入新标签名称">
+                <input type="text" id="image-tags-new" maxlength="64" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入新标签名称">
                 <button type="button" id="image-tags-create" class="ls-btn h-11 shrink-0 px-4 sm:h-9">新建标签</button>
             </div>
             <div id="image-tags-list" class="mt-3 flex max-h-[50vh] w-full flex-col gap-1.5 overflow-y-auto pr-1"></div>
@@ -423,8 +423,8 @@
     <script type="text/html" id="image-tags-edit-tpl">
         <div id="tag-edit" class="flex w-full flex-col rounded-lg border border-line p-2">
             <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
-            <form class="flex w-full items-center gap-2" action="/user/tags/__id__" method="POST">
-                <input type="text" name="name" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称">
+            <form class="flex w-full items-center gap-2" action="{{ route('user.tag.update', ['id' => '__id__']) }}" method="POST">
+                <input type="text" name="name" maxlength="64" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称">
                 <button type="submit" class="ls-btn h-11 shrink-0 px-4 sm:h-9">确认修改</button>
             </form>
         </div>
@@ -501,6 +501,8 @@
             const TAGS_MODAL = 'image-tags-modal';
             // 「显示图片标签」开关的本地记忆键（与页面其它偏好一致，存 localStorage）
             const TAG_BADGE_KEY = 'lsky.show_image_tags';
+            // 删除标签的地址（模板里给个占位符，运行时替换真实 id）
+            const TAG_DELETE_URL = "{{ route('user.tag.delete', ['id' => '__ID__']) }}";
 
             /* ---------------- 标签（fork 新增） ----------------
              * 标签按用户隔离：列表来自 GET user/tags，打标/移除走 PUT user/images/tags。
@@ -516,6 +518,10 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+
+            // 统一的接口错误文案：优先用后端返回的 message（含 422 校验失败），其次 Error.message
+            const apiErrMsg = (error, fallback) => (error && error.response && error.response.data
+                && error.response.data.message) || (error && error.message) || fallback;
 
             // 图片墙卡片角标：只显示前几个，长名字截断（角标容器是 pointer-events-none，不抢点击）
             const cardTagsHtml = (tags) => {
@@ -572,7 +578,9 @@
                             .replace(/__height__/g, images[i].height)
                             // 卡片角标 = 这张图的标签（列表接口已带 tags）
                             .replace(/__tags__/g, cardTagsHtml(images[i].tags).replace(/\$/g, '$$$$'))
-                            .replace(/__json__/g, JSON.stringify(images[i]).replace(/\$/g, '$$$$'))
+                            // 标签名会进这里的 JSON，而 data-json 是单引号属性 —— 名字里带 '
+                            // 就能把属性提前闭合（自伤型 XSS 面），所以先按 HTML 转义再注入
+                            .replace(/__json__/g, escapeHtml(JSON.stringify(images[i])).replace(/\$/g, '$$$$'))
                     }
 
                     $photos.append(html);
@@ -876,8 +884,11 @@
              * 任何一处改动都会刷新三个消费方：筛选下拉、详情卡候选、图片墙（角标 + 筛选结果）。
              * ------------------------------------------------------------------ */
 
-            // 标签变了 → 重拉标签缓存 + 重拉当前视图（角标/筛选结果都会跟着正确）
-            const refreshAfterTagChange = () => loadTags().then(() => setTags());
+            /* 注：这里原有一个 refreshAfterTagChange()（改名/删除后 loadTags + setTags）。
+             * setTags() 会通过 resetImages() 清空图片墙并 ds.clearSelection() —— 把用户正在打标的
+             * 这批选中图片连同弹窗勾选态一起丢掉（老师报的「编辑/删除会整页刷新」就是这个）。
+             * 已删除：改名/删除改成 patchCardsTag() 就地同步；只有「被删的标签正用作筛选项」
+             * 那种结果集真的变了的情况，才单独调一次 setTags()。 */
 
             // 打开标签管理窗口。selIds 是当前选中的图片 id（可能为空）
             const openTagManager = (selIds) => {
@@ -933,7 +944,7 @@
                             .replace(/__id__/g, tag.id)
                             .replace(/__name__/g, escapeHtml(tag.name).replace(/\$/g, '$$$$'))
                             .replace(/__images_count__/g, tag.images_count)
-                            .replace(/__json__/g, JSON.stringify(tag).replace(/\$/g, '$$$$')));
+                            .replace(/__json__/g, escapeHtml(JSON.stringify(tag)).replace(/\$/g, '$$$$')));
 
                         let id = String(tag.id);
                         let checked = isChecked(id);
@@ -1011,7 +1022,7 @@
                         renderRows();
                         toastr.success(response.data.message);
                         attach(response.data.data.id);
-                    });
+                    }).catch(error => toastr.warning(apiErrMsg(error, '创建标签失败')));
                 });
 
                 // 重命名：点行右侧「编辑」在那一行下方就地展开表单（再点一次收起）
@@ -1038,11 +1049,19 @@
                         if (! response.data.status) {
                             return $error.html('<i class="fas fa-exclamation-circle"></i> ' + response.data.message).show();
                         }
+                        let $row = $form.closest('#tag-edit').prev('.image-tag-row');
+                        let tagId = $row.data('id');
+                        let newName = ($form.find('input[name=name]').val() || '').trim();
                         $('#tag-edit').remove();
                         toastr.success(response.data.message);
-                        // 名字变了：筛选下拉、详情卡候选、卡片角标都要跟着换
-                        refreshAfterTagChange().then(renderRows);
-                    });
+                        // 局部更新：重拉标签缓存（筛选下拉 / 详情卡候选 / 行内名字），
+                        // 再就地改写卡片角标与 data-json —— 不重拉图片墙，选中不丢。
+                        loadTags().then(() => {
+                            patchCardsTag(tagId, newName);
+                            renderRows();
+                        });
+                    }).catch(error => $error.html('<i class="fas fa-exclamation-circle"></i> '
+                        + apiErrMsg(error, '修改失败')).show());
                 });
 
                 // 删除标签：二次确认（明确说明会从所有图片上移除，且不可恢复）
@@ -1066,19 +1085,28 @@
                         if (! result.isConfirmed) {
                             return;
                         }
-                        axios.delete('/user/tags/' + tag.id).then(response => {
+                        axios.delete(TAG_DELETE_URL.replace('__ID__', tag.id)).then(response => {
                             if (! response.data.status) {
                                 return toastr.warning(response.data.message);
                             }
                             // 这个标签要从所有本地状态里摘干净：筛选选中、待添加、待移除、行内编辑表单
+                            // 它是不是正被用作筛选项 —— 决定要不要重拉图片墙（见下）
+                            let wasFilter = selectedTagIds.some(id => String(id) === String(tag.id));
                             selectedTagIds = selectedTagIds.filter(id => String(id) !== String(tag.id));
                             addIds = addIds.filter(id => id !== String(tag.id));
                             removeIds = removeIds.filter(id => id !== String(tag.id));
                             $('#tag-edit').remove();
                             refreshConfirm();
                             toastr.success(response.data.message);
-                            refreshAfterTagChange().then(renderRows);
-                        });
+                            loadTags().then(() => {
+                                patchCardsTag(tag.id, null);
+                                renderRows();
+                                // 只有它正被当筛选项时结果集才真的变了，那时才有必要重拉图片墙
+                                if (wasFilter) {
+                                    setTags();
+                                }
+                            });
+                        }).catch(error => toastr.warning(apiErrMsg(error, '删除失败')));
                     });
                 });
 
@@ -1128,7 +1156,7 @@
                             setTags();
                         }
                         loadTags();
-                    });
+                    }).catch(error => toastr.warning(apiErrMsg(error, '设置失败')));
                 });
 
                 renderRows();
@@ -1451,6 +1479,32 @@
                 $options.html(allTags.map(tag => `<option value="${escapeHtml(tag.name)}"></option>`).join(''));
             };
 
+            /* 标签「改名 / 删除」后就地同步所有卡片与详情卡 —— **绝不重拉图片墙**。
+             * 重拉（setTags → resetImages）会清空图片墙并 ds.clearSelection()，把用户正在打标的
+             * 这批选中图片丢掉，弹窗里的勾选态也随之失真（老师报过的「编辑/删除会整页刷新」）。
+             * newName 传 null 表示这个标签已被删除。 */
+            const patchCardsTag = (tagId, newName) => {
+                tagId = String(tagId);
+                $photos.find(IMAGES_ITEM).each(function () {
+                    let $item = $(this);
+                    let json = $item.data('json');
+                    if (! json || ! (json.tags || []).some(t => String(t.id) === tagId)) {
+                        return;
+                    }
+                    let next = (json.tags || [])
+                        .filter(t => newName !== null || String(t.id) !== tagId)
+                        .map(t => String(t.id) === tagId ? {id: t.id, name: newName} : {id: t.id, name: t.name});
+                    syncCardTags(json.id, next);
+                });
+                // 详情卡正开着这张图时，它的 chip 也要跟着换
+                if (detailImageTags.some(t => String(t.id) === tagId)) {
+                    detailImageTags = newName === null
+                        ? detailImageTags.filter(t => String(t.id) !== tagId)
+                        : detailImageTags.map(t => String(t.id) === tagId ? {id: t.id, name: newName} : t);
+                    renderDetailTags();
+                }
+            };
+
             // 同步图片墙上某张图的卡片角标（连同它的 data-json，右键菜单/详情读的是这份）
             const syncCardTags = (imageId, tags) => {
                 let $item = $photos.find(`${IMAGES_ITEM}[data-id="${imageId}"]`);
@@ -1460,7 +1514,8 @@
                 let json = $item.data('json');
                 if (json) {
                     json.tags = tags.map(tag => ({id: tag.id, name: tag.name}));
-                    $item.data('json', json).attr('data-json', JSON.stringify(json));
+                    // 属性值同样要转义（浏览器解码后仍是合法 JSON，jQuery 读到的内容不变）
+                    $item.data('json', json).attr('data-json', escapeHtml(JSON.stringify(json)));
                 }
                 $item.find('.image-tags').html(cardTagsHtml(tags));
             };
@@ -1494,9 +1549,7 @@
                     syncCardTags(imageId, detailImageTags);
                     loadTags();     // 使用数量变了，顺手刷新（顶部筛选与候选同步更新）
                     toastr.success(response.data.message);
-                }).catch(error => {
-                    toastr.warning(error.message || '设置失败');
-                });
+                }).catch(error => toastr.warning(apiErrMsg(error, '设置失败')));
             };
 
             // 详情卡里「添加」：已有同名标签就直接挂上，没有就先 POST 新建
@@ -1525,7 +1578,7 @@
                         return;
                     }
                     return submitImageTags(detailImageId, [tagId], []);
-                }).catch(error => toastr.warning(error.message || '添加失败'));
+                }).catch(error => toastr.warning(apiErrMsg(error, '添加失败')));
             };
 
             // 详情弹窗里的标签按钮/回车（委托绑在常驻容器上，弹窗内容每次重渲染都不用重绑）

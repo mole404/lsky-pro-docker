@@ -31,6 +31,10 @@ class UserService
             foreach ($model->cursor() as $image) {
                 // 相册图片数量更新
                 $image->album?->decrement('image_num');
+                // fork：图片删了，它与标签的关联行也要一并清掉。
+                // 迁移注释声明「关联行由应用代码显式删除」，这里就是那条规则（SQLite 未启用
+                // 外键级联，不显式删就会留下指向已删图片的残留行，无声累积）。
+                $image->tags()->detach();
                 // 更新相册图片数量
                 $image->delete();
                 // 更新数量

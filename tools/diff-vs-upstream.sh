@@ -277,6 +277,13 @@ src/app/Http/Requests/UserSettingRequest.php
 #   （后台搜索的 'is:public' / 'is:private' 两条语法随「图片权限」口径下线一起删除；
 #     ImagePermission 的引用同时摘掉，其余搜索语法原样保留）
 src/app/Http/Controllers/Admin/ImageController.php
+#   src/app/Services/UserService.php
+#   src/app/Http/Controllers/Admin/UserController.php
+#   （删图片 / 删用户时显式清理 image_tag 与 tags —— 本仓 SQLite 未启用 PRAGMA foreign_keys，
+#     迁移注释声明的「关联行由应用代码显式删除」必须在应用层落实，否则残留行无声累积。
+#     自检脚本：tools/check-tag-integrity.php）
+src/app/Services/UserService.php
+src/app/Http/Controllers/Admin/UserController.php
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单

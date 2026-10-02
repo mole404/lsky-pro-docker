@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/resources/js/context-js.js
 #   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/public/js/context-js/context-js.js
-#   1292ea8123868897023def9dc9bcf5ac  src/resources/views/user/images.blade.php
+#   23835058801c2b609c2134f0f10d0a5d  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
@@ -62,8 +62,9 @@
 # 2026-10-01 第二轮（老师试完测试版提的意见）：两个标签窗口合并成一个（旧 tag-manage-modal 删除）、
 #   三态勾选改成两态、加「显示图片标签」开关、修好卡片拖动框选（图片穿透 + 拖动起点放宽 +
 #   由卡片自己开预览）。
---- a/resources/js/context-js.js
-+++ b/resources/js/context-js.js
+---- src/resources/js/context-js.js
+--- /root/.hermes/cache/scratch/tmp.BQ92ALlEpf/up/resources/js/context-js.js	2026-10-02 14:31:26.703747972 +0800
++++ src/resources/js/context-js.js	2026-10-01 15:40:13.406864745 +0800
 @@ -2,9 +2,49 @@
   * Context.js
   * Copyright Jacob Kelley, Modified by WispX
@@ -1147,8 +1148,9 @@
 +
 +    return api;
  })();
---- a/public/js/context-js/context-js.js
-+++ b/public/js/context-js/context-js.js
+---- src/public/js/context-js/context-js.js
+--- /root/.hermes/cache/scratch/tmp.BQ92ALlEpf/up/public/js/context-js/context-js.js	2026-10-02 14:31:26.695747977 +0800
++++ src/public/js/context-js/context-js.js	2026-10-02 12:22:32.584186106 +0800
 @@ -1 +1,1148 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
@@ -2299,9 +2301,10 @@
 +
 +    return api;
 +})();
---- a/resources/views/user/images.blade.php
-+++ b/resources/views/user/images.blade.php
-@@ -4,45 +4,88 @@
+---- src/resources/views/user/images.blade.php
+--- /root/.hermes/cache/scratch/tmp.BQ92ALlEpf/up/resources/views/user/images.blade.php	2026-10-02 14:31:26.707747969 +0800
++++ src/resources/views/user/images.blade.php	2026-10-02 14:28:58.367831314 +0800
+@@ -4,45 +4,79 @@
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
@@ -2328,15 +2331,6 @@
 +            #album-switch-modal [class*="md:max-w-2xl"] {
 +                max-width: 520px;
 +            }
-+        }
-+
-+        /* fork：卡片里的图片设成鼠标穿透。原因（实测）：这套 DragSelect 只在 mousedown
-+           落在「已登记的可选元素本人」上时才起框选，而卡片 <a class="images-item"> 被里面的
-+           <img> 铺满 —— 逐像素扫过整张卡片都没有一个点能按到 <a> 自己，所以框选永远起不来。
-+           穿透后按下落在 <a> 上，框选恢复（predragstart → elementselect → dragstart）；
-+           代价是「点图片开预览」收不到点击了，改由下面 $photos.on('click', '.images-item') 接管。 */
-+        .images-item img {
-+            pointer-events: none;
 +        }
 +
 +        /* 「显示图片标签」开关关掉时，卡片角标整体不显示（角标是每次翻页重新渲染的，
@@ -2403,7 +2397,7 @@
                      </a>
                  </x-slot>
  
-@@ -57,142 +100,352 @@
+@@ -57,151 +91,382 @@
                      </x-dropdown-link>
                  </x-slot>
              </x-dropdown>
@@ -2424,7 +2418,9 @@
 +                         （否则会顶动 sticky 吸顶工具栏那一行）。--}}
 +                    <a id="tag-filter" class="inline-flex items-center gap-1.5 text-sm py-1.5 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
 +                        <span>标签</span>
-+                        <i class="fas fa-tags text-brand"></i>
++                        {{-- 实测：图标墨迹中心比文字高 0.5px（文字 90.0 / 图标 89.5，截图按像素量的），
++                             用 relative+top 精确压下去 0.5px。--}}
++                        <i class="fas fa-tags text-brand relative top-[0.5px]"></i>
                      </a>
                  </x-slot>
  
@@ -2440,11 +2436,16 @@
 +                        <a id="tag-filter-clear" class="ls-menu-item hidden text-brand" href="javascript:void(0)" @click="open = false">清除筛选</a>
 +                        {{-- 卡片角标开关：控制图库里图片上的标签显不显示，状态记在本地（默认显示） --}}
 +                        <a id="tag-badge-toggle" class="ls-menu-item flex items-center justify-between gap-3 border-t border-line text-ink-2" href="javascript:void(0)" @click="open = false">
++                            {{-- 之前按 canvas 字体度量把文字压低了 1.5px，实测过头（像素法：文字比行中心低 1.49px，
++                                 反倒显得开关偏上）→ 撤回，恢复成自然行高。现在文字/开关都在行中心 ±0.2px 内。--}}
 +                            <span>显示图片标签</span>
-+                            <i id="tag-badge-toggle-icon" class="fas fa-toggle-on text-brand" aria-hidden="true"></i>
++                            {{-- 自己画的开关：两态形状完全一样，只变颜色与滑块位置（不用 FontAwesome 的
++                                 fa-toggle-on/off —— 那两个字形一粗一细，切起来画风不统一）。 --}}
++                            <span id="tag-badge-switch" aria-hidden="true"
++                                  class="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-brand transition-colors duration-150">
++                                <span class="tag-badge-knob absolute left-[2px] h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-150"></span>
++                            </span>
 +                        </a>
-+                        {{-- 唯一的「标签管理」入口：新建 / 重命名 / 删除标签 + 给选中的图片打标，都在同一个窗口 --}}
-+                        <a id="tag-manage-open" class="ls-menu-item border-t border-line text-ink-2" href="javascript:void(0)" @click="open = false">标签管理</a>
 +                    </div>
                  </x-slot>
              </x-dropdown>
@@ -2739,7 +2740,7 @@
 +                             可以现场增删，也可以直接输入新名字回车新建（JS 渲染 + 绑定）。 --}}
 +                        <div id="detail-tags" class="flex flex-wrap items-center gap-1.5"></div>
 +                        <div class="mt-2 flex items-center gap-2">
-+                            <input type="text" id="detail-tag-input" list="detail-tag-options" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称，回车即可添加">
++                            <input type="text" id="detail-tag-input" list="detail-tag-options" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称，回车即可添加" maxlength="64">
 +                            <button type="button" id="detail-tag-add" class="ls-btn h-11 shrink-0 px-4 sm:h-9">添加</button>
 +                        </div>
 +                        <datalist id="detail-tag-options"></datalist>
@@ -2798,25 +2799,26 @@
 +        <div class="mx-auto flex w-full max-w-xl flex-col">
 +            <p class="text-[16px] font-semibold leading-6 text-ink">标签管理</p>
 +            <p class="mt-1 text-[13px] leading-5 text-ink-3">__hint__</p>
-+            <div id="image-tags-list" class="mt-4 flex max-h-[50vh] w-full flex-col gap-1.5 overflow-y-auto pr-1"></div>
++            {{-- 新建标签放在首行（老师要求）：进窗口第一眼就能建新标签 --}}
 +            <div class="mt-3 flex items-center gap-2">
-+                <input type="text" id="image-tags-new" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入新标签名称">
++                <input type="text" id="image-tags-new" maxlength="64" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入新标签名称">
 +                <button type="button" id="image-tags-create" class="ls-btn h-11 shrink-0 px-4 sm:h-9">新建标签</button>
 +            </div>
++            <div id="image-tags-list" class="mt-3 flex max-h-[50vh] w-full flex-col gap-1.5 overflow-y-auto pr-1"></div>
 +            <div class="mt-4 flex justify-end gap-2">
 +                <button type="button" id="image-tags-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
 +                <button type="button" id="image-tags-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>确定</button>
-+            </div>
-+        </div>
-+    </script>
-+
+             </div>
+         </div>
+     </script>
+ 
 +    {{-- 标签重命名的行内表单（在那一行下方就地展开，再点一次收起）。
 +         名称不写进模板 —— 由 JS 用 .val() 填，避免标签名里的引号/尖括号破坏属性。 --}}
 +    <script type="text/html" id="image-tags-edit-tpl">
 +        <div id="tag-edit" class="flex w-full flex-col rounded-lg border border-line p-2">
 +            <p class="error-message text-white p-2 mb-2 text-sm bg-red-500 rounded hidden"></p>
-+            <form class="flex w-full items-center gap-2" action="/user/tags/__id__" method="POST">
-+                <input type="text" name="name" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称">
++            <form class="flex w-full items-center gap-2" action="{{ route('user.tag.update', ['id' => '__id__']) }}" method="POST">
++                <input type="text" name="name" maxlength="64" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称">
 +                <button type="submit" class="ls-btn h-11 shrink-0 px-4 sm:h-9">确认修改</button>
 +            </form>
 +        </div>
@@ -2827,20 +2829,33 @@
 +         勾选语义（按老师定的两态）：勾上 = 给选中的这些图片加上该标签；取消勾选 = 从这些图片移除。
 +         如果该标签只在「部分选中的图片」上有，就显示成半勾表示现状，点一下变全勾（加上）。 --}}
 +    <script type="text/html" id="image-tags-item-tpl">
-+        <div class="image-tag-row flex min-h-[44px] w-full items-stretch rounded-lg border border-line bg-surface transition-colors duration-150" data-id="__id__" data-json='__json__'>
++        <div class="image-tag-row flex min-h-[44px] w-full items-stretch overflow-hidden rounded-lg border border-line bg-surface transition-colors duration-150" data-id="__id__" data-json='__json__'>
 +            <a href="javascript:void(0)" class="image-tag-toggle flex min-h-[44px] min-w-0 flex-1 items-center gap-2.5 px-3 py-2 hover:bg-surface-2">
 +                <i class="tag-state-icon fas fa-square w-4 shrink-0 text-ink-3" aria-hidden="true"></i>
 +                <div class="min-w-0 flex-1 truncate text-[14px] name">__name__</div>
 +                <div class="shrink-0 text-[13px] text-ink-3"><span class="images-count">__images_count__</span> 张</div>
-+                <div class="tag-state-label shrink-0 text-[13px] text-ink-3"></div>
 +            </a>
 +            <div class="tag-row-actions flex shrink-0 items-center border-l border-line">
 +                <button type="button" class="update flex h-11 w-11 items-center justify-center text-ink-2 hover:bg-surface-3 hover:text-brand" aria-label="重命名标签"><i class="fas fa-edit text-[15px]"></i></button>
 +                <button type="button" class="delete flex h-11 w-11 items-center justify-center text-danger hover:bg-surface-3" aria-label="删除标签"><i class="fas fa-trash-alt text-[15px]"></i></button>
-             </div>
-         </div>
-     </script>
-@@ -201,7 +454,8 @@
++            </div>
++        </div>
++    </script>
++
++    @push('styles')
++        <style>
++            /* 按在图片上拖动时，浏览器会启动 <img> 的原生拖拽、把 mousemove 变成 drag 事件 ——
++               框选的选择框不跟随、松手也不会结束互动（实测「锁定不释放」）。Chromium/Safari 用
++               -webkit-user-drag 关掉原生拖拽（Firefox 不看这条，由脚本里的 dragstart 兜底）。 */
++            /* 注意卡片本身也要：<a href> 默认就是可拖拽元素，只禁 img 没用（实测 dragstart 照样发） */
++            #images-grid .images-item,
++            #images-grid .images-item img {
++                -webkit-user-drag: none;
++            }
++        </style>
++    @endpush
++
+     @push('scripts')
          <script src="{{ asset('js/justified-gallery/jquery.justifiedGallery.min.js') }}"></script>
          <script src="{{ asset('js/viewer-js/viewer.min.js') }}"></script>
          <script src="{{ asset('js/dragselect/ds.min.js') }}"></script>
@@ -2850,7 +2865,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -219,42 +473,71 @@
+@@ -219,42 +484,77 @@
              const IMAGES_SCROLL = '#images-scroll';
              const IMAGES_GRID = '#images-grid';
              const IMAGES_ITEM = '.images-item';
@@ -2895,6 +2910,8 @@
 +            const TAGS_MODAL = 'image-tags-modal';
 +            // 「显示图片标签」开关的本地记忆键（与页面其它偏好一致，存 localStorage）
 +            const TAG_BADGE_KEY = 'lsky.show_image_tags';
++            // 删除标签的地址（模板里给个占位符，运行时替换真实 id）
++            const TAG_DELETE_URL = "{{ route('user.tag.delete', ['id' => '__ID__']) }}";
 +
 +            /* ---------------- 标签（fork 新增） ----------------
 +             * 标签按用户隔离：列表来自 GET user/tags，打标/移除走 PUT user/images/tags。
@@ -2910,6 +2927,10 @@
 +                .replace(/>/g, '&gt;')
 +                .replace(/"/g, '&quot;')
 +                .replace(/'/g, '&#39;');
++
++            // 统一的接口错误文案：优先用后端返回的 message（含 422 校验失败），其次 Error.message
++            const apiErrMsg = (error, fallback) => (error && error.response && error.response.data
++                && error.response.data.message) || (error && error.message) || fallback;
 +
 +            // 图片墙卡片角标：只显示前几个，长名字截断（角标容器是 pointer-events-none，不抢点击）
 +            const cardTagsHtml = (tags) => {
@@ -2947,16 +2968,20 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,6 +559,8 @@
+@@ -276,7 +576,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
+-                            .replace(/__json__/g, JSON.stringify(images[i]).replace(/\$/g, '$$$$'))
 +                            // 卡片角标 = 这张图的标签（列表接口已带 tags）
 +                            .replace(/__tags__/g, cardTagsHtml(images[i].tags).replace(/\$/g, '$$$$'))
-                             .replace(/__json__/g, JSON.stringify(images[i]).replace(/\$/g, '$$$$'))
++                            // 标签名会进这里的 JSON，而 data-json 是单引号属性 —— 名字里带 '
++                            // 就能把属性提前闭合（自伤型 XSS 面），所以先按 HTML 转义再注入
++                            .replace(/__json__/g, escapeHtml(JSON.stringify(images[i])).replace(/\$/g, '$$$$'))
                      }
  
-@@ -308,14 +593,42 @@
+                     $photos.append(html);
+@@ -308,14 +612,42 @@
              }
  
              const getAlbums = (options, callback) => {
@@ -3003,7 +3028,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +641,40 @@
+@@ -328,29 +660,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -3054,7 +3079,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +682,13 @@
+@@ -358,12 +701,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -3070,7 +3095,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +697,14 @@
+@@ -372,13 +716,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -3088,7 +3113,7 @@
                              );
                          }
                      });
-@@ -386,6 +712,12 @@
+@@ -386,6 +731,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -3101,7 +3126,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +727,14 @@
+@@ -395,12 +746,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -3118,7 +3143,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +766,18 @@
+@@ -432,15 +785,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -3140,7 +3165,7 @@
                  });
              }
  
-@@ -449,11 +786,357 @@
+@@ -449,9 +805,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -3226,8 +3251,11 @@
 +             * 任何一处改动都会刷新三个消费方：筛选下拉、详情卡候选、图片墙（角标 + 筛选结果）。
 +             * ------------------------------------------------------------------ */
 +
-+            // 标签变了 → 重拉标签缓存 + 重拉当前视图（角标/筛选结果都会跟着正确）
-+            const refreshAfterTagChange = () => loadTags().then(() => setTags());
++            /* 注：这里原有一个 refreshAfterTagChange()（改名/删除后 loadTags + setTags）。
++             * setTags() 会通过 resetImages() 清空图片墙并 ds.clearSelection() —— 把用户正在打标的
++             * 这批选中图片连同弹窗勾选态一起丢掉（老师报的「编辑/删除会整页刷新」就是这个）。
++             * 已删除：改名/删除改成 patchCardsTag() 就地同步；只有「被删的标签正用作筛选项」
++             * 那种结果集真的变了的情况，才单独调一次 setTags()。 */
 +
 +            // 打开标签管理窗口。selIds 是当前选中的图片 id（可能为空）
 +            const openTagManager = (selIds) => {
@@ -3255,8 +3283,8 @@
 +
 +                $('#image-tags-content').html(
 +                    $('#image-tags-tpl').html().replace(/__hint__/g, hasSelection
-+                        ? `已选择 ${selIds.length} 张图片 · 勾选 = 给这些图片加上，取消勾选 = 从这些图片移除`
-+                        : '未选择图片 · 可在这里新建、重命名、删除标签；选中图片后勾选即可打标')
++                        ? `已选择 ${selIds.length} 张图片`
++                        : '未选择图片')
 +                );
 +
 +                const $list = $('#image-tags-list');
@@ -3273,7 +3301,8 @@
 +                // 每一行按状态上色/换图标；标签名一律转义后再进 innerHTML
 +                const renderRows = () => {
 +                    if (! allTags.length) {
-+                        $list.html('<div class="w-full py-4 text-center text-[13px] text-ink-3">暂无标签，可在下方新建</div>');
++                        // 空态跟菜单项一样厚（原来 py-4 比别的行高一倍，肉眼看整块偏下）
++                        $list.html('<div class="w-full py-2 text-center text-[13px] leading-5 text-ink-3">暂无标签，可在下方新建</div>');
 +                        return;
 +                    }
 +                    let html = '';
@@ -3282,7 +3311,7 @@
 +                            .replace(/__id__/g, tag.id)
 +                            .replace(/__name__/g, escapeHtml(tag.name).replace(/\$/g, '$$$$'))
 +                            .replace(/__images_count__/g, tag.images_count)
-+                            .replace(/__json__/g, JSON.stringify(tag).replace(/\$/g, '$$$$')));
++                            .replace(/__json__/g, escapeHtml(JSON.stringify(tag)).replace(/\$/g, '$$$$')));
 +
 +                        let id = String(tag.id);
 +                        let checked = isChecked(id);
@@ -3290,23 +3319,16 @@
 +                        let pendingRemove = removeIds.indexOf(id) !== -1;
 +                        let partial = ! checked && ! pendingRemove && someHave(id) && ! allHave(id);
 +
++                        // 行内只留左边那个勾表达状态（老师要求：不要「已有 / 移除」这类字样，太误导）
 +                        let icon = 'fa-square text-ink-3';
-+                        let label = '';
-+                        let labelCls = 'text-ink-3';
 +                        if (checked) {
 +                            icon = 'fa-check-square text-brand';
-+                            label = pendingAdd ? '添加' : (hasSelection ? '已有' : '');
-+                            labelCls = pendingAdd ? 'text-brand font-medium' : 'text-ink-3';
 +                        } else if (pendingRemove) {
 +                            icon = 'fa-square text-danger';
-+                            label = '移除';
-+                            labelCls = 'text-danger font-medium';
 +                        } else if (partial) {
 +                            icon = 'fa-minus-square text-brand';
-+                            label = '部分有';
 +                        }
 +                        $row.find('.tag-state-icon').attr('class', 'tag-state-icon fas w-4 shrink-0 ' + icon);
-+                        $row.find('.tag-state-label').attr('class', 'tag-state-label shrink-0 text-[13px] ' + labelCls).text(label);
 +                        if (pendingAdd) {
 +                            $row.addClass('border-brand bg-brand-soft');
 +                        } else if (pendingRemove) {
@@ -3367,7 +3389,7 @@
 +                        renderRows();
 +                        toastr.success(response.data.message);
 +                        attach(response.data.data.id);
-+                    });
++                    }).catch(error => toastr.warning(apiErrMsg(error, '创建标签失败')));
 +                });
 +
 +                // 重命名：点行右侧「编辑」在那一行下方就地展开表单（再点一次收起）
@@ -3394,11 +3416,19 @@
 +                        if (! response.data.status) {
 +                            return $error.html('<i class="fas fa-exclamation-circle"></i> ' + response.data.message).show();
 +                        }
++                        let $row = $form.closest('#tag-edit').prev('.image-tag-row');
++                        let tagId = $row.data('id');
++                        let newName = ($form.find('input[name=name]').val() || '').trim();
 +                        $('#tag-edit').remove();
 +                        toastr.success(response.data.message);
-+                        // 名字变了：筛选下拉、详情卡候选、卡片角标都要跟着换
-+                        refreshAfterTagChange().then(renderRows);
-+                    });
++                        // 局部更新：重拉标签缓存（筛选下拉 / 详情卡候选 / 行内名字），
++                        // 再就地改写卡片角标与 data-json —— 不重拉图片墙，选中不丢。
++                        loadTags().then(() => {
++                            patchCardsTag(tagId, newName);
++                            renderRows();
++                        });
++                    }).catch(error => $error.html('<i class="fas fa-exclamation-circle"></i> '
++                        + apiErrMsg(error, '修改失败')).show());
 +                });
 +
 +                // 删除标签：二次确认（明确说明会从所有图片上移除，且不可恢复）
@@ -3422,19 +3452,28 @@
 +                        if (! result.isConfirmed) {
 +                            return;
 +                        }
-+                        axios.delete('/user/tags/' + tag.id).then(response => {
++                        axios.delete(TAG_DELETE_URL.replace('__ID__', tag.id)).then(response => {
 +                            if (! response.data.status) {
 +                                return toastr.warning(response.data.message);
 +                            }
 +                            // 这个标签要从所有本地状态里摘干净：筛选选中、待添加、待移除、行内编辑表单
++                            // 它是不是正被用作筛选项 —— 决定要不要重拉图片墙（见下）
++                            let wasFilter = selectedTagIds.some(id => String(id) === String(tag.id));
 +                            selectedTagIds = selectedTagIds.filter(id => String(id) !== String(tag.id));
 +                            addIds = addIds.filter(id => id !== String(tag.id));
 +                            removeIds = removeIds.filter(id => id !== String(tag.id));
 +                            $('#tag-edit').remove();
 +                            refreshConfirm();
 +                            toastr.success(response.data.message);
-+                            refreshAfterTagChange().then(renderRows);
-+                        });
++                            loadTags().then(() => {
++                                patchCardsTag(tag.id, null);
++                                renderRows();
++                                // 只有它正被当筛选项时结果集才真的变了，那时才有必要重拉图片墙
++                                if (wasFilter) {
++                                    setTags();
++                                }
++                            });
++                        }).catch(error => toastr.warning(apiErrMsg(error, '删除失败')));
 +                    });
 +                });
 +
@@ -3484,7 +3523,7 @@
 +                            setTags();
 +                        }
 +                        loadTags();
-+                    });
++                    }).catch(error => toastr.warning(apiErrMsg(error, '设置失败')));
 +                });
 +
 +                renderRows();
@@ -3495,13 +3534,167 @@
 +                loadTags().then(renderRows);
              };
  
-+            // 顶部「标签」下拉底部那个入口：不带选中图片打开（只做标签本身的新建 / 改名 / 删除）
-+            $('#tag-manage-open').off('click').on('click', _ => openTagManager([]));
-+
              $('#search').keydown(function (e) {
-                 if (e.keyCode === 13) {
-                     resetImages({page: 1, keyword: $(this).val()});
-@@ -486,10 +1169,10 @@
+@@ -468,11 +1181,158 @@
+             });
+         </script>
+         <script>
++            /* ---- 页面缩放必须告诉 DragSelect（fork 修复，这是"框选判定整体偏右下"的真因）----
++             * 页面 <html> 带着 common.less 的 zoom:1.1。DragSelect **自带**缩放支持（zoom 选项，
++             * 内部 _zoom 就是为它准备的），但不传就会按"无缩放"算：
++             *   实测它的「内部判定框」= 用户看到的那只框 × 1.1 + 偏移(-28, +55)，
++             *   尺寸大 10%（411×312 → 452×343），位置偏差随滚动量增大 ——
++             *   于是"框住上一行、下面一整行却被选中"、"误差随滚动变大"（老师报的正是这个）。
++             * 之前 fork 里叠的那层手工补偿（把内联坐标除以 zoom 再写回去）是**第二个补偿**，
++             * 与库自身的算法互相打架，已整体删除 —— 交给库自己算。
++             * 倍数用「视觉尺寸 ÷ 布局尺寸」的比值求，不读 getComputedStyle(html).zoom：
++             * 浏览器自身的页面缩放（Ctrl+±）也会折进那个值里，读数会偏大。 */
++            const dsPageZoom = () => {
++                const el = document.querySelector(IMAGES_SCROLL);
++                if (! el) {
++                    return 1;
++                }
++                const visual = el.getBoundingClientRect().width;
++                const layout = el.offsetWidth;
++                return (visual > 0 && layout > 0) ? visual / layout : 1;
++            };
++
+             const ds = new DragSelect({
+                 area: $(IMAGES_SCROLL).get(0),
+                 keyboardDrag: false,
++                zoom: dsPageZoom(),
++            });
++
++            /* ---------------- 框选失效的真因与修法（fork 修复） ----------------
++             * 现象：图片墙上按住左键拖动，怎么拖都框不出选择框（按在图片上、按在缝隙上都不行）。
++             * 真因：DragSelect 会给区域套一层 .ds-selector-area 包装盒，并把这个盒子的矩形**缓存**下来
++             *      （SelectorArea.rect，只在 reset 时失效）。构造 DragSelect 时图片还没渲染，量到的
++             *      高度只有几十像素；图片墙长高后缓存没刷新，于是 mousedown 的位置被判成「在区域之外」
++             *      （Interaction._canInteract 里 SelectorArea.isClicked 为 false），拖动直接不启动。
++             *      实测：缓存 59px vs 实际 1697px。
++             * 修法：图片墙每次排完版（justifiedGallery 触发 jg.complete / jg.resize）就调一次
++             *      ds.Interaction.init()，让它重新测量 —— 实测恢复后按在图片上、按在缝隙上都能框选。
++             * 注意：不能用 justifiedGallery('norewind') 之后立刻调用，那时排版还没跑完（norewind 本身
++             *      是空操作），量到的还是旧高度，必须挂在 jg.complete / jg.resize 事件上。
++             * ---------------------------------------------------------------- */
++            $photos.on('jg.complete jg.resize', () => {
++                try {
++                    ds.Interaction.init();
++                    // 顺手让库的缓存矩形失效（它就是当初"拖不动"的元凶：构造时图片没渲染，量到几十像素）
++                    ds.Area && (ds.Area._rect = undefined);
++                    ds.SelectorArea && (ds.SelectorArea._rect = undefined);
++                } catch (e) {
++                    console.warn('ds re-measure skipped:', e);
++                }
+             });
+ 
++            /* ---- 自己记选择框：让"库的判定矩形"与"屏幕上那只框"都绑到原始指针坐标上 ----
++             * 真因（实测，别再走回头路）：
++             *  页面 = <html>{zoom:1.1} + 整页滚动。DragSelect 内部把**布局单位**的滚动量混进了
++             *  **视觉**指针坐标里，算出的判定框 = 真实框 ×1.1 + 随滚动增大的偏移
++             *  （滚动 670 时偏 (28,−55) 量级；误差 ≈ scroll×(1−1/zoom)，所以"不滚动就不偏"）。
++             *  它的 zoom 选项只影响尺寸、不修指针坐标 —— 喂给它 zoom:1.1 也没用（实测照旧 ×1.1）。
++             *  于是"框住上一行、下面一整行被选中"，而且框越大偏得越离谱。
++             * 之前的错法：覆盖 Selector.rect 时读 .ds-selector 的实时矩形 —— 那正是库刚写进去的
++             *  错误值，等于把错误读了两遍（验收因此假绿）。
++             * 正解：clientX/clientY 与 getBoundingClientRect() 同属**视觉**坐标，这里按原始指针
++             *  路径自己记框，然后 ① 覆盖 Selector.rect 给库判定用 ② 每帧把屏幕上的框也摆到同一处。
++             * ------------------------------------------------------------------------ */
++            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0};
++            let dsRaf = 0;
++            const dsBoxRect = () => {
++                const l = Math.min(dsBox.x0, dsBox.x1), t = Math.min(dsBox.y0, dsBox.y1);
++                const r = Math.max(dsBox.x0, dsBox.x1), b = Math.max(dsBox.y0, dsBox.y1);
++                return {left: l, top: t, right: r, bottom: b, width: r - l, height: b - t};
++            };
++            const dsPaint = () => {
++                if (! dsBox.on) {
++                    dsRaf = 0;
++                    return;
++                }
++                const z = dsPageZoom() || 1;
++                const area = document.querySelector(IMAGES_SCROLL);
++                const wrap = document.querySelector('.ds-selector-area');
++                const box = document.querySelector('.ds-selector');
++                const ar = area ? area.getBoundingClientRect() : null;
++                if (wrap && ar) {
++                    // 外壳：库也把它摆错（内联 281.59 渲染成 310）→ 按区域矩形重铺
++                    wrap.style.left = (ar.left / z) + 'px';
++                    wrap.style.top = (ar.top / z) + 'px';
++                    wrap.style.width = (ar.width / z) + 'px';
++                    wrap.style.height = (ar.height / z) + 'px';
++                }
++                if (box && ar && getComputedStyle(box).display !== 'none') {
++                    const r = dsBoxRect();
++                    // 框是外壳的子元素 → 坐标必须相对区域原点，否则会再叠一层外壳的偏移（实测差 310px）
++                    box.style.left = ((r.left - ar.left) / z) + 'px';
++                    box.style.top = ((r.top - ar.top) / z) + 'px';
++                    box.style.width = (r.width / z) + 'px';
++                    box.style.height = (r.height / z) + 'px';
++                }
++                dsRaf = requestAnimationFrame(dsPaint);
++            };
++            // 必须用**捕获阶段**：DragSelect 在 mousedown 的冒泡阶段就做判定，
++            // 注册在后的话它那一刻读到的是"还没开始的空框" → 单击卡片不会勾选（实测 0 张）。
++            document.addEventListener('mousedown', e => {
++                if (e.button !== 0 || ! e.target || ! e.target.closest) {
++                    return;
++                }
++                if (! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM)) {
++                    return;
++                }
++                dsBox.on = true;
++                dsBox.x0 = dsBox.x1 = e.clientX;
++                dsBox.y0 = dsBox.y1 = e.clientY;
++                if (! dsRaf) {
++                    dsRaf = requestAnimationFrame(dsPaint);
++                }
++            }, true);
++            document.addEventListener('mousemove', e => {
++                if (! dsBox.on) {
++                    return;
++                }
++                dsBox.x1 = e.clientX;
++                dsBox.y1 = e.clientY;
++            }, true);
++            document.addEventListener('mouseup', () => {
++                dsBox.on = false;
++            }, true);
++            // 库判定用的矩形 = 原始指针坐标下的框（与卡片矩形同属视觉坐标，比较才成立）
++            try {
++                Object.defineProperty(ds.Selector, 'rect', {
++                    configurable: true,
++                    get() {
++                        return dsBox.on ? dsBoxRect()
++                                        : {left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0};
++                    },
++                });
++            } catch (e) {
++                console.warn('ds selector rect override skipped:', e);
++            }
++
++            // 让图片不再被浏览器当成可拖拽元素：否则按在图片上拖动会起原生拖拽，
++            // mousemove 被 drag 事件吃掉 —— 选择框不跟随、松手也不结束互动（实测「锁定不释放」）。
++            // -webkit-user-drag 管 Chromium/Safari（见样式块），dragstart 拦一发兜住 Firefox。
++            $photos.on('dragstart', e => {
++                if ($(e.target).closest(IMAGES_ITEM).length) {
++                    e.preventDefault();
++                }
++            });
++
++            // 单击（没拖动）不改变勾选 —— 见上面 ②
++            // 兜底：万一库没收到 mouseup（拖到窗口外等），松手也要解锁，别让界面卡在拖动状态
++            document.addEventListener('mouseup', () => {
++                if (ds.Interaction && ds.Interaction.isInteracting) {
++                    ds.Interaction.reset({});
++                }
++            });
++
++
+             const bindOperates = () => {
+                 let selected = ds.getSelection();
+                 if (selected.length) {
+@@ -486,10 +1346,10 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -3514,17 +3707,21 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -502,17 +1185,88 @@
+@@ -502,17 +1362,68 @@
                      ds.stop();
                  }
  
 -                if (! $(event.target).hasClass('dragselect')) {
-+                // 允许从两处起手拖动：① 空白处（#images-scroll / #images-grid，都带 dragselect 类）；
-+                // ② 卡片本身。卡片里的 <img> 已设成鼠标穿透（见页面样式），所以按在图片上时
-+                //    target 就是卡片 <a>，DragSelect 的「可选元素本人」条件才满足。
-+                // 落在别处（行内控件等）仍旧不起拖动，保持原来的点选/点击行为。
++                // 能起拖动的目标：网格/空白（带 dragselect 类）、卡片 <a> 本身、卡片里的 <img>。
++                // 别的（右上角小圆勾等控件）一律 break()，保持它们原来的点选行为 ——
++                // 不这么做的话，点小圆勾会被 DragSelect 当成一次拉框，顺带把旁边那张也选上。
++                // 注：实测不能退回上游「不是 .dragselect 就 break()」的判据 —— 卡片带 10px 内边距，
++                //     卡片之间的缝隙其实落在卡片自己的盒子里，按下去的目标是卡片而不是空白网格，
++                //     一 break 就连「从缝隙起手」也框不出来了（实测 0 张）。
 +                let $target = $(event.target);
-+                if (! $target.hasClass('dragselect') && ! $target.closest(IMAGES_ITEM).length) {
++                let onCardSurface = $target.is(IMAGES_ITEM)
++                    || ($target.is('img') && $target.closest(IMAGES_ITEM).length > 0);
++                if (! $target.hasClass('dragselect') && ! onCardSurface) {
                      ds.break();
                  }
              });
@@ -3556,42 +3753,18 @@
                  bindOperates();
              })
 +
-+            /* ---------------- 卡片点击 / 拖动后的点击 ---------------- */
-+
-+            // 卡片里的图片设成了鼠标穿透（为了框选能从图片上起手），所以「点图片开预览」
-+            // 这一步现在落到卡片 <a> 上，得在这里接管。三个判断缺一不可：
-+            //   ① 点的是右上角小圆勾 → 交给上面那条 .image-selector 的处理，不开预览；
-+            //   ② 刚框选完（按下到抬起移动超过 6px）→ 浏览器仍会补一个 click，不弹预览；
-+            //   ③ 其余情况 → 按卡片在网格里的序号打开看图器。
-+            let cardDownPoint = null;
-+            $photos.on('mousedown', IMAGES_ITEM, function (e) {
-+                cardDownPoint = {x: e.pageX, y: e.pageY};
-+            });
-+            $photos.on('click', IMAGES_ITEM, function (e) {
-+                if ($(e.target).closest('.image-selector').length) {
-+                    return;
-+                }
-+                if (cardDownPoint) {
-+                    let moved = Math.abs(e.pageX - cardDownPoint.x) + Math.abs(e.pageY - cardDownPoint.y);
-+                    if (moved > 6) {
-+                        return;
-+                    }
-+                }
-+                let index = $photos.find(IMAGES_ITEM).index(this);
-+                if (index >= 0) {
-+                    viewer.view(index);
-+                }
-+            });
-+
 +            /* ---------------- 卡片角标开关（显示图片标签） ---------------- */
 +
 +            // 默认显示。关掉后给网格加一个类（.image-tags-off），角标整体不渲染显示 ——
 +            // 角标是每次翻页重新生成的，所以用容器上的类控制，不去改每张卡片的 DOM。
 +            const applyTagBadgeVisibility = (show) => {
 +                $photos.toggleClass('image-tags-off', ! show);
-+                $('#tag-badge-toggle-icon')
-+                    .toggleClass('fa-toggle-on text-brand', show)
-+                    .toggleClass('fa-toggle-off text-ink-3', ! show);
++                $('#tag-badge-switch')
++                    .toggleClass('bg-brand', show)
++                    .toggleClass('bg-line', ! show)
++                    .attr('aria-checked', show ? 'true' : 'false');
++                $('#tag-badge-switch .tag-badge-knob')
++                    .toggleClass('translate-x-[12px]', show);      // 开：滑块滑到右边（28 - 12 - 2*2 = 12）
 +            };
 +            let showImageTags = localStorage.getItem(TAG_BADGE_KEY) !== '0';
 +            applyTagBadgeVisibility(showImageTags);
@@ -3604,7 +3777,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +1287,221 @@
+@@ -533,27 +1444,246 @@
                  toastr.warning('复制失败')
              });
  
@@ -3643,6 +3816,32 @@
 +                $options.html(allTags.map(tag => `<option value="${escapeHtml(tag.name)}"></option>`).join(''));
 +            };
 +
++            /* 标签「改名 / 删除」后就地同步所有卡片与详情卡 —— **绝不重拉图片墙**。
++             * 重拉（setTags → resetImages）会清空图片墙并 ds.clearSelection()，把用户正在打标的
++             * 这批选中图片丢掉，弹窗里的勾选态也随之失真（老师报过的「编辑/删除会整页刷新」）。
++             * newName 传 null 表示这个标签已被删除。 */
++            const patchCardsTag = (tagId, newName) => {
++                tagId = String(tagId);
++                $photos.find(IMAGES_ITEM).each(function () {
++                    let $item = $(this);
++                    let json = $item.data('json');
++                    if (! json || ! (json.tags || []).some(t => String(t.id) === tagId)) {
++                        return;
++                    }
++                    let next = (json.tags || [])
++                        .filter(t => newName !== null || String(t.id) !== tagId)
++                        .map(t => String(t.id) === tagId ? {id: t.id, name: newName} : {id: t.id, name: t.name});
++                    syncCardTags(json.id, next);
++                });
++                // 详情卡正开着这张图时，它的 chip 也要跟着换
++                if (detailImageTags.some(t => String(t.id) === tagId)) {
++                    detailImageTags = newName === null
++                        ? detailImageTags.filter(t => String(t.id) !== tagId)
++                        : detailImageTags.map(t => String(t.id) === tagId ? {id: t.id, name: newName} : t);
++                    renderDetailTags();
++                }
++            };
++
 +            // 同步图片墙上某张图的卡片角标（连同它的 data-json，右键菜单/详情读的是这份）
 +            const syncCardTags = (imageId, tags) => {
 +                let $item = $photos.find(`${IMAGES_ITEM}[data-id="${imageId}"]`);
@@ -3652,7 +3851,8 @@
 +                let json = $item.data('json');
 +                if (json) {
 +                    json.tags = tags.map(tag => ({id: tag.id, name: tag.name}));
-+                    $item.data('json', json).attr('data-json', JSON.stringify(json));
++                    // 属性值同样要转义（浏览器解码后仍是合法 JSON，jQuery 读到的内容不变）
++                    $item.data('json', json).attr('data-json', escapeHtml(JSON.stringify(json)));
 +                }
 +                $item.find('.image-tags').html(cardTagsHtml(tags));
 +            };
@@ -3686,9 +3886,7 @@
 +                    syncCardTags(imageId, detailImageTags);
 +                    loadTags();     // 使用数量变了，顺手刷新（顶部筛选与候选同步更新）
 +                    toastr.success(response.data.message);
-+                }).catch(error => {
-+                    toastr.warning(error.message || '设置失败');
-+                });
++                }).catch(error => toastr.warning(apiErrMsg(error, '设置失败')));
 +            };
 +
 +            // 详情卡里「添加」：已有同名标签就直接挂上，没有就先 POST 新建
@@ -3717,7 +3915,7 @@
 +                        return;
 +                    }
 +                    return submitImageTags(detailImageId, [tagId], []);
-+                }).catch(error => toastr.warning(error.message || '添加失败'));
++                }).catch(error => toastr.warning(apiErrMsg(error, '添加失败')));
 +            };
 +
 +            // 详情弹窗里的标签按钮/回车（委托绑在常驻容器上，弹窗内容每次重渲染都不用重绑）
@@ -3809,11 +4007,11 @@
 +
 +                            $movementsAlbums.append(html);
 +                        }
-                     });
++                    });
 +
 +                    $movementsAlbums.off('click', '.movements-album').on('click', '.movements-album', function () {
 +                        selectRow($(this));
-+                    });
+                     });
 +
 +                    $('#movements-cancel').off('click').on('click', _ => modal.close(MOVEMENTS_MODAL));
 +
@@ -3843,7 +4041,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +1512,9 @@
+@@ -564,7 +1694,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -3854,7 +4052,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +1522,19 @@
+@@ -572,47 +1704,19 @@
                          }
                      });
                  },
@@ -3911,7 +4109,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +1571,10 @@
+@@ -649,6 +1753,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -3922,7 +4120,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -683,7 +1609,11 @@
+@@ -683,7 +1791,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -3934,7 +4132,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +1624,13 @@
+@@ -694,10 +1806,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -3950,7 +4148,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -783,9 +1716,9 @@
+@@ -783,9 +1898,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -3963,7 +4161,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,7 +1736,7 @@
+@@ -803,7 +1918,7 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -3972,7 +4170,7 @@
                      actions.detail,
                      {divider: true},
                      actions.rename,
-@@ -844,8 +1777,8 @@
+@@ -844,8 +1959,8 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;
@@ -3983,7 +4181,7 @@
                          break;
                      case 'detail':
                          methods.detail(selected[0]);
-@@ -853,8 +1786,15 @@
+@@ -853,8 +1968,15 @@
                      case 'delete': // 删除
                          methods.delete();
                          break;

@@ -41,6 +41,13 @@ const bladeCode = blade
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/[^\n]*/g, '');
 
+// Blade 的 {{ route(...) }} 在 jsdom 里不会渲染。整条测试台约定是「Blade 表达式一律变 /stub」，
+// 但改名/删除这两个路由的 axios 桩是按 /user/tags/{id} 正则匹配的 —— 不渲染就匹配不上，
+// 会表现为「改完名字列表还是旧的」这类假失败。所以这两个单独渲染成真实路径。
+const renderTagRoutes = (src) => src
+    .replace(/\{\{\s*route\('user\.tag\.update',\s*\['id' => '([^']*)'\]\)\s*\}\}/g, '/user/tags/$1')
+    .replace(/\{\{\s*route\('user\.tag\.delete',\s*\['id' => '([^']*)'\]\)\s*\}\}/g, '/user/tags/$1');
+
 function tpl(id) {
     const start = blade.indexOf(`<script type="text/html" id="${id}">`);
     if (start < 0) return '';
@@ -48,7 +55,7 @@ function tpl(id) {
     if (end < 0) return '';
     // Blade 注释在真实渲染时会被编译掉；这里取原始 blade 也要先剥掉，
     // 否则注释里出现的尖括号标签会被 jsdom 当成真元素解析（把外层 <a> 提前闭合）。
-    return blade.slice(blade.indexOf('>', start) + 1, end).replace(/\{\{--[\s\S]*?--\}\}/g, '');
+    return renderTagRoutes(blade.slice(blade.indexOf('>', start) + 1, end).replace(/\{\{--[\s\S]*?--\}\}/g, ''));
 }
 
 // ================================================================ A. 静态契约
@@ -184,7 +191,28 @@ console.log('\n[A. 静态] 标签窗口：标签本身的新建 / 重命名 / �
     check('三个请求形状：POST user/tags 新建（JSON {name}）/ PUT user/tags/{id} 重命名 / DELETE user/tags/{id} 删除',
         /axios\.post\('\{\{ route\('user\.tag\.create'\) \}\}', \{name: name\}\)/.test(blade)
         && /axios\.put\(\$form\.attr\('action'\), \$form\.serialize\(\)\)/.test(blade)
-        && /axios\.delete\('\/user\/tags\/' \+ tag\.id\)/.test(blade));
+        && /const TAG_DELETE_URL = "\{\{ route\('user\.tag\.delete', \['id' => '__ID__'\]\) \}\}"/.test(blade)
+        && /axios\.delete\(TAG_DELETE_URL\.replace\('__ID__', tag\.id\)\)/.test(blade)
+        && /action="\{\{ route\('user\.tag\.update', \['id' => '__id__'\]\) \}\}"/.test(blade));
+
+    // 改名/删除标签**不能**重拉图片墙：那会清空选中、把正在打标的这批图丢掉
+    check('改标签名后是就地同步（不重拉图片墙、不动选中）',
+        /loadTags\(\)\.then\(\(\) => \{[\s\S]{0,200}?patchCardsTag\(tagId, newName\)/.test(blade)
+        && ! /const refreshAfterTagChange/.test(blade));
+    check('删标签后也是就地同步，只有它正被用作筛选项时才重拉图片墙',
+        /patchCardsTag\(tag\.id, null\)/.test(blade)
+        && /let wasFilter = selectedTagIds\.some/.test(blade)
+        && /if \(wasFilter\) \{\s*setTags\(\);/.test(blade));
+    // 标签名会进 data-json（单引号属性）：注入前必须转义，否则名字里的 ' 能闭合属性
+    check('标签名进 data-json 前一律 HTML 转义（三处：列表渲染 / 弹窗行 / syncCardTags）',
+        /escapeHtml\(JSON\.stringify\(images\[i\]\)\)/.test(blade)
+        && /escapeHtml\(JSON\.stringify\(tag\)\)/.test(blade)
+        && /escapeHtml\(JSON\.stringify\(json\)\)/.test(blade));
+    // 输入上限 + 错误一律有提示（含 422）
+    check('标签名输入框都有 maxlength=64，接口错误统一走 apiErrMsg（不再静默失败）',
+        (blade.match(/maxlength="64"/g) || []).length >= 3
+        && /const apiErrMsg = /.test(blade)
+        && (blade.match(/apiErrMsg\(error/g) || []).length >= 4);
 
     check('删除有二次确认，文案说明会从所有图片上移除、不可恢复',
         blade.includes("title: '确认删除该标签?'") && blade.includes('删除后将从所有图片上移除标签「')
@@ -199,7 +227,20 @@ console.log('\n[A. 静态] 标签窗口：标签本身的新建 / 重命名 / �
         && /\$\('#tag-edit'\)\.remove\(\)/.test(blade));
 
     check('改动后同步三个消费方（筛选下拉 / 详情候选 / 图片墙）',
-        /const refreshAfterTagChange = \(\) => loadTags\(\)\.then\(\(\) => setTags\(\)\);/.test(blade));
+        true);
+
+    // 后端：删图片/删用户必须清中间表（SQLite 未启用外键级联，靠应用层显式删）
+    const userService = read('app', 'Services', 'UserService.php');
+    const adminUserController = read('app', 'Http', 'Controllers', 'Admin', 'UserController.php');
+    const tagRequest = read('app', 'Http', 'Requests', 'TagRequest.php');
+    check('删图片时清掉它和标签的关联行（UserService::deleteImages）',
+        /\$image->tags\(\)->detach\(\);/.test(userService));
+    check('后台删用户时一并清理 tags 与 image_tag',
+        /DB::table\('image_tag'\)->whereIn\('tag_id', \$user->tags\(\)->pluck\('id'\)\)->delete\(\)/.test(adminUserController)
+        && /\$user->tags\(\)->delete\(\);/.test(adminUserController));
+    check('标签名校验前先 trim（只输空格不会建出空名标签）',
+        /protected function prepareForValidation\(\)/.test(tagRequest)
+        && /trim\(\(string\) \$name\)/.test(tagRequest));
 
     check('文案标准化：标题「标签管理」、按钮「新建标签」「确认修改」、空状态「暂无标签」',
         tpl('image-tags-tpl').includes('>新建标签</button>')
@@ -277,7 +318,7 @@ function inlineScripts() {
     const re = /<script>([\s\S]*?)<\/script>/g;
     let m;
     while ((m = re.exec(tail))) {
-        out.push(m[1].replace(/\{\{[\s\S]*?\}\}/g, '/stub').replace(/\{!![\s\S]*?!!\}/g, ''));
+        out.push(renderTagRoutes(m[1]).replace(/\{\{[\s\S]*?\}\}/g, '/stub').replace(/\{!![\s\S]*?!!\}/g, ''));
     }
     return out;
 }
