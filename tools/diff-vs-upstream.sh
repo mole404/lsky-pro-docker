@@ -179,7 +179,7 @@ src/resources/views/components/table.blade.php
 src/resources/views/components/textarea.blade.php
 #   src/resources/views/components/upload.blade.php
 src/resources/views/components/upload.blade.php
-#   src/resources/views/install.blade.php
+#   src/resources/views/install.blade.php（安装向导：默认数据库类型改成 SQLite + 加载时联动一次；成功页加本 fork 仓库链接）
 src/resources/views/install.blade.php
 #   src/resources/views/layouts/app.blade.php
 src/resources/views/layouts/app.blade.php
