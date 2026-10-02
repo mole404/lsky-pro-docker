@@ -114,4 +114,4 @@ docker run -d --name lsky-pro --restart unless-stopped \
 
 **非官方镜像，自用为主**  
 **使用前请自行判断是否符合你的需求与合规要求**  
-**如果有其他需求，请自行 Fork 修改，本人不提供维护保障，不处理 issue 和 PR**
+**如果有其他需求，请自行 Fork 修改，本人不提供维护保障，不保证处理 issue 和 PR**
