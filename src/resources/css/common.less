@@ -637,6 +637,21 @@ html.dark {
     html .ls-zoom-mt-0 {
         margin-top: 0;
     }
+
+    // 看图控件（Viewer.js，user/images.blade.php:536 的 new Viewer）吃的是同一个 zoom：
+    // 它的 .viewer-container 是 position:fixed + inset:0 的「一屏大」盒子，110% 下和
+    // .min-h-screen 一样会渲染成 1.1 屏；而它内部由 JS 用布局单位做居中 ⇒ 居中的结果
+    // 整体向右下各偏 5%（1280 宽下约 +64px，用户看到的就是「左键打开图片左右不居中」）。
+    // 除以 1.1 后盒子渲染出来正好一屏，内部居中随之归位。
+    // 容器里的 canvas / backdrop / footer 都是它自己的 inset:0 子元素，跟着一起归位，
+    // 不需要另写规则；<768px 无 zoom，故只写在桌面这条 @media 里。
+    // 带 `html ` 前缀：viewer.min.css 是页面里 @push('styles') 的外链样式表，(0,1,0) 会输给它。
+    html .viewer-container {
+        right: auto;
+        bottom: auto;
+        width: calc(100% / 1.1);
+        height: calc(100% / 1.1);
+    }
 }
 
 // ---------------------------------------------------------------------------
