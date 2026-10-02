@@ -20,7 +20,7 @@
 
 ## 快速开始
 
-Docker Compose：
+Docker Compose（推荐）：
 
 ```yaml
 services:
@@ -36,7 +36,7 @@ services:
       - WEB_PORT=8089
 ```
 
-等价的 `docker run`：
+或使用等价的 `docker run`：
 
 ```bash
 docker run -d --name lsky-pro --restart unless-stopped \
