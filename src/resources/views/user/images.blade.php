@@ -642,6 +642,64 @@
                 document.addEventListener('touchcancel', () => { navDown = false; }, true);
             })();
 
+            /* 触摸端切图阈值接管（老师定的三条规则）：
+             *   未放大：横划跟手，松手时 |dx| ≥ 40px 且明显横向才切图，否则弹回原位；
+             *   放大后：拖动看图照旧（库自己的 ACTION_MOVE），横划 ≥ 80px 且明显横向才切图；
+             *   竖直滑永远不切图。
+             * 为什么要在外面接管：库把阈值硬编码成 1px（others.js 的 change()：
+             * absoluteOffsetX > 1 && > |offsetY|），而且"这一下是切图还是拖动"在 pointerdown
+             * 就按"图片有没有超出屏幕"定死了 ⇒ 未放大时几乎必然判成切图（稍动就切）、
+             * 放大后又必然判成拖动（切不了）。老师反馈"阈值区间摸不透"就是这个不自洽。
+             * 做法：库的"跟手滑动"保留不动，只在松手时若不够格就把切过去的那张 view() 回来
+             *（观感就是弹回原位）；放大后库不切，由本层按 80px 判定补一次 view()。
+             * 注意用 pointer 事件（与库同一套），判断范围限定在 .viewer-canvas 内，不碰缩略图条。 */
+            (function () {
+                const SWIPE_NOT_ZOOMED = 40;   // 未放大：划够这么多才切
+                const SWIPE_ZOOMED = 80;       // 放大后：更钝一点，避免和拖动打架
+                const DIRECTION_RATIO = 1.2;   // |dx| 要明显大于 |dy| 才算横划
+                let downX = 0;
+                let downY = 0;
+                let downIndex = null;
+                let zoomed = false;
+                let qualified = false;
+                const inCanvas = (el) => el instanceof Element && !!el.closest('.viewer-canvas');
+                const isZoomed = () => {
+                    const im = document.querySelector('.viewer-canvas img');
+                    const c = document.querySelector('.viewer-canvas');
+                    if (!im || !c) return false;
+                    return im.getBoundingClientRect().width > c.getBoundingClientRect().width + 2;
+                };
+                document.addEventListener('pointerdown', (e) => {
+                    if (!inCanvas(e.target)) return;
+                    downX = e.clientX;
+                    downY = e.clientY;
+                    downIndex = viewer.index;
+                    zoomed = isZoomed();
+                    qualified = false;
+                }, true);
+                document.addEventListener('pointermove', (e) => {
+                    if (downIndex === null) return;
+                    const dx = e.clientX - downX;
+                    const dy = e.clientY - downY;
+                    const need = zoomed ? SWIPE_ZOOMED : SWIPE_NOT_ZOOMED;
+                    qualified = Math.abs(dx) >= need && Math.abs(dx) > Math.abs(dy) * DIRECTION_RATIO;
+                }, true);
+                document.addEventListener('pointerup', (e) => {
+                    if (downIndex === null) return;
+                    const from = downIndex;
+                    const dx = e.clientX - downX;
+                    downIndex = null;
+                    if (qualified) {
+                        // 放大时库不会自己切（它判成拖动），由这里补一次
+                        if (zoomed) viewer.view(viewer.index + (dx < 0 ? 1 : -1));
+                        return;
+                    }
+                    // 不够格：库可能已经"跟手切过去"了，把它弹回原位
+                    if (!zoomed && viewer.index !== from) viewer.view(from);
+                }, true);
+                document.addEventListener('pointercancel', () => { downIndex = null; }, true);
+            })();
+
             /* 双击放大：库里的「模拟双击」（handlers.js:424-451）只看两次抬手的间隔（硬编码 500ms），
              * 完全不检查中间有没有拖动 ⇒ 连续拖动两下也会被当成双击放大。这里在外面收口（不改库）：
              *   1. 抬手时用「起点→终点」的位移判断这一下是轻点还是拖动。阈值 30px 的依据是实测：
