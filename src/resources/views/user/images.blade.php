@@ -704,15 +704,42 @@
                         }
                     }
                     if (!full) return;
+
+                    // ── 小图分流（老师定的规则）───────────────────────────────
+                    //   像素 ≥ 1,440,000  或  体积 ≥ 1024KB(1MB)  ⇒ 达标：走缩略图路 + 450ms 闸门
+                    //   两个都 < 及以上阈值                     ⇒ 未达标：小图优化，不等闸门直接上原图
+                    //   读不到元数据 ⇒ 保守当作"达标"，走安全路（绝不卡顿）
+                    let small = false;
+                    {
+                        const card = shown.closest ? null : null;
+                        const cards2 = document.querySelectorAll('#images-grid .images-item, .images-item');
+                        let host = null;
+                        for (let k2 = 0; k2 < cards2.length; k2++) {
+                            const im2 = cards2[k2].querySelector('img');
+                            if (im2 && im2.getAttribute('src') === cur) { host = cards2[k2]; break; }
+                        }
+                        if (host) {
+                            let meta = {};
+                            try { meta = JSON.parse(host.getAttribute('data-json')) || {}; } catch (e) { meta = {}; }
+                            const w = Number(meta.width) || 0, h = Number(meta.height) || 0;
+                            const kb = Number(meta.size) || 0;
+                            if (w > 0 && h > 0 && kb > 0) {
+                                const px = w * h;
+                                small = (px < 1440000) && (kb < 1024);
+                            }
+                        }
+                    }
+
                     // 时间闸门：过渡动画固定 0.3s（CSS 写死、与设备无关）。
                     // 若网速极快或原图已缓存，onload 可能在动画中途就回来，那时换图会把
-                    // 巨图提前塞进动画帧 ⇒ 又变卡。故给每个 <img> 打上"出现时刻"，
-                    // 450ms 内一律不换，确保动画期间显示的始终是缩略图。
+                    // 巨图提前塞进动画帧 ⇒ 又变卡。故给每个 <img> 打上"出现时刻"：
+                    // 达标的图 450ms 内一律不换；小图优化则闸门为 0（立刻换，不产生那一下延迟）。
+                    const gate = small ? 0 : 450;
                     if (!shown.getAttribute('data-shown-at')) {
                         shown.setAttribute('data-shown-at', String(Date.now()));
-                        return;
+                        if (gate > 0) return;      // 达标的图：先记录时刻，下一轮再来
                     }
-                    if (Date.now() - Number(shown.getAttribute('data-shown-at')) < 450) return;
+                    if (Date.now() - Number(shown.getAttribute('data-shown-at')) < gate) return;
                     const rec = state[full] || {};
                     if (rec.done) {                                       // 之前成功过，直接换（走缓存）
                         shown.setAttribute('data-full', '1');
