@@ -214,5 +214,5 @@ return [
     */
 
     'version' => 'v3.2',
-    'author'  => 'mole404',
+    'author'  => 'Mole404 & DeepSeek & Claude',
 ];
