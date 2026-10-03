@@ -655,6 +655,7 @@
                 const FAR_MIN = 56;        // 或至少这么多 px
                 const FAST_SPEED = 0.5;    // 够快：px/ms
                 let g = null;
+                let guardClick = 0;   // 刚切过图的时刻：用来吞掉随后那发背景 click
                 const inCanvas = (el) => el instanceof Element && !!el.closest('.viewer-canvas');
                 const isFit = () => {
                     const d = viewer.imageData;
@@ -679,11 +680,26 @@
                     const far = Math.abs(dx) > Math.max(FAR_MIN, window.innerWidth * FAR_RATIO);
                     const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 30;
                     if ((far || fast) && Math.abs(dx) > Math.abs(dy) * 1.5) {
+                        /* 先复位平移再切图：库用 marginTop/marginLeft 定位，拖动平移过之后
+                         * 直接切图，新图会从被平移的偏移量开始做 transition ⇒ 观感上是
+                         * "从偏上的位置飞出来"（手指带纵向位移时最明显）。 */
+                        viewer.reset();
                         if (dx < 0) viewer.next(false); else viewer.prev(false);
+                        guardClick = Date.now();                          // 标记：刚刚切过图
                     } else if (dx !== 0 || dy !== 0) {
                         viewer.reset();                                   // 带动画的回弹
                     }
                 }, false);
+                /* 手指在图片外空白处结束时，浏览器会补一发 click 落到背景上，库因此关闭查看器 ——
+                 * 于是"切图成功"和"退出查看"同时发生。这里只吞紧跟切图之后那 400ms 内的背景 click，
+                 * 且点在图片上的不算，避免误伤正常点击关闭。 */
+                document.addEventListener('click', (e) => {
+                    if (Date.now() - guardClick > 400) return;
+                    if (e.target instanceof Element && e.target.closest('.viewer-canvas img')) return;
+                    guardClick = 0;
+                    e.stopPropagation();
+                    e.preventDefault();
+                }, true);
             })();
 
             /* 双击放大：库里的「模拟双击」（handlers.js:424-451）只看两次抬手的间隔（硬编码 500ms），
