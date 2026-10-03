@@ -127,25 +127,14 @@ function boot({ wallGeometry = true } = {}) {
 {
     check('抽到的 infiniteScroll 就是 app.js 里那份（含 useWindowScroll 与两个分支）',
         METHOD_BODY.includes("const useWindowScroll = options.root === 'window';")
-        && METHOD_BODY.includes("$(window).on('scroll.infiniteScroll', onScroll)")
-        && METHOD_BODY.includes("$(selector).on('scroll.infiniteScroll', onScroll)")
-        // fork：这两条改成链式绑定了（后面多挂了一层 .on(ARM_EVENTS, arm)，见下方"重排后临时锁"），
-        // 所以断言不再要求以分号结尾，只要求确实绑在那个命名空间上。
-        && METHOD_BODY.includes('ARM_EVENTS'),
+        && METHOD_BODY.includes("$(window).on('scroll.infiniteScroll', onScroll);")
+        && METHOD_BODY.includes("$(selector).on('scroll.infiniteScroll', onScroll);"),
         `${APP_JS}`);
-    // fork 更新：window 分支现在先把 top 取出来再比较（为了在比较前判断是否离开视口以解临时锁），
-    // 语义不变 —— 仍是「哨兵相对可视视口的位置」判定，故改成分别检查这两块。
-    check('window 分支仍用哨兵相对可视视口的位置判定（getBoundingClientRect().top 与 innerHeight + offset）',
+    check('window 分支改用哨兵相对可视视口的位置（getBoundingClientRect().top <= innerHeight + offset）',
         METHOD_BODY.includes("$(selector).find('.infinite-scroll').last()")
-        && METHOD_BODY.includes('getBoundingClientRect().top')
-        && METHOD_BODY.includes('window.innerHeight + offset')
-        && METHOD_BODY.includes('armed'));
-    // fork 更新：容器分支现在先判断「没到底就解锁并返回」，再在 armed 时才加载（见"重排后临时锁"），
-    // 不再是一行 if。语义不变 —— 滚到底仍然是触发加载的判据，故改成分别检查判定式与 armed 门。
-    check('容器滚动分支仍以「滚到底」为触发判据（this.scrollTop + height >= scrollHeight - offset）',
-        METHOD_BODY.includes('this.scrollTop + $(selector).height()')
-        && METHOD_BODY.includes('this.scrollHeight - offset')
-        && METHOD_BODY.includes('armed'));
+        && METHOD_BODY.includes('getBoundingClientRect().top <= window.innerHeight + offset'));
+    check('容器滚动分支原封不动（this.scrollTop + $(selector).height() >= this.scrollHeight - offset）',
+        METHOD_BODY.includes('if (this.scrollTop + $(selector).height() >= this.scrollHeight - offset) {'));
     check('找不到哨兵时退回老公式（别把自己搞死），offset 默认值仍为 30',
         METHOD_BODY.includes('$(document).height() - offset')
         && METHOD_BODY.includes('let offset = options.offset || 30;'));

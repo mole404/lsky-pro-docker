@@ -73,16 +73,6 @@ window.utils = {
                 loading: false,
                 finished: false,
             };
-            // 「用户是否已经有过真实输入」。滚动到底自动加载依赖「哨兵进入视口」这一个判据，
-            // 而图墙被清空重排（换筛选/换排序/刷新）时页面会瞬间变极短，哨兵必然落在视口里，
-            // 此后每一次滚动事件都满足条件 ⇒ 一页接一页连着拉，表现就是「无脑滚到底」
-            // （安卓 Edge 重排期间滚动事件更密，只有它中招）。
-            // 对策：重排之后必须先有用户的真实输入（滚轮/触摸滑动/按键）才恢复自动加载；
-            // 程序化滚动与重排自身引发的 scroll 事件不算数。点哨兵手动加载不受影响。
-            // 初始必须为 true：页面正常加载后用户下滑就该自动加载，不能一进页面就锁住。
-            // 只在重排（refresh/reset）之后才置 false。
-            let armed = true;
-            const arm = () => { armed = true; };
             // 哨兵（列表末尾那行「加载更多 / 我也是有底线的~」）的专属类：click 委托只认它，
             // 不再用「容器内任意 span」—— 否则列表行里任何一个 span（相册名、徽标…）被点都会
             // 误触发加载。模板一行都不用改：哨兵是这里自己插进容器的。
@@ -131,7 +121,6 @@ window.utils = {
             let load = (params, force) => {
                 if (!force) {
                     if (props.loading || props.finished) return;
-                    if (!armed) return;      // 重排/恢复位置引起的程序化滚动不算数，等用户真实滚动一次
                 }
                 if (typeof options.data === 'function') {
                     opts.data = options.data(opts.data) || {};
@@ -171,14 +160,7 @@ window.utils = {
                     // 回归测试：infinite-scroll-bottom-mobile.test.mjs
                     const $sentinel = $(selector).find('.infinite-scroll').last();
                     if ($sentinel.length > 0) {
-                        const top = $sentinel[0].getBoundingClientRect().top;
-                        // 哨兵已经不在视口里（页面重新长高／用户滚上去了）⇒ 解除重排后的临时锁，
-                        // 之后凡是滑到底都照常自动加载。这样既不误伤正常下滑，也不让重排后的
-                        // 「页面极短 + 任何 scroll 事件」连拉到底。
-                        if (top > window.innerHeight + offset) {
-                            armed = true;
-                        }
-                        if (top <= window.innerHeight + offset && armed) {
+                        if ($sentinel[0].getBoundingClientRect().top <= window.innerHeight + offset) {
                             load();
                         }
                         return;
@@ -190,37 +172,28 @@ window.utils = {
                     }
                     return;
                 }
-                if (this.scrollTop + $(selector).height() < this.scrollHeight - offset) {
-                    armed = true;      // 没到底 ⇒ 解锁（同 window 版的语义）
-                    return;
-                }
-                if (armed) {
+                if (this.scrollTop + $(selector).height() >= this.scrollHeight - offset) {
                     load();
                 }
             };
-            const ARM_EVENTS = 'wheel.infiniteScroll touchmove.infiniteScroll keydown.infiniteScroll';
             if (useWindowScroll) {
-                $(window).on('scroll.infiniteScroll', onScroll).on(ARM_EVENTS, arm);
+                $(window).on('scroll.infiniteScroll', onScroll);
             } else {
-                $(selector).on('scroll.infiniteScroll', onScroll).on(ARM_EVENTS, arm);
+                $(selector).on('scroll.infiniteScroll', onScroll);
             }
 
             return {
                 refresh(params) {
-                    armed = false;              // 重排后要求用户再真实滚动一次
                     load(params, true);
                 },
                 reset() {
-                    armed = false;              // 同上
                     opts.data = {page: 1};
                     props.loading = false;
                     props.finished = false;
-                    load(undefined, true);
+                    load();
                 },
                 destroy() {
                     $(selector).off('scroll.infiniteScroll').off('click.infiniteScroll')
-                        .off('wheel.infiniteScroll touchmove.infiniteScroll keydown.infiniteScroll')
-                    $(window).off('wheel.infiniteScroll touchmove.infiniteScroll keydown.infiniteScroll')
                     // 谁注册谁解绑：window 版把监听挂在 window 上，容器版（相册弹窗/移动到相册
                     // 列表）挂在自己的 selector 上。原来这行是无条件的 —— 容器版一 destroy
                     // 就把图片墙的整页滚动监听一起摘掉了（相册弹窗开→关之后，滚到底不再自动
