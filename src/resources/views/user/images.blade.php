@@ -722,7 +722,26 @@
                         } catch (e) {}
                     };
                     apply();
-                    [60, 200, 500].forEach(function (d) { setTimeout(apply, d); });
+                    // 固定延时不可靠：库是在「图片加载完成」时才写标题，那时我们早跑完了，
+                    // 于是会先闪一下缩略图的数值。改为盯着标题节点 —— 库一写就立刻盖掉，
+                    // 零延迟；下面的定时器只作兜底（防止观察器被库重建节点而失效）。
+                    try {
+                        const host = document.querySelector('.viewer-container') || document.body;
+                        if (host && !host.__titleWatcher) {
+                            const obs = new MutationObserver(function () {
+                                const t = document.querySelector('.viewer-title');
+                                if (!t || !viewer.imageData) return;
+                                const w = viewer.imageData.naturalWidth, h = viewer.imageData.naturalHeight;
+                                if (!w || !h) return;
+                                const nm = (t.textContent || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+                                const want = nm + ' (' + w + ' × ' + h + ')';
+                                if (t.textContent !== want) t.textContent = want;
+                            });
+                            obs.observe(host, { childList: true, subtree: true, characterData: true });
+                            host.__titleWatcher = obs;
+                        }
+                    } catch (e) {}
+                    [60, 200, 500, 1200].forEach(function (d) { setTimeout(apply, d); });
                 };
 
                 const upgrade = function () {
