@@ -32,7 +32,7 @@
 
 # 上游源码快照的版本号（只用于版本标记与镜像元数据；代码本体是仓库里的 src/）。
 # 改这里 = 必须同时用 tools/vendor-upstream.sh 重新 vendor src/，否则标记与实际代码不符（自证 1 会失败）。
-ARG LSKY_COMMIT=b0548556cd8ec7067f5313243000792655174953
+ARG LSKY_COMMIT=38d52c4609eb85236b45ac75acac2ced55174953
 # PHP 版本：8.1 已于 2025-12-31 EOL，8.2 的 EOL 是 2026-12-31（都太近），
 # 所以选 8.3（安全维护到 2027-12-31）。依赖侧配套升到同一大版本线内的最新：
 # laravel/framework 9.52.22（9.x 最后一个补丁）+ symfony/* 6.4 LTS（Laravel 9 的 ^6.0 正好允许）。
@@ -165,7 +165,7 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 RUN printf '%s\n' \
         'c0e513ec8e93fd81b34b3c6de5cf5eb8  ./public/js/context-js/context-js.js' \
         'c0e513ec8e93fd81b34b3c6de5cf5eb8  ./resources/js/context-js.js' \
-        '1584639c049acb02ee812244f95bd7c6  ./resources/views/user/images.blade.php' \
+        'b0548556cd8ec7067f53132430007926  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -208,7 +208,7 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
         "context_js_md5=c0e513ec8e93fd81b34b3c6de5cf5eb8" \
-        "images_blade_md5=1584639c049acb02ee812244f95bd7c6" \
+        "images_blade_md5=b0548556cd8ec7067f53132430007926" \
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
