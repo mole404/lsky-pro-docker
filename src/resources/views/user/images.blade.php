@@ -538,6 +538,16 @@
                 // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
                 // 控件重建画布/缩略图条 ⇒ iOS 整个界面左偏、安卓缩略图全空，见后续修复记录）
                 loop: false,
+                // focus: false —— Claude 定位 + 真机对照验证：
+                // view() 在摆放缩略图条之前会先对目标缩略图的 <li> 调 .focus()（源码 s.focus&&h.focus()），
+                // 而 .viewer-navbar 虽然 overflow:hidden 但仍是滚动容器 ⇒ 浏览器为了"让焦点可见"把导航条
+                // 滚走（scrollLeft 推到最大）；随后 renderList() 再叠一层 translateX ⇒ 位置被偏移两次，
+                // 整条列表跑到屏幕外，只剩空黑底。表现就是"从靠前的图跳到很靠后的图（或关掉再打开靠后的图）后，
+                // 缩略图条里后面那批不显示，前面的还在"——因为前面那批本来就在初始可视区，不触发滚动。
+                // 加 focus:false 后：navScrollLeft 由 2439 → 0，可见缩略图 0 → 43（真 Chromium 实测）。
+                // 代价：关掉"打开后聚焦容器 + 焦点陷阱"，对鼠标/触屏无影响，仅纯键盘 Tab 导航有差别
+                //（键盘切图与 Esc 关闭实测不受影响）。
+                focus: false,
             });
 
             /* 修 Viewer.js 的另一个坑：update() 重建缩略图条却不重算它的位置。
@@ -599,13 +609,15 @@
                 };
                 document.addEventListener('wheel', (e) => {
                     if (!inBar(e.target)) return;
-                    e.preventDefault();
-                    e.stopPropagation();                            // 别让控件把它当成缩放
+                    e.stopPropagation();        // 足够：控件"把滚轮当缩放"是在它自己的监听器里做的，
+                                                // 拦住传播它就收不到。这里**不能**用 preventDefault ——
+                                                // document 上的非 passive wheel 同样会让浏览器失去
+                                                // "不等 JS 就滚动/绘制"的快路径（与 touchmove 那个坑同源）。
                     const now = Date.now();
                     if (now - lastWheel < WHEEL_GAP) return;
                     lastWheel = now;
                     goTo(viewer.index + (e.deltaY > 0 ? 1 : -1));
-                }, {capture: true, passive: false});
+                }, {capture: true, passive: true});
                 document.addEventListener('touchstart', (e) => {
                     navDown = inBar(e.target);
                     const t = e.changedTouches && e.changedTouches[0];
