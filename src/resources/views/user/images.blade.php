@@ -691,6 +691,7 @@
                 // 把库的尺寸认知与标题设对，不必等原图下载、也不解码。
                 // 库是在图片加载完成时才写标题，所以这里多补几次（0/60/200/500ms），
                 // 防止我们刚设好又被库覆盖；每次都是幂等赋值，代价可忽略。
+                const sizeMemo = { url: '', w: 0, h: 0 };
                 const fixSizeNow = function (url) {
                     if (!url) return;
                     let realW = 0, realH = 0;
@@ -707,6 +708,7 @@
                         }
                     }
                     if (!realW || !realH) return;
+                    sizeMemo.url = url; sizeMemo.w = realW; sizeMemo.h = realH;   // 记住真实宽高
                     const apply = function () {
                         try {
                             if (viewer.imageData) {
@@ -730,9 +732,11 @@
                         if (host && !host.__titleWatcher) {
                             const obs = new MutationObserver(function () {
                                 const t = document.querySelector('.viewer-title');
-                                if (!t || !viewer.imageData) return;
-                                const w = viewer.imageData.naturalWidth, h = viewer.imageData.naturalHeight;
-                                if (!w || !h) return;
+                                // ★ 只认 sizeMemo 里我们自己查到的真实宽高。
+                                // 曾经这里读 viewer.imageData.naturalWidth —— 那正是库按缩略图写下的错值，
+                                // 于是「库写错的 → 我们原样再写一遍」，标题永远停在 400 × 275。
+                                if (!t || !sizeMemo.w || !sizeMemo.h) return;
+                                const w = sizeMemo.w, h = sizeMemo.h;
                                 const nm = (t.textContent || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
                                 const want = nm + ' (' + w + ' × ' + h + ')';
                                 if (t.textContent !== want) t.textContent = want;
@@ -741,7 +745,9 @@
                             host.__titleWatcher = obs;
                         }
                     } catch (e) {}
-                    [60, 200, 500, 1200].forEach(function (d) { setTimeout(apply, d); });
+                    // 库会在「图片加载完成」时用缩略图的尺寸覆盖 imageData（我们改的会被冲掉），
+                    // 所以在打开后的短窗口内多压几次，让放大上限也按真实分辨率算。
+                    for (let d = 0; d <= 2500; d += 100) { setTimeout(apply, d); }
                 };
 
                 const upgrade = function () {
