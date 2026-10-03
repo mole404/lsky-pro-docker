@@ -885,11 +885,16 @@
             // ★ B 保险：告诉无限加载「用户是不是真的在往下滚 + 是不是刚重置过」。
             //   浏览器为了维持滚动位置偷偷补的那一滚，不满足这两个条件，于是不会连锁。
             {
-                const pend = window.__lskyScrollGate = window.__lskyScrollGate || { lastY: window.scrollY, ready: 0 };
+                // 只做记录、不做拦截。
+                // ★ 教训：曾经这里做过一道「必须由用户手指驱动（touchmove/wheel）才放行」的闸，
+                //   结果把真实滑到底一起堵死了 —— 用户滑到底那一刻可能刚处在窗口边缘，当场被拦
+                //   后又不再有 scroll 事件 ⇒ 永远不加载；程序化滚动（测试、浏览器补滚）更是永远
+                //   挤不进这条路径。守卫测试 infinite-scroll 三套当时全红，失败项正是「到底了不
+                //   触发」。说明那道闸方向就是错的，别再往这里加法。
+                //   拦截只保留 app.js 里那一道「重置窗口」。
+                window.__lskyScrollGate = window.__lskyScrollGate || { lastY: window.scrollY };
                 window.addEventListener('scroll', function () {
-                    const y = window.scrollY;
-                    if (y > pend.lastY + 4) pend.ready = Date.now();   // 真的往下滚了
-                    pend.lastY = y;
+                    window.__lskyScrollGate.lastY = window.scrollY;
                 }, { passive: true });
             }   // ★ 重置窗口的截止时间戳（见 resetImages）
             const resetImages = (params) => {
