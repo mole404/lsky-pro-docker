@@ -89,8 +89,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 {
     check('抽到的 infiniteScroll 就是 app.js 里那份（含 useWindowScroll 与两个分支）',
         METHOD_BODY.includes("const useWindowScroll = options.root === 'window';")
-        && METHOD_BODY.includes("$(window).on('scroll.infiniteScroll', onScroll);")
-        && METHOD_BODY.includes("$(selector).on('scroll.infiniteScroll', onScroll);"),
+        && METHOD_BODY.includes("$(window).on('scroll.infiniteScroll', onScroll)")
+        && METHOD_BODY.includes("$(selector).on('scroll.infiniteScroll', onScroll)")
+        // fork：这两条改成链式绑定了（后面多挂了一层 .on(ARM_EVENTS, arm)，见下方"重排后临时锁"），
+        // 所以断言不再要求以分号结尾，只要求确实绑在那个命名空间上。
+        && METHOD_BODY.includes('ARM_EVENTS'),
         `${APP_JS}`);
 }
 
