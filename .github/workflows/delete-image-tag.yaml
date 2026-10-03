@@ -1,0 +1,52 @@
+name: Delete image tag (manual)
+
+# 手动删除 GHCR 上某个镜像 tag（连同承载它的那个 package version）。
+# 本机 token 没有 packages 权限（本地操作会 401），所以只能在这里用 GITHUB_TOKEN。
+# 只影响该 tag 自身；sha-<commit> 快照与 latest 各自是独立的 version，不受影响。
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要删除的镜像 tag（例如 v3.5.1）'
+        required: true
+        type: string
+
+jobs:
+  delete-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Delete the package version carrying this tag
+        env:
+          TAG: ${{ inputs.tag }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          PKG="${GITHUB_REPOSITORY##*/}"
+          API="https://api.github.com/users/${OWNER}/packages/container/${PKG}/versions"
+          echo "目标 tag：$TAG"
+
+          # 分页扫描：本包已有 130+ 个 version，默认一页 100 条会截断，必须翻页。
+          FOUND=""
+          page=1
+          while [ "$page" -le 20 ]; do
+            curl -fsS -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+              "${API}?per_page=100&page=${page}" > "/tmp/pg-${page}.json"
+            FOUND=$(python3 -c 'import json,os,sys; t=os.environ["TAG"]; d=json.load(open(sys.argv[1])); print(next((str(v["id"]) for v in d if t in ((v.get("metadata",{}).get("container",{}) or {}).get("tags") or [])), ""))' "/tmp/pg-${page}.json")
+            if [ -n "$FOUND" ]; then echo "在第 ${page} 页命中：version id = $FOUND"; break; fi
+            N=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "/tmp/pg-${page}.json")
+            [ "$N" = "0" ] && break
+            page=$((page+1))
+          done
+          [ -n "$FOUND" ] || { echo "::error::没找到带 tag '$TAG' 的 package version"; exit 1; }
+
+          echo "删除 version $FOUND …"
+          code=$(curl -sS -o /tmp/del.out -w '%{http_code}' -X DELETE \
+            -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+            "${API}/${FOUND}")
+          echo "DELETE 返回 HTTP $code"
+          if [ "$code" != "204" ] && [ "$code" != "200" ]; then cat /tmp/del.out || true; echo "::error::删除失败"; exit 1; fi
+          echo "已删除 tag：$TAG"

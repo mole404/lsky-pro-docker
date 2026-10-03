@@ -1,6 +1,6 @@
 name: Backfill version tag (manual)
 
-# 一次性补打：给**已经发布过的历史镜像**补一个版本号 tag（vX.Y.Z）。
+# 一次性补打：给**已经发布过的历史镜像**补一个版本号 tag（X.Y.Z）。
 #
 # 为什么单独一个文件（而不是塞进 build-image.yaml 里）：
 #   · 本工作流**只有手动触发**（下面 on: 里只有 workflow_dispatch），推代码不会启动它
@@ -22,7 +22,7 @@ on:
         required: true
         type: string
       backfill_version:
-        description: '要打的版本号 vX.Y.Z；留空=从该 commit 的 config/app.php 读'
+        description: '要打的版本号 X.Y.Z；留空=从该 commit 的 config/app.php 读'
         required: false
         default: ''
         type: string
@@ -73,10 +73,10 @@ jobs:
           [ -n "$VER" ] || { echo "::error::拿不到版本号（输入留空，且从该 commit 读不到 config/app.php 的 version）"; exit 1; }
           echo "版本号：$VER"
 
-          # 守卫①：格式必须 vX.Y.Z
-          [[ "$VER" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-            || { echo "::error::版本号格式不对（期望 vX.Y.Z，实际 '$VER'）"; exit 1; }
-          echo "守卫①通过：格式 vX.Y.Z"
+          # 守卫①：格式必须 X.Y.Z
+          [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::版本号格式不对（期望 X.Y.Z，实际 '$VER'）"; exit 1; }
+          echo "守卫①通过：格式 X.Y.Z"
 
           # 守卫②：目标 commit 必须在 master 上 —— 这是「版本号永远拉不到 test 镜像」的硬保证
           CMP=$(curl -fsS \
