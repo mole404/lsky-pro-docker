@@ -644,7 +644,24 @@
                 document.addEventListener('touchcancel', () => { navDown = false; }, true);
             })();
 
-                                    /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
+                                    /* 切图动画起点固定为"屏幕中心"（Claude 方案 A）。
+             * 库每切一张都新建 <img>：先写成屏幕中心的点（宽高 0 + margin 居中），读完自然尺寸
+             * 再加 viewer-transition 写最终宽高与 margin，靠 CSS 过渡补间。CSS 过渡的起点是
+             * 浏览器"上一次真正渲染过的样式" —— 中间那帧有没有渲染出来取决于图片缓存/网速/
+             * 主线程忙不忙，于是表现为"有时从中间长出来、有时从屏幕上方飞进来"。
+             * 这里在 initImage 之前强制回流一次，把"中心点"提交为已渲染样式 ⇒ 起点永远是中心。
+             * 覆盖手指滑动、缩略图条、键盘与底部按钮等所有切图路径（都在 view() 里）。
+             * 注：早先那版在 pointerup 里摘旧图的 viewer-transition 是无效的 —— view() 新建的是
+             * 另一个 <img>，且 load() 会按 options.transition 给新图重新加类。 */
+            if (viewer && typeof viewer.initImage === 'function') {
+                const rawInitImage = viewer.initImage.bind(viewer);
+                viewer.initImage = function (cb) {
+                    if (viewer.image) void viewer.image.offsetWidth;   // 强制回流，提交"中心点"
+                    return rawInitImage(cb);
+                };
+            }
+
+            /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
              * 库里 slideOnTouch:false ⇒ 单指动作永远是 'move'，库自己的平移就是跟手拖动，
              * 不再出现 'switch' 动作 ⇒ 1px 判据与"闩锁"都不存在。切图还是回弹由松手时决定。
              * 为什么不拦事件：库用 HAS_POINTER_EVENT ? 'pointermove' : 'touchmove' 选通道，
@@ -680,12 +697,6 @@
                     const far = Math.abs(dx) > Math.max(FAR_MIN, window.innerWidth * FAR_RATIO);
                     const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 30;
                     if ((far || fast) && Math.abs(dx) > Math.abs(dy) * 1.5) {
-                        /* 切图不要"飞入"：库的过渡是"从上一张图的 margin 滑到新图的 margin"，
-                         * 两张图高度不同（横图↔竖图）时，新图就会从偏上/偏下的位置滑进来。
-                         * 这一段临时摘掉过渡类 ⇒ 新图直接出现在它该在的位置（= "从中间出来"）。
-                         * 过渡类是库自己在管的（action 为 move/zoom 时它自己也会摘），不属于
-                         * 那个碰不得的 action 状态机，且同一帧即由 renderImage 恢复。 */
-                        viewer.image.classList.remove('viewer-transition');
                         if (dx < 0) viewer.next(false); else viewer.prev(false);
                         guardClick = Date.now();                          // 标记：刚刚切过图
                     } else if (dx !== 0 || dy !== 0) {
