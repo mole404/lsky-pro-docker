@@ -28,7 +28,11 @@
              * 对策：用 :not([style]) 只命中"还没有内联样式"的那一瞬（库一写内联样式立刻失效，
              * 因此绝不影响最终显示、也不会和库打架），把这一瞬做成"屏幕中心的小点" ——
              * 无论渲染到哪一帧，起点都是中心。过渡照旧用库自带的，所以动画保留。 */
-            .viewer-canvas > img:not([style]) {
+            /* ★ 关掉浏览器「滚动锚定」（scroll anchoring）：换排序/刷新后列表清空重排，
+             *   浏览器会把哨兵当锚点、上方内容变高就自动往下补 scrollTop，于是哨兵又进视口、
+             *   又触发下一页 —— 连锁滚到底。安卓 Edge 上尤其明显（安卓 Chrome / iOS 不这样）。 */
+            html, body, #images-scroll, #images-scroll .infinite-scroll { overflow-anchor: none; }
+                        .viewer-canvas > img:not([style]) {
                 width: 1px;
                 height: 1px;
                 margin-left: 50vw;
@@ -500,6 +504,9 @@
 
             const HEADER_TITLE = '#header-title';
             const IMAGES_SCROLL = '#images-scroll';
+            // ★ 关掉浏览器「刷新时恢复滚动位置」：刷新图库时我们要的是回到顶部从头看，
+            //   而恢复机制会把页面拽回原位置，配合无限加载就是又一轮连锁。
+            try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) {}
             const IMAGES_GRID = '#images-grid';
             const IMAGES_ITEM = '.images-item';
             // 相册行容器（承载 data-id / data-json + 当前相册高亮）。
@@ -875,10 +882,28 @@
                 }
             });
 
+            // ★ B 保险：告诉无限加载「用户是不是真的在往下滚 + 是不是刚重置过」。
+            //   浏览器为了维持滚动位置偷偷补的那一滚，不满足这两个条件，于是不会连锁。
+            {
+                const pend = window.__lskyScrollGate = window.__lskyScrollGate || { lastY: window.scrollY, ready: 0 };
+                window.addEventListener('scroll', function () {
+                    const y = window.scrollY;
+                    if (y > pend.lastY + 4) pend.ready = Date.now();   // 真的往下滚了
+                    pend.lastY = y;
+                }, { passive: true });
+            }   // ★ 重置窗口的截止时间戳（见 resetImages）
             const resetImages = (params) => {
+                // ★ 顺序很重要：清空内容之前先回顶部。
+                //   清空后页面高度塌缩，浏览器的滚动位置会被夹到某个浅位置，再叠加重排补滚，
+                //   就是「无脑滚到底」的起点。换排序/刷新本来也该从头看。
+                try { window.scrollTo(0, 0); } catch (e) {}
                 $photos.addClass('reset').html('').justifiedGallery('destroy');
                 ds.clearSelection();
                 params = $.extend({page: 1}, params)
+                // ★ 重置窗口：从清空到第一页真正落地这段时间里，忽略滚动触发的加载。
+                //   这段时间页面高度剧烈变化（塌缩 → 逐页长回来），最容易被补齐/重排带着连发。
+                resetGuardUntil = Date.now() + 800;
+                try { window.__lskyResetGuardUntil = resetGuardUntil; } catch (e) {}
                 imagesInfinite.refresh(params);
             }
 
