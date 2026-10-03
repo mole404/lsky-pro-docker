@@ -213,7 +213,7 @@
                  角标一旦接住点击，DragSelect 的选中与「点开预览」都会被抢掉。
                  （这里别写尖括号标签名：这段模板会被静态测试当纯文本取出来渲染。）--}}
             <div class="image-tags pointer-events-none absolute left-0 right-0 bottom-0 z-[1] flex flex-wrap items-end gap-1 p-2">__tags__</div>
-            <img alt="__name__" data-original="__url__" data-view-src="__view_src__" src="__thumb_url__" width="__width__" height="__height__">
+            <img alt="__name__" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
         </a>
     </script>
 
@@ -552,7 +552,7 @@
                 ).join('');
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {
-                url: 'data-view-src',   // 看图显示用图：小图=原图（第一帧就清晰），其余=缩略图（大图过渡才丝滑，原图由下方第二阶段换上）
+                url: 'src',   // 先用页面里已有的缩略图当显示图（小位图，过渡才丝滑）；原图由下方第二阶段换上
                     slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
 
                 // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
@@ -687,69 +687,6 @@
                 const MAX_FAILS = 3;        // 连续失败几次就放弃（保持缩略图）
                 const state = {};           // 原图地址 -> { pending, fails, done, t }
 
-                // 「立刻按真实分辨率修正」：打开/切图的那一刻就能用卡片里*已知的*宽高
-                // 把库的尺寸认知与标题设对，不必等原图下载、也不解码。
-                // 库是在图片加载完成时才写标题，所以这里多补几次（0/60/200/500ms），
-                // 防止我们刚设好又被库覆盖；每次都是幂等赋值，代价可忽略。
-                const sizeMemo = { url: '', w: 0, h: 0 };
-                const fixSizeNow = function (url) {
-                    if (!url) return;
-                    let realW = 0, realH = 0;
-                    const cards = document.querySelectorAll('#images-grid .images-item, .images-item');
-                    for (let k = 0; k < cards.length; k++) {
-                        const im = cards[k].querySelector('img');
-                        if (!im) continue;
-                        if (im.getAttribute('data-original') === url || im.getAttribute('data-view-src') === url || im.getAttribute('src') === url) {
-                            let meta = {};
-                            try { meta = JSON.parse(cards[k].getAttribute('data-json') || '{}') || {}; } catch (e) { meta = {}; }
-                            realW = Number(meta.width) || 0;
-                            realH = Number(meta.height) || 0;
-                            break;
-                        }
-                    }
-                    if (!realW || !realH) return;
-                    sizeMemo.url = url; sizeMemo.w = realW; sizeMemo.h = realH;   // 记住真实宽高
-                    const apply = function () {
-                        try {
-                            if (viewer.imageData) {
-                                viewer.imageData.naturalWidth = realW;
-                                viewer.imageData.naturalHeight = realH;
-                            }
-                            const tEl = document.querySelector('.viewer-title');
-                            if (tEl) {
-                                const nm = (tEl.textContent || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
-                                const want = nm + ' (' + realW + ' × ' + realH + ')';
-                                if (tEl.textContent !== want) tEl.textContent = want;
-                            }
-                        } catch (e) {}
-                    };
-                    apply();
-                    // 固定延时不可靠：库是在「图片加载完成」时才写标题，那时我们早跑完了，
-                    // 于是会先闪一下缩略图的数值。改为盯着标题节点 —— 库一写就立刻盖掉，
-                    // 零延迟；下面的定时器只作兜底（防止观察器被库重建节点而失效）。
-                    try {
-                        const host = document.querySelector('.viewer-container') || document.body;
-                        if (host && !host.__titleWatcher) {
-                            const obs = new MutationObserver(function () {
-                                const t = document.querySelector('.viewer-title');
-                                // ★ 只认 sizeMemo 里我们自己查到的真实宽高。
-                                // 曾经这里读 viewer.imageData.naturalWidth —— 那正是库按缩略图写下的错值，
-                                // 于是「库写错的 → 我们原样再写一遍」，标题永远停在 400 × 275。
-                                if (!t || !sizeMemo.w || !sizeMemo.h) return;
-                                const w = sizeMemo.w, h = sizeMemo.h;
-                                const nm = (t.textContent || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
-                                const want = nm + ' (' + w + ' × ' + h + ')';
-                                if (t.textContent !== want) t.textContent = want;
-                            });
-                            obs.observe(host, { childList: true, subtree: true, characterData: true });
-                            host.__titleWatcher = obs;
-                        }
-                    } catch (e) {}
-                    // 库会在「图片加载完成」时用缩略图的尺寸覆盖 imageData（我们改的会被冲掉），
-                    // 所以在打开后的短窗口内多压几次，让放大上限也按真实分辨率算。
-                    for (let d = 0; d <= 2500; d += 100) { setTimeout(apply, d); }
-                };
-
                 const upgrade = function () {
                     const shown = document.querySelector(canvasSel);
                     if (!shown) return;
@@ -761,50 +698,21 @@
                     let full = '';
                     for (let k = 0; k < cards.length; k++) {
                         const c = cards[k];
-                        const csrc = c.getAttribute('src') || '';
-                        const cview = c.getAttribute('data-view-src') || '';
-                        if (csrc === cur || cview === cur) {
+                        if ((c.getAttribute('src') || '') === cur) {
                             full = c.getAttribute('data-original') || '';
                             break;
                         }
                     }
                     if (!full) return;
-
-                    // ── 小图分流（老师定的规则）───────────────────────────────
-                    //   像素 ≥ 1,440,000  或  体积 ≥ 1024KB(1MB)  ⇒ 达标：走缩略图路 + 450ms 闸门
-                    //   两个都 < 及以上阈值                     ⇒ 未达标：小图优化，不等闸门直接上原图
-                    //   读不到元数据 ⇒ 保守当作"达标"，走安全路（绝不卡顿）
-                    let small = false;
-                    {
-                        const card = shown.closest ? null : null;
-                        const cards2 = document.querySelectorAll('#images-grid .images-item, .images-item');
-                        let host = null;
-                        for (let k2 = 0; k2 < cards2.length; k2++) {
-                            const im2 = cards2[k2].querySelector('img');
-                            if (im2 && im2.getAttribute('src') === cur) { host = cards2[k2]; break; }
-                        }
-                        if (host) {
-                            let meta = {};
-                            try { meta = JSON.parse(host.getAttribute('data-json')) || {}; } catch (e) { meta = {}; }
-                            const w = Number(meta.width) || 0, h = Number(meta.height) || 0;
-                            const kb = Number(meta.size) || 0;
-                            if (w > 0 && h > 0 && kb > 0) {
-                                const px = w * h;
-                                small = (px < 1440000) && (kb < 1024);
-                            }
-                        }
-                    }
-
                     // 时间闸门：过渡动画固定 0.3s（CSS 写死、与设备无关）。
                     // 若网速极快或原图已缓存，onload 可能在动画中途就回来，那时换图会把
-                    // 巨图提前塞进动画帧 ⇒ 又变卡。故给每个 <img> 打上"出现时刻"：
-                    // 达标的图 450ms 内一律不换；小图优化则闸门为 0（立刻换，不产生那一下延迟）。
-                    const gate = small ? 0 : 450;
+                    // 巨图提前塞进动画帧 ⇒ 又变卡。故给每个 <img> 打上"出现时刻"，
+                    // 450ms 内一律不换，确保动画期间显示的始终是缩略图。
                     if (!shown.getAttribute('data-shown-at')) {
                         shown.setAttribute('data-shown-at', String(Date.now()));
-                        if (gate > 0) return;      // 达标的图：先记录时刻，下一轮再来
+                        return;
                     }
-                    if (Date.now() - Number(shown.getAttribute('data-shown-at')) < gate) return;
+                    if (Date.now() - Number(shown.getAttribute('data-shown-at')) < 450) return;
                     const rec = state[full] || {};
                     if (rec.done) {                                       // 之前成功过，直接换（走缓存）
                         shown.setAttribute('data-full', '1');
@@ -824,37 +732,6 @@
                         if (my.getAttribute('data-full')) return;
                         my.setAttribute('data-full', '1');
                         my.src = full;                                      // 同位置换高清
-                        // 换图只改了 src，但库在 view() 那一刻就用「当时那张图」（缩略图）算好了
-                        // 两样东西，之后不会自己更新：
-                        //   ① 看图器标题里的分辨率（形如「名称 (400 × 275)」）
-                        //   ② 库缓存的尺寸认知（放大上限据此计算）
-                        // 这里用卡片 data-json 里*已知的*真实宽高把它们修正过来。
-                        // 关键：绝不去读刚赋值图片的 naturalWidth —— 那会逼浏览器当场同步解码，
-                        // 对千万像素级就是一次长帧（老师实测的「像掉帧」正是它）。
-                        try {
-                            let realW = 0, realH = 0;
-                            const cards3 = document.querySelectorAll('#images-grid .images-item, .images-item');
-                            for (let k3 = 0; k3 < cards3.length; k3++) {
-                                const im3 = cards3[k3].querySelector('img');
-                                if (im3 && im3.getAttribute('data-original') === full) {
-                                    const meta3 = JSON.parse(cards3[k3].getAttribute('data-json') || '{}') || {};
-                                    realW = Number(meta3.width) || 0;
-                                    realH = Number(meta3.height) || 0;
-                                    break;
-                                }
-                            }
-                            if (realW > 0 && realH > 0) {
-                                if (viewer.imageData) {
-                                    viewer.imageData.naturalWidth = realW;
-                                    viewer.imageData.naturalHeight = realH;
-                                }
-                                const tEl = document.querySelector('.viewer-title');
-                                if (tEl) {
-                                    const name = (tEl.textContent || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
-                                    tEl.textContent = name + ' (' + realW + ' × ' + realH + ')';
-                                }
-                            }
-                        } catch (e) {}
                     };
                     probe.onerror = function () {
                         const r = state[full] || {};
@@ -867,24 +744,6 @@
                     };
                     probe.src = full;
                 };
-
-                // 打开/切图的那一刻就修正尺寸认知与标题（用已知数据，不等加载）
-                ['show', 'view', 'next', 'prev'].forEach(function (name) {
-                    if (typeof viewer[name] !== 'function') return;
-                    const raw = viewer[name].bind(viewer);
-                    viewer[name] = function () {
-                        const r = raw.apply(null, arguments);
-                        try {
-                            let idx = viewer.index;
-                            if (name === 'view' && typeof arguments[0] === 'number') idx = arguments[0];
-                            const items = viewer.items;
-                            const item = items && items[idx];
-                            const url = item && (item.getAttribute('data-original') || item.getAttribute('data-view-src') || item.src);
-                            fixSizeNow(url);
-                        } catch (e) {}
-                        return r;
-                    };
-                });
 
                 setInterval(upgrade, 500);
                 upgrade();
@@ -1073,10 +932,6 @@
                             .replace(/__date__/g, images[i].date)
                             .replace(/__url__/g, images[i].url)
                             .replace(/__thumb_url__/g, images[i].thumb_url)
-                            // 看图时该显示谁：小图（像素<144万 且 体积<1MB）直接用原图，
-                            // 免得先亮一帧缩略图再换；达标图仍用缩略图过渡（防大图逐帧重绘卡顿）。
-                            // 图墙缩略图不受影响 —— 卡片 <img src> 始终是缩略图。
-                            .replace(/__view_src__/g, ((images[i].width * images[i].height < 1440000) && (images[i].size < 1024)) ? images[i].url : images[i].thumb_url)
                             .replace(/__width__/g, images[i].width)
                             .replace(/__height__/g, images[i].height)
                             // 卡片角标 = 这张图的标签（列表接口已带 tags）
