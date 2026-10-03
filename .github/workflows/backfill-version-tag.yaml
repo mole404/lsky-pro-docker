@@ -99,10 +99,17 @@ jobs:
           # 守卫④：版本号 tag 不可变 —— 已存在就保留原样（这正是「靠版本号拉回旧正式版」的前提）
           if docker buildx imagetools inspect "${IMAGE}:${VER}" >/dev/null 2>&1; then
             echo "::notice::${IMAGE}:${VER} 已存在 —— 保留原样，不覆盖"
-            docker buildx imagetools inspect "${IMAGE}:${VER}" | head -6
+            # ⚠ 同上：不要 `| head`（pipefail 下会假红）。先落文件再读。
+            docker buildx imagetools inspect "${IMAGE}:${VER}" > /tmp/ver.txt 2>&1 || true
+            head -6 /tmp/ver.txt
             exit 0
           fi
 
           docker buildx imagetools create -t "${IMAGE}:${VER}" "${IMAGE}:sha-${SHA}"
           echo "已补打：${VER} → sha-${SHA}"
-          docker buildx imagetools inspect "${IMAGE}:${VER}" | head -8
+          # ⚠ 本工作流开了 set -o pipefail：`docker ... inspect | head` 里 head 提前退出，
+          #   docker CLI 会吃到 SIGPIPE 并以非 0 退出（本次实测是 255）→ 整条管道非 0 →
+          #   假红。build-image.yaml 早就踩过同一个坑并写明「不在管道里接 head/grep」。
+          #   统一改成「先落文件，再读文件」。
+          docker buildx imagetools inspect "${IMAGE}:${VER}" > /tmp/ver.txt 2>&1 || true
+          head -8 /tmp/ver.txt
