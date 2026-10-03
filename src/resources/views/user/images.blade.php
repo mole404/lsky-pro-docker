@@ -644,22 +644,41 @@
                 document.addEventListener('touchcancel', () => { navDown = false; }, true);
             })();
 
-                                    /* 切图动画起点固定为"屏幕中心"（Claude 方案 A）。
-             * 库每切一张都新建 <img>：先写成屏幕中心的点（宽高 0 + margin 居中），读完自然尺寸
-             * 再加 viewer-transition 写最终宽高与 margin，靠 CSS 过渡补间。CSS 过渡的起点是
-             * 浏览器"上一次真正渲染过的样式" —— 中间那帧有没有渲染出来取决于图片缓存/网速/
-             * 主线程忙不忙，于是表现为"有时从中间长出来、有时从屏幕上方飞进来"。
-             * 这里在 initImage 之前强制回流一次，把"中心点"提交为已渲染样式 ⇒ 起点永远是中心。
-             * 覆盖手指滑动、缩略图条、键盘与底部按钮等所有切图路径（都在 view() 里）。
-             * 注：早先那版在 pointerup 里摘旧图的 viewer-transition 是无效的 —— view() 新建的是
-             * 另一个 <img>，且 load() 会按 options.transition 给新图重新加类。 */
-            if (viewer && typeof viewer.initImage === 'function') {
-                const rawInitImage = viewer.initImage.bind(viewer);
-                viewer.initImage = function (cb) {
-                    if (viewer.image) void viewer.image.offsetWidth;   // 强制回流，提交"中心点"
-                    return rawInitImage(cb);
+                                    /* 切图不要过渡动画（Claude 方案 B）。
+             * 库每切一张都新建 <img>：先把新图写成"屏幕中心的点"，读完自然尺寸再写最终尺寸，靠
+             * CSS 过渡补间；而过渡的起点是"浏览器上一次真正渲染过的样式"，哪一帧渲染过取决于图片
+             * 缓存/网速/主线程忙不忙，于是表现为"有时从中间长出来、有时从屏幕上方飞入"。方案 A
+             * （强制回流）在真机上仍不稳定，索性取消这一下的动画 —— 起点问题就不存在了。
+             * 必须走 options.transition 开关，**不能**用 CSS transition:none 去压：那样 renderImage
+             * 永远等不到 transitionend，viewed 不触发，手势会被卡死。
+             * 路径覆盖：next()/prev() 内部调的都是 this.view，所以手指滑动、缩略图条、键盘、
+             * 底部按钮全都会经过这里。 */
+            (function () {
+                let saved = null;
+                let timer = 0;
+                const restore = () => {
+                    if (saved === null) return;
+                    viewer.options.transition = saved;
+                    saved = null;
+                    clearTimeout(timer);
+                    timer = 0;
                 };
-            }
+                // 防御：测试环境里的 Viewer 是替身，可能没有 view / element
+                if (!viewer || typeof viewer.view !== 'function') return;
+                const rawView = viewer.view.bind(viewer);
+                viewer.view = function (index) {
+                    const target = (typeof index === 'number') ? index : viewer.index;
+                    if (target !== viewer.index && viewer.isShown && saved === null) {
+                        saved = viewer.options.transition;
+                        viewer.options.transition = false;
+                        timer = setTimeout(restore, 1000);   // 兜底：万一 viewed 没来也不卡住
+                    }
+                    return rawView(index);
+                };
+                // viewed 是库派发的 DOM 事件（不是那个不存在的 viewer.on），两处都听稳一点
+                if (viewer.element) viewer.element.addEventListener('viewed', restore);
+                document.addEventListener('viewed', restore, true);
+            })();
 
             /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
              * 库里 slideOnTouch:false ⇒ 单指动作永远是 'move'，库自己的平移就是跟手拖动，
