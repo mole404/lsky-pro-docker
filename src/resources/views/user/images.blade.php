@@ -669,16 +669,23 @@
              *       随后在后台加载原图，加载完把同一个 <img> 的 src 换成原图。
              *       视觉上是「丝滑长出来 → 随即变清晰」，且全程零新增图片文件。
              *
-             * 触发方式：只碰 DOM，不碰库内部对象。
-             *   前两版分别踩过：viewer.on 不存在（事件其实发在根元素）、viewer.element/
-             *   viewer.image 在不同构建里形态不一（可能是 jQuery 包装对象，没有 addEventListener），
-             *   结果触发逻辑被静默跳过，老师一直看到模糊缩略图。故本版改为：
-             *   每 500ms 扫一眼画布里的 <img>：若它的 src 还是缩略图，就拿这个 src 去图库里
-             *   反查同一张图对应的卡片（卡片的 <img> src 就是同一个缩略图），取其 data-original，
-             *   后台加载完成后原地替换 src。用 data-full 标记去重，重复触发无害。 */
+             * 触发方式：只碰 DOM，不碰库内部对象（前两版栽在 viewer.on / viewer.element /
+             *   viewer.image 上：形态不可靠、守卫反而把整段静默跳过）。
+             *
+             * 网络健壮性（老师特别问过）：慢网/波动/失败时的行为
+             *   · 同一张原图同一时刻只会有一个请求在飞：用 state 表记 pending，
+             *     没加载完就不重复发起（否则每 500ms 一个新 Image，慢网下会并发几十个请求，
+             *     白烧流量、还可能因多份解码占用把手机拖垮）。
+             *   · 加载失败 ⇒ 退避 8 秒后再试，最多失败 3 次就放弃，保持显示缩略图（功能不受影响）。
+             *   · 已成功加载过的地址记 done，之后再遇到同一张直接换（走浏览器缓存，秒换）。
+             *   · 无论成功失败都不会报错中断：元素没了/期间切了图都直接放弃本次。
+             *   · 最坏情况：原图始终拿不到 ⇒ 一直显示缩略图，看图/缩放/切图全部照常可用。 */
             (function () {
                 const canvasSel = '.viewer-canvas > img';
                 const THUMB_HINT = 'thumbnails';
+                const RETRY_MS = 8000;      // 失败后退避多久才重试
+                const MAX_FAILS = 3;        // 连续失败几次就放弃（保持缩略图）
+                const state = {};           // 原图地址 -> { pending, fails, done, t }
 
                 const upgrade = function () {
                     const shown = document.querySelector(canvasSel);
@@ -697,15 +704,35 @@
                         }
                     }
                     if (!full) return;
+                    const rec = state[full] || {};
+                    if (rec.done) {                                       // 之前成功过，直接换（走缓存）
+                        shown.setAttribute('data-full', '1');
+                        shown.src = full;
+                        return;
+                    }
+                    if (rec.pending) return;                              // 正在加载，别重复发起
+                    if ((rec.fails || 0) >= MAX_FAILS) return;            // 连续失败太多，放弃本次
+                    if (rec.t && Date.now() - rec.t < RETRY_MS) return;   // 失败后的退避期内
+                    state[full] = { pending: true, fails: rec.fails || 0, done: false, t: Date.now() };
+
                     const my = shown;
                     const probe = new Image();
                     probe.onload = function () {
+                        state[full] = { pending: false, fails: 0, done: true, t: Date.now() };
                         if (document.querySelector(canvasSel) !== my) return;   // 期间又切图了
                         if (my.getAttribute('data-full')) return;
                         my.setAttribute('data-full', '1');
                         my.src = full;                                      // 同位置换高清
                     };
-                    probe.onerror = function () {};
+                    probe.onerror = function () {
+                        const r = state[full] || {};
+                        state[full] = {
+                            pending: false,
+                            fails: (r.fails || 0) + 1,
+                            done: false,
+                            t: Date.now()
+                        };
+                    };
                     probe.src = full;
                 };
 
