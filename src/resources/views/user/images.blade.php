@@ -540,6 +540,59 @@
                 loop: false,
             });
 
+            /* 底部缩略图条上的快捷切图（老师要的功能）。
+             *   · 电脑：光标在缩略图条上滚轮 ⇒ 滚一格切一张。
+             *     控件自己在外层容器上绑了"滚轮缩放"（捕获阶段），所以这里也在 document 捕获
+             *     阶段抢在它之前，并且**只对落在缩略图条上的滚轮生效**：图上滚轮依旧是缩放。
+             *   · 手机：在缩略图条上左右拖动 ⇒ 连续切图（每滑过 DRAG_STEP 像素切一张，
+             *     拖回来也会切回去）。缩略图条被库设成 touch-action:none、本来就划不动，
+             *     所以不存在"抢走缩略图条自己的滚动"这个问题（它靠自动跟随当前图）。
+             * 一律从外面调它的对外 API viewer.view(index)，不改库；到头即止（loop 已关）。 */
+            (function () {
+                const BAR = '.viewer-navbar';
+                const WHEEL_GAP = 260;   // 滚轮节流：一格切一张，别被惯性滚轮连着切
+                const DRAG_STEP = 40;    // 手机上每滑过这么多像素切一张
+                let lastWheel = 0;
+                let navDown = false;
+                let dragStartX = 0;
+                let dragBaseIndex = 0;
+                const inBar = (el) => el instanceof Element && !!el.closest(BAR);
+                const count = () => document.querySelectorAll(BAR + ' .viewer-list > li').length;
+                const goTo = (i) => {
+                    const n = count();
+                    if (!n || !Number.isFinite(i)) return;
+                    const target = Math.max(0, Math.min(n - 1, i));
+                    if (target !== viewer.index) viewer.view(target);
+                };
+                document.addEventListener('wheel', (e) => {
+                    if (!inBar(e.target)) return;
+                    e.preventDefault();
+                    e.stopPropagation();                            // 别让控件把它当成缩放
+                    const now = Date.now();
+                    if (now - lastWheel < WHEEL_GAP) return;
+                    lastWheel = now;
+                    goTo(viewer.index + (e.deltaY > 0 ? 1 : -1));
+                }, {capture: true, passive: false});
+                document.addEventListener('touchstart', (e) => {
+                    navDown = inBar(e.target);
+                    const t = e.changedTouches && e.changedTouches[0];
+                    if (navDown && t) {
+                        dragStartX = t.clientX;
+                        dragBaseIndex = viewer.index;
+                    }
+                }, true);
+                document.addEventListener('touchmove', (e) => {
+                    if (!navDown) return;
+                    const t = e.changedTouches && e.changedTouches[0];
+                    if (!t) return;
+                    if (e.cancelable) e.preventDefault();
+                    // 往左拖 = 下一张，往右拖 = 上一张；按"已经滑过的距离"连续跟随，拖回来也切回去
+                    goTo(dragBaseIndex + Math.trunc((dragStartX - t.clientX) / DRAG_STEP));
+                }, {capture: true, passive: false});
+                document.addEventListener('touchend', () => { navDown = false; }, true);
+                document.addEventListener('touchcancel', () => { navDown = false; }, true);
+            })();
+
             /* 双击放大：库里的「模拟双击」（handlers.js:424-451）只看两次抬手的间隔（硬编码 500ms），
              * 完全不检查中间有没有拖动 ⇒ 连续拖动两下也会被当成双击放大。这里在外面收口（不改库）：
              *   1. 抬手时用「起点→终点」的位移判断这一下是轻点还是拖动。阈值 30px 的依据是实测：

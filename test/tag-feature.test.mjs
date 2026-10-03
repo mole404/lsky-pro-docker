@@ -768,8 +768,13 @@ console.log('\n[B. 行为] 卡片点击不被打标/拖动逻辑接管（预览�
     const { $, t } = boot({ gridItems: 3 });
     await sleep(20);
 
+    // 守卫的原意是「预览仍由 viewer 原生处理，应用不要自己劫持卡片点击」。
+    // 收窄成"卡片点击附近不许出现 viewer.view("：fork 新增的缩略图条滚轮/拖动切图
+    // 确实会调 viewer.view()，但它挂在 .viewer-navbar 上、完全不碰卡片点击，
+    // 不属于这条守卫针对的老问题（当年是拿它接管卡片预览）。
     check('应用没有自己接管卡片点击（预览由 viewer 原生处理，不被拦）',
-        ! /on\('click', IMAGES_ITEM/.test(blade) && ! /viewer\.view\(/.test(blade));
+        ! /on\('click', IMAGES_ITEM/.test(blade)
+        && ! /IMAGES_ITEM[\s\S]{0,400}viewer\.view\(/.test(blade));
     check('拖动起手放宽只写在 predragstart 的判据里（不改 DragSelect 的其它配置）',
         /keyboardDrag: false,/.test(blade) && ! /immediateDrag/.test(blade));
 
