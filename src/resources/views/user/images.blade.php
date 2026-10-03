@@ -663,45 +663,77 @@
             })();
 
                                     /* 切图前先把目标图"解码完"，再放行动画（治大图过渡卡顿）。
-             * 病因：库的过渡补间 width/height/margin，每帧都要按当前尺寸重新缩放并重绘那张大位图。
-             * 一张 10MB 的 JPEG 往往是两三千万像素，浏览器还要"边解码边缩放"，于是每帧都极重 ——
-             * 文件越大越卡、线性变化（老师观察到的规律正是如此）。
-             * 做法：调用库的 view() 之前，用一个游离的 Image 对象把目标地址解码进内存
-             *（img.decode()），解码完成才真正放行动画 —— 动画期间就不必再做解码这项重活。
-             * 兜底：最多等 1.2 秒；解码慢、失败或浏览器不支持 decode() 都直接放行，绝不卡住手势。
-             * 同一地址解码过一次就记下来，后续切回不再重复等待。 */
+             * 病因：库的过渡补间 width/height/margin，每帧都要按当前尺寸重新缩放并重绘整张位图。
+             *       一张 10MB 的 JPEG 常有数千万像素，"边解码边缩放"每帧都极重 —— 越大越卡、线性变化。
+             *       注意：解码只是开头那一下的成本，逐帧重绘才是主因；这一步能省掉一个可观的固定开销，
+             *       但若仍旧卡，就得改用"过渡期间拿小图顶替"（见下方 TODO 方案②）。
+             * 做法：把几个入口（show / next / prev / view）都包一层：先 img.decode() 目标地址，
+             *       解码完成再放行真正调用。同一地址解码过即记录，切回不再等待。
+             * 兜底：最多等 1.2s；解码失败、超时或不支持 decode() 都直接放行，绝不卡住手势。
+             * 上一版只挂了 view()，而"点开看图"走 show()、"滑动切图"走 next()/prev() —— 等于没生效，故补全。 */
             (function () {
                 const DECODED = new Set();
                 const WAIT_MS = 1200;
-                if (!viewer || typeof viewer.view !== 'function') return;   // 测试替身：直接跳过
-                const rawView = viewer.view.bind(viewer);
-                viewer.view = function (index) {
-                    const target = (typeof index === 'number') ? index : viewer.index;
-                    if (target === viewer.index || !viewer.isShown || !viewer.items) return rawView(index);
-                    const item = viewer.items[target];
-                    const url = item && (item.getAttribute('data-original') || item.src);
-                    if (!url || DECODED.has(url)) return rawView(index);
-                    let done = false;
-                    const go = () => {
-                        if (done) return;
-                        done = true;
+                if (!viewer) return;
+
+                const urlOf = function (index) {
+                    const list = viewer.items;
+                    if (!list || typeof index !== 'number' || index < 0 || index >= list.length) return '';
+                    const item = list[index];
+                    return item ? (item.getAttribute('data-original') || item.src || '') : '';
+                };
+
+                const preDecode = function (url, done) {
+                    if (!url || DECODED.has(url)) { done(); return; }
+                    let called = false;
+                    const go = function () {
+                        if (called) return;
+                        called = true;
                         DECODED.add(url);
-                        rawView(index);
+                        done();
                     };
                     const timer = setTimeout(go, WAIT_MS);
                     const img = new Image();
                     img.src = url;
                     if (typeof img.decode === 'function') {
                         img.decode().then(
-                            () => { clearTimeout(timer); go(); },
-                            () => { clearTimeout(timer); go(); }
+                            function () { clearTimeout(timer); go(); },
+                            function () { clearTimeout(timer); go(); }
                         );
                     } else {
-                        img.onload = () => { clearTimeout(timer); go(); };
-                        img.onerror = () => { clearTimeout(timer); go(); };
+                        img.onload = function () { clearTimeout(timer); go(); };
+                        img.onerror = function () { clearTimeout(timer); go(); };
                     }
-                    return viewer;
                 };
+
+                // 包住一个入口：先解码"这次要去的那张"，再放行
+                const wrap = function (name, pickIndex) {
+                    if (typeof viewer[name] !== 'function') return;
+                    const raw = viewer[name].bind(viewer);
+                    viewer[name] = function () {
+                        const args = arguments;
+                        const idx = pickIndex.apply(null, args);
+                        preDecode(urlOf(idx), function () { raw.apply(null, args); });
+                        return viewer;
+                    };
+                };
+
+                // show / view：参数里带着目标 index（没带就用当前 index）
+                wrap('show', function () { return viewer.index; });
+                wrap('view', function (index) {
+                    return (typeof index === 'number') ? index : viewer.index;
+                });
+                // next / prev：库自己算目标 index，这里按方向推一个
+                wrap('next', function () {
+                    const n = viewer.length || (viewer.items ? viewer.items.length : 0);
+                    if (!n) return viewer.index;
+                    return (viewer.index + 1) % n;
+                });
+                wrap('prev', function () {
+                    const n = viewer.length || (viewer.items ? viewer.items.length : 0);
+                    if (!n) return viewer.index;
+                    return (viewer.index - 1 + n) % n;
+                });
             })();
 
             /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
