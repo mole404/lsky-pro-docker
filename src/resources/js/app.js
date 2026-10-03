@@ -161,17 +161,18 @@ window.utils = {
                     const $sentinel = $(selector).find('.infinite-scroll').last();
                     if ($sentinel.length > 0) {
                         if ($sentinel[0].getBoundingClientRect().top <= window.innerHeight + offset) {
-                            // ★ 保险闸 1：距上次「用户真实向下滚动」不足 150ms 不放行。
-                            //   浏览器为了维持滚动位置自动补的那一滚，不会更新这个时间戳，
-                            //   所以补滚最多带出已有的那一页，不会连锁到最底。
-                            // ★ 保险闸 2：刚重置过（清空重排中）不放行 —— 那段时间页面高度剧烈
-                            //   变化，最容易被带着连发请求。窗口由页面侧在 resetImages 里开。
-                            const gate = window.__lskyScrollGate;
-                            const idleOK = !gate || !gate.ready || (Date.now() - gate.ready >= 150);
-                            const resetOK = !window.__lskyResetGuardUntil || Date.now() >= window.__lskyResetGuardUntil;
-                            if (idleOK && resetOK) {
-                                load();
+                            // ★ 唯一的闸门：页面侧在 resetImages 里开的「重置窗口」内不放行。
+                            //   换排序/刷新刚清空那段时间，页面高度剧烈变化（塌缩再逐页长回来），
+                            //   最容易被补齐/重排带着连发请求 —— 那才是「无脑滚到底」的起点。
+                            //   ★ 曾经还加过「必须由用户手指驱动（touchmove/wheel）才算用户滚动」的
+                            //   第二道闸，结果把真实滑到底一起堵死了（滑到底那一刻可能刚处在窗口
+                            //   边缘，被拦之后又不再有 scroll 事件 ⇒ 永远不加载）。守卫测试
+                            //   infinite-scroll 三套当时全红，失败项正是「到底了不触发」——
+                            //   别再往这里加法。
+                            if (window.__lskyResetGuardUntil && Date.now() < window.__lskyResetGuardUntil) {
+                                return;
                             }
+                            load();
                         }
                         return;
                     }
