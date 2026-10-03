@@ -19,6 +19,24 @@
             不再需要 @media (hover: none) 那条「给触摸设备常显操作按钮」的补丁 —— 已删掉，
             别再写回来：按钮本来就常显，触摸端与桌面端行为一套。--}}
     <style>
+            /* 让"切图过渡"的起点稳定在屏幕中心。
+             * 库每切一张都新建 <img>：刚插进画布时用的是默认 CSS（满宽、贴顶，来自库自带的
+             * .viewer-container img{width:100%;height:auto} + margin:15px auto）。之后图片加载完成，
+             * 库才写内联样式：先写成"屏幕中心的一个点"，再写最终尺寸，靠 CSS 过渡补间。
+             * 而过渡的起点 = 浏览器「上一次真正渲染过的样式」：若只渲染到"满宽贴顶"那一帧，
+             * 动画就从屏幕上方飞进来。哪一帧被渲染由缓存/网速/主线程决定 —— 这就是"忽上忽下"。
+             * 对策：用 :not([style]) 只命中"还没有内联样式"的那一瞬（库一写内联样式立刻失效，
+             * 因此绝不影响最终显示、也不会和库打架），把这一瞬做成"屏幕中心的小点" ——
+             * 无论渲染到哪一帧，起点都是中心。过渡照旧用库自带的，所以动画保留。 */
+            .viewer-canvas > img:not([style]) {
+                width: 1px;
+                height: 1px;
+                margin-left: 50vw;
+                margin-top: 50vh;
+                opacity: 0;
+            }
+
+
         #album-switch-modal .infinite-scroll {
             display: none;
         }
@@ -644,43 +662,7 @@
                 document.addEventListener('touchcancel', () => { navDown = false; }, true);
             })();
 
-                                    /* 切图不要过渡动画（Claude 方案 B）。
-             * 库每切一张都新建 <img>：先把新图写成"屏幕中心的点"，读完自然尺寸再写最终尺寸，靠
-             * CSS 过渡补间；而过渡的起点是"浏览器上一次真正渲染过的样式"，哪一帧渲染过取决于图片
-             * 缓存/网速/主线程忙不忙，于是表现为"有时从中间长出来、有时从屏幕上方飞入"。方案 A
-             * （强制回流）在真机上仍不稳定，索性取消这一下的动画 —— 起点问题就不存在了。
-             * 必须走 options.transition 开关，**不能**用 CSS transition:none 去压：那样 renderImage
-             * 永远等不到 transitionend，viewed 不触发，手势会被卡死。
-             * 路径覆盖：next()/prev() 内部调的都是 this.view，所以手指滑动、缩略图条、键盘、
-             * 底部按钮全都会经过这里。 */
-            (function () {
-                let saved = null;
-                let timer = 0;
-                const restore = () => {
-                    if (saved === null) return;
-                    viewer.options.transition = saved;
-                    saved = null;
-                    clearTimeout(timer);
-                    timer = 0;
-                };
-                // 防御：测试环境里的 Viewer 是替身，可能没有 view / element
-                if (!viewer || typeof viewer.view !== 'function') return;
-                const rawView = viewer.view.bind(viewer);
-                viewer.view = function (index) {
-                    const target = (typeof index === 'number') ? index : viewer.index;
-                    if (target !== viewer.index && viewer.isShown && saved === null) {
-                        saved = viewer.options.transition;
-                        viewer.options.transition = false;
-                        timer = setTimeout(restore, 1000);   // 兜底：万一 viewed 没来也不卡住
-                    }
-                    return rawView(index);
-                };
-                // viewed 是库派发的 DOM 事件（不是那个不存在的 viewer.on），两处都听稳一点
-                if (viewer.element) viewer.element.addEventListener('viewed', restore);
-                document.addEventListener('viewed', restore, true);
-            })();
-
-            /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
+                                    /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
              * 库里 slideOnTouch:false ⇒ 单指动作永远是 'move'，库自己的平移就是跟手拖动，
              * 不再出现 'switch' 动作 ⇒ 1px 判据与"闩锁"都不存在。切图还是回弹由松手时决定。
              * 为什么不拦事件：库用 HAS_POINTER_EVENT ? 'pointermove' : 'touchmove' 选通道，
