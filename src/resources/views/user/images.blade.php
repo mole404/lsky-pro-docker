@@ -662,7 +662,49 @@
                 document.addEventListener('touchcancel', () => { navDown = false; }, true);
             })();
 
-                                    /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
+                                    /* 切图前先把目标图"解码完"，再放行动画（治大图过渡卡顿）。
+             * 病因：库的过渡补间 width/height/margin，每帧都要按当前尺寸重新缩放并重绘那张大位图。
+             * 一张 10MB 的 JPEG 往往是两三千万像素，浏览器还要"边解码边缩放"，于是每帧都极重 ——
+             * 文件越大越卡、线性变化（老师观察到的规律正是如此）。
+             * 做法：调用库的 view() 之前，用一个游离的 Image 对象把目标地址解码进内存
+             *（img.decode()），解码完成才真正放行动画 —— 动画期间就不必再做解码这项重活。
+             * 兜底：最多等 1.2 秒；解码慢、失败或浏览器不支持 decode() 都直接放行，绝不卡住手势。
+             * 同一地址解码过一次就记下来，后续切回不再重复等待。 */
+            (function () {
+                const DECODED = new Set();
+                const WAIT_MS = 1200;
+                if (!viewer || typeof viewer.view !== 'function') return;   // 测试替身：直接跳过
+                const rawView = viewer.view.bind(viewer);
+                viewer.view = function (index) {
+                    const target = (typeof index === 'number') ? index : viewer.index;
+                    if (target === viewer.index || !viewer.isShown || !viewer.items) return rawView(index);
+                    const item = viewer.items[target];
+                    const url = item && (item.getAttribute('data-original') || item.src);
+                    if (!url || DECODED.has(url)) return rawView(index);
+                    let done = false;
+                    const go = () => {
+                        if (done) return;
+                        done = true;
+                        DECODED.add(url);
+                        rawView(index);
+                    };
+                    const timer = setTimeout(go, WAIT_MS);
+                    const img = new Image();
+                    img.src = url;
+                    if (typeof img.decode === 'function') {
+                        img.decode().then(
+                            () => { clearTimeout(timer); go(); },
+                            () => { clearTimeout(timer); go(); }
+                        );
+                    } else {
+                        img.onload = () => { clearTimeout(timer); go(); };
+                        img.onerror = () => { clearTimeout(timer); go(); };
+                    }
+                    return viewer;
+                };
+            })();
+
+            /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
              * 库里 slideOnTouch:false ⇒ 单指动作永远是 'move'，库自己的平移就是跟手拖动，
              * 不再出现 'switch' 动作 ⇒ 1px 判据与"闩锁"都不存在。切图还是回弹由松手时决定。
              * 为什么不拦事件：库用 HAS_POINTER_EVENT ? 'pointermove' : 'touchmove' 选通道，
