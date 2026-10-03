@@ -540,6 +540,39 @@
                 loop: false,
             });
 
+            /* 修 Viewer.js 的另一个坑：update() 重建缩略图条却不重算它的位置。
+             * Claude 定位 + jsdom 复现（我核对了源码与线上压缩产物）：
+             *   update() 会把 .viewer-list 的 width 设成 auto 并重建所有 <li>，
+             *   但当前图没变时不会调 renderList() ⇒ 位置（width + translateX((容器宽-30)/2 - 31*index)）
+             *   还是旧值。图越靠后这个负偏移越大，超过一屏宽后整个列表被推出导航条可视区，
+             *   只剩一条空的黑底 —— 就是老师看到的"缩略图条不显示"；手指一滑（goTo → view → renderList）
+             *   位置被重算，缩略图立刻回来。
+             * 谁会在看图时调 update()：images.blade.php 里无限滚动每次请求结束的 complete 回调
+             * （看图时后台正好加载完一批就会触发），以及侧栏折叠。所以是"偶尔"。
+             * 修法：包一层 update()，让它跑完补一次 renderList()，并把丢失的 active 状态找回来。
+             * 注意不要依赖 viewer.items / isShown —— 线上压缩产物里查不到这两个名字（可能被改名），
+             * 改成查 DOM，稳。
+             * 注意这是 fork 侧的自证：Dockerfile 里钉的 images.blade.php md5 不变的话构建会失败。 */
+            (function () {
+                if (typeof viewer.update !== 'function' || typeof viewer.renderList !== 'function') {
+                    return;                                 // 产物变了就安静退出，不折腾
+                }
+                const rawUpdate = viewer.update.bind(viewer);
+                viewer.update = function () {
+                    const ret = rawUpdate.apply(null, arguments);
+                    try {
+                        const list = document.querySelector('.viewer-navbar .viewer-list');
+                        if (!list || !viewer.ready) return ret;
+                        // 重建出来的 <li> 会丢掉 active 状态，按当前 index 补回去
+                        if (!list.querySelector('li.viewer-active') && list.children[viewer.index]) {
+                            list.children[viewer.index].classList.add('viewer-active');
+                        }
+                        viewer.renderList();                // 重算 width 与 translateX
+                    } catch (e) { /* 兜底：绝不因为补一刀而让看图界面挂掉 */ }
+                    return ret;
+                };
+            })();
+
             /* 底部缩略图条上的快捷切图（老师要的功能）。
              *   · 电脑：光标在缩略图条上滚轮 ⇒ 滚一格切一张。
              *     控件自己在外层容器上绑了"滚轮缩放"（捕获阶段），所以这里也在 document 捕获
