@@ -654,14 +654,15 @@
              *（观感就是弹回原位）；放大后库不切，由本层按 80px 判定补一次 view()。
              * 注意用 pointer 事件（与库同一套），判断范围限定在 .viewer-canvas 内，不碰缩略图条。 */
             (function () {
-                const SWIPE_NOT_ZOOMED = 40;   // 未放大：划够这么多才切
-                const SWIPE_ZOOMED = 80;       // 放大后：更钝一点，避免和拖动打架
+                const SWIPE_NOT_ZOOMED = 60;   // 未放大：划够这么多才开始跟手/切图（老师反馈 40 仍太灵敏，加大）
+                const SWIPE_ZOOMED = 120;      // 放大后：更钝，避免和拖动打架
                 const DIRECTION_RATIO = 1.2;   // |dx| 要明显大于 |dy| 才算横划
                 let downX = 0;
                 let downY = 0;
                 let downIndex = null;
                 let zoomed = false;
                 let qualified = false;
+                let savedAction = null;        // 库在 pointerdown 时算出的动作值，划够后再还给它们
                 const inCanvas = (el) => el instanceof Element && !!el.closest('.viewer-canvas');
                 const isZoomed = () => {
                     const im = document.querySelector('.viewer-canvas img');
@@ -676,28 +677,37 @@
                     downIndex = viewer.index;
                     zoomed = isZoomed();
                     qualified = false;
+                    savedAction = null;        // 库的 pointerdown 在本层之后才跑，故延到第一次 move 再取
                 }, true);
                 document.addEventListener('pointermove', (e) => {
                     if (downIndex === null) return;
+                    if (savedAction === null) savedAction = viewer.action;   // 第一次 move 时库已经定好动作了
                     const dx = e.clientX - downX;
                     const dy = e.clientY - downY;
                     const need = zoomed ? SWIPE_ZOOMED : SWIPE_NOT_ZOOMED;
                     qualified = Math.abs(dx) >= need && Math.abs(dx) > Math.abs(dy) * DIRECTION_RATIO;
+                    /* 关键：没划够时把动作设成"无"，让库的 move 处理直接 return
+                     *（库的 pointermove 开头就是 if (!this.viewed || !action) return）。
+                     * 这样拖动过程中根本不会发生"先翻过去再弹回来"—— 上一版的缺陷就在这：
+                     * 只在松手时弹回，翻页那一瞬用户已经看见了，观感还是"一碰就翻"。
+                     * 一旦划够阈值，就把库自己算的动作原样还回去，从这一刻开始跟手。 */
+                    viewer.action = qualified ? (savedAction || false) : false;
                 }, true);
                 document.addEventListener('pointerup', (e) => {
                     if (downIndex === null) return;
                     const from = downIndex;
                     const dx = e.clientX - downX;
                     downIndex = null;
+                    savedAction = null;
                     if (qualified) {
-                        // 放大时库不会自己切（它判成拖动），由这里补一次
+                        // 放大时库判成拖动（只平移不切），由这里补一次
                         if (zoomed) viewer.view(viewer.index + (dx < 0 ? 1 : -1));
                         return;
                     }
-                    // 不够格：库可能已经"跟手切过去"了，把它弹回原位
+                    // 兜底：万一还是切过去了，弹回原位（正常路径下不会走到）
                     if (!zoomed && viewer.index !== from) viewer.view(from);
                 }, true);
-                document.addEventListener('pointercancel', () => { downIndex = null; }, true);
+                document.addEventListener('pointercancel', () => { downIndex = null; savedAction = null; }, true);
             })();
 
             /* 双击放大：库里的「模拟双击」（handlers.js:424-451）只看两次抬手的间隔（硬编码 500ms），
