@@ -535,6 +535,8 @@
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {
                 url: 'data-original',
+                    slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
+
                 // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
                 // 控件重建画布/缩略图条 ⇒ iOS 整个界面左偏、安卓缩略图全空，见后续修复记录）
                 loop: false,
@@ -642,52 +644,46 @@
                 document.addEventListener('touchcancel', () => { navDown = false; }, true);
             })();
 
-                        /* 触摸端切图阈值接管（最小侵入版）：只拦事件，绝不写库的内部状态。
-             * 为什么必须这样 —— 血的教训：库的捏合、双击、移动过渡全靠它自己的
-             * this.action 状态机（handlers.js:367-375 在 pointerdown 时一次性定值，
-             * 且移动时若 action 为 'move' 会摘掉过渡类）。从外面改写这个值 ⇒
-             * 双指捏合被覆盖失效、拖动带上 CSS 过渡延迟、切图行为也乱 —— 全崩。
-             * 所以这里只做一件事：单指触摸、且位移还没到阈值时，在捕获阶段
-             * stopPropagation，让库收不到这次移动（它就不会切图）；一旦划够阈值就
-             * 立刻放行，之后全部交给库原样处理（跟手切图本来就是它自带的）。
-             * 多指（捏合）一根手指都不干预；库的内部状态自始至终不碰。 */
+                                    /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
+             * 库里 slideOnTouch:false ⇒ 单指动作永远是 'move'，库自己的平移就是跟手拖动，
+             * 不再出现 'switch' 动作 ⇒ 1px 判据与"闩锁"都不存在。切图还是回弹由松手时决定。
+             * 为什么不拦事件：库用 HAS_POINTER_EVENT ? 'pointermove' : 'touchmove' 选通道，
+             * 拦 pointermove 在真机上可能整段失效（踩过）。这里只读 viewer.action 判定是否放权，
+             * 一个字都不写库的内部状态 —— 捏合/双击/过渡因此完全不受影响。 */
             (function () {
-                const SWIPE_NOT_ZOOMED = 60;   // 未放大：划够这么多才切图
-                const SWIPE_ZOOMED = 120;      // 放大后：更钝，避免和拖动打架
-                const DIRECTION_RATIO = 1.2;   // |dx| 要明显大于 |dy| 才算横划
-                let active = 0;                // 当前按下的手指数
-                let downX = 0;
-                let downY = 0;
-                let zoomed = false;
-                let qualified = true;          // 默认放行（非画布/多指都走放行）
+                const FAR_RATIO = 0.18;    // 够远：视口宽的这个比例
+                const FAR_MIN = 56;        // 或至少这么多 px
+                const FAST_SPEED = 0.5;    // 够快：px/ms
+                let g = null;
                 const inCanvas = (el) => el instanceof Element && !!el.closest('.viewer-canvas');
-                const isZoomed = () => {
-                    const im = document.querySelector('.viewer-canvas img');
-                    const c = document.querySelector('.viewer-canvas');
-                    if (!im || !c) return false;
-                    return im.getBoundingClientRect().width > c.getBoundingClientRect().width + 2;
+                const isFit = () => {
+                    const d = viewer.imageData;
+                    const v = viewer.viewerData;
+                    if (!d || !v) return false;
+                    return d.x >= 0 && d.y >= 0 && d.width <= v.width && d.height <= v.height;
                 };
                 document.addEventListener('pointerdown', (e) => {
-                    active += 1;
-                    if (active > 1 || !inCanvas(e.target)) { qualified = true; return; }
-                    downX = e.clientX;
-                    downY = e.clientY;
-                    zoomed = isZoomed();
-                    qualified = false;
+                    if (!e.isPrimary) { if (g) g.multi = true; return; }   // 第二指 ⇒ 捏合，放权给库
+                    g = (e.pointerType !== 'mouse' && inCanvas(e.target))
+                        ? { x: e.clientX, y: e.clientY, t: e.timeStamp, fit: isFit(), multi: false }
+                        : null;
                 }, true);
-                document.addEventListener('pointermove', (e) => {
-                    if (active > 1 || qualified) return;      // 捏合中 / 已放行：不干预
-                    const dx = e.clientX - downX;
-                    const dy = e.clientY - downY;
-                    const need = zoomed ? SWIPE_ZOOMED : SWIPE_NOT_ZOOMED;
-                    if (Math.abs(dx) >= need && Math.abs(dx) > Math.abs(dy) * DIRECTION_RATIO) {
-                        qualified = true;                     // 划够了：从这一下起放行
-                        return;
+                document.addEventListener('pointerup', (e) => {
+                    if (!g || !e.isPrimary) return;
+                    const s = g;
+                    g = null;
+                    if (!s.fit || s.multi) return;                        // 放大态 / 捏合：一律交给库
+                    const dx = e.clientX - s.x;
+                    const dy = e.clientY - s.y;
+                    const dt = Math.max(1, e.timeStamp - s.t);
+                    const far = Math.abs(dx) > Math.max(FAR_MIN, window.innerWidth * FAR_RATIO);
+                    const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 30;
+                    if ((far || fast) && Math.abs(dx) > Math.abs(dy) * 1.5) {
+                        if (dx < 0) viewer.next(false); else viewer.prev(false);
+                    } else if (dx !== 0 || dy !== 0) {
+                        viewer.reset();                                   // 带动画的回弹
                     }
-                    e.stopPropagation();                      // 没划够：库收不到 ⇒ 不会切图
-                }, true);
-                document.addEventListener('pointerup', () => { active = Math.max(0, active - 1); }, true);
-                document.addEventListener('pointercancel', () => { active = Math.max(0, active - 1); }, true);
+                }, false);
             })();
 
             /* 双击放大：库里的「模拟双击」（handlers.js:424-451）只看两次抬手的间隔（硬编码 500ms），
