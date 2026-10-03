@@ -680,10 +680,12 @@
                     const far = Math.abs(dx) > Math.max(FAR_MIN, window.innerWidth * FAR_RATIO);
                     const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 30;
                     if ((far || fast) && Math.abs(dx) > Math.abs(dy) * 1.5) {
-                        /* 先复位平移再切图：库用 marginTop/marginLeft 定位，拖动平移过之后
-                         * 直接切图，新图会从被平移的偏移量开始做 transition ⇒ 观感上是
-                         * "从偏上的位置飞出来"（手指带纵向位移时最明显）。 */
-                        viewer.reset();
+                        /* 切图不要"飞入"：库的过渡是"从上一张图的 margin 滑到新图的 margin"，
+                         * 两张图高度不同（横图↔竖图）时，新图就会从偏上/偏下的位置滑进来。
+                         * 这一段临时摘掉过渡类 ⇒ 新图直接出现在它该在的位置（= "从中间出来"）。
+                         * 过渡类是库自己在管的（action 为 move/zoom 时它自己也会摘），不属于
+                         * 那个碰不得的 action 状态机，且同一帧即由 renderImage 恢复。 */
+                        viewer.image.classList.remove('viewer-transition');
                         if (dx < 0) viewer.next(false); else viewer.prev(false);
                         guardClick = Date.now();                          // 标记：刚刚切过图
                     } else if (dx !== 0 || dy !== 0) {
