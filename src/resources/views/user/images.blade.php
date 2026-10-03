@@ -686,12 +686,15 @@
                     const dy = e.clientY - downY;
                     const need = zoomed ? SWIPE_ZOOMED : SWIPE_NOT_ZOOMED;
                     qualified = Math.abs(dx) >= need && Math.abs(dx) > Math.abs(dy) * DIRECTION_RATIO;
-                    /* 关键：没划够时把动作设成"无"，让库的 move 处理直接 return
-                     *（库的 pointermove 开头就是 if (!this.viewed || !action) return）。
-                     * 这样拖动过程中根本不会发生"先翻过去再弹回来"—— 上一版的缺陷就在这：
-                     * 只在松手时弹回，翻页那一瞬用户已经看见了，观感还是"一碰就翻"。
-                     * 一旦划够阈值，就把库自己算的动作原样还回去，从这一刻开始跟手。 */
-                    viewer.action = qualified ? (savedAction || false) : false;
+                    /* 关键：给库"规范动作值"，不去读它内部的状态。
+                     * 为什么不能"读回来再还回去"：库的 change() 一进 SWITCH 分支就把
+                     * this.action 改成 'switched'（others.js:217，即那个"闩"），而这个值
+                     * 在外层 switch 里没有 case ⇒ 还给库等于让它什么都不做，切图就失效了
+                     *（上一版正是栽在这里）。所以这里直接用两个确定的字面量：
+                     *   未划够 / 已放大未够格 → 'move'：库只平移，绝不切图；
+                     *   未放大且划够      → 'switch'：库跟手切图（跟手也是库自带的行为）。
+                     * 另外不要动 options.movable / slideOnTouch，可见性判断交给库。 */
+                    viewer.action = (qualified && !zoomed) ? 'switch' : 'move';
                 }, true);
                 document.addEventListener('pointerup', (e) => {
                     if (downIndex === null) return;
