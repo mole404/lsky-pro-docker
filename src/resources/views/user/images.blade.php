@@ -664,66 +664,53 @@
 
                                     /* 第二阶段：过渡结束后，在后台把"原图"换上（治大图过渡卡顿的主手段）。
              * 病因：库的过渡补间 width/height/margin，每帧都要按当前尺寸重新缩放并重绘整张位图，
-             *       10MB 的 JPEG 常有数千万像素 ⇒ 每帧极重、越大越卡且线性变化。
+             *       一张 10MB 的 JPEG 常有数千万像素 ⇒ 每帧极重、越大越卡且线性变化。
              * 做法：显示用图先用页面里已有的缩略图（约 400px，逐帧重绘代价小两个数量级）⇒ 过渡丝滑；
-             *       随后在后台加载原图，加载完把同一个 <img> 的 src 换成原图并同步一次库内部尺寸
-             *（临时关 transition，避免重放动画）。视觉上是「丝滑长出来 → 随即变清晰」。
-             *       全程零新增图片文件（沿用已有的缩略图），失败就保持缩略图显示，不影响手势。
-             * 触发方式（上一版踩坑：库的 viewed 事件不在 viewer 实例上，viewer.on 不存在，
-             *       我那句 typeof viewer.on !== 'function' 的守卫反而把整段跳过了 ⇒ 老师只看到模糊缩略图）：
-             *       ① 监听根元素 viewer.element 的 viewed / shown（库的事件发在根元素上）；
-             *       ② 再用一个 450ms 的兜底定时器（过渡 0.3s）在切换后强制检查一次。
-             *       两条路都幂等（靠 data-full 标记去重），重复触发无害。 */
+             *       随后在后台加载原图，加载完把同一个 <img> 的 src 换成原图。
+             *       视觉上是「丝滑长出来 → 随即变清晰」，且全程零新增图片文件。
+             *
+             * 触发方式：只碰 DOM，不碰库内部对象。
+             *   前两版分别踩过：viewer.on 不存在（事件其实发在根元素）、viewer.element/
+             *   viewer.image 在不同构建里形态不一（可能是 jQuery 包装对象，没有 addEventListener），
+             *   结果触发逻辑被静默跳过，老师一直看到模糊缩略图。故本版改为：
+             *   每 500ms 扫一眼画布里的 <img>：若它的 src 还是缩略图，就拿这个 src 去图库里
+             *   反查同一张图对应的卡片（卡片的 <img> src 就是同一个缩略图），取其 data-original，
+             *   后台加载完成后原地替换 src。用 data-full 标记去重，重复触发无害。 */
             (function () {
-                if (!viewer || !viewer.items) return;
-                const root = viewer.element || viewer.viewer;
-                let timer = null;
+                const canvasSel = '.viewer-canvas > img';
+                const THUMB_HINT = 'thumbnails';
 
-                const swap = function () {
-                    const img = viewer.image;
-                    if (!img) return;
-                    const item = viewer.items[viewer.index];
-                    if (!item) return;
-                    const full = item.getAttribute('data-original');
+                const upgrade = function () {
+                    const shown = document.querySelector(canvasSel);
+                    if (!shown) return;
+                    const cur = shown.getAttribute('src') || '';
+                    if (!cur || cur.indexOf(THUMB_HINT) === -1) return;   // 已经是原图，不用管
+                    if (shown.getAttribute('data-full')) return;          // 这次已经换过了
+                    // 用缩略图地址反查卡片，拿到原图地址
+                    const cards = document.querySelectorAll('#images-grid img, .images-item img');
+                    let full = '';
+                    for (let k = 0; k < cards.length; k++) {
+                        const c = cards[k];
+                        if ((c.getAttribute('src') || '') === cur) {
+                            full = c.getAttribute('data-original') || '';
+                            break;
+                        }
+                    }
                     if (!full) return;
-                    if (img.getAttribute('data-full') === full) return;   // 已经换过了
-                    const my = img;
+                    const my = shown;
                     const probe = new Image();
                     probe.onload = function () {
-                        if (viewer.image !== my) return;                  // 期间又切图了，放弃
-                        if (my.getAttribute('data-full') === full) return;
-                        my.setAttribute('data-full', full);
-                        my.src = full;                                    // 同位置换高清，尺寸不变
-                        try {
-                            const keep = viewer.options.transition;
-                            viewer.options.transition = false;            // 不重放动画
-                            if (typeof viewer.initImage === 'function') viewer.initImage();
-                            viewer.options.transition = keep;
-                        } catch (e) {}
+                        if (document.querySelector(canvasSel) !== my) return;   // 期间又切图了
+                        if (my.getAttribute('data-full')) return;
+                        my.setAttribute('data-full', '1');
+                        my.src = full;                                      // 同位置换高清
                     };
                     probe.onerror = function () {};
                     probe.src = full;
                 };
 
-                if (root && typeof root.addEventListener === 'function') {
-                    root.addEventListener('viewed', swap);
-                    root.addEventListener('shown', swap);
-                }
-                // 兜底：切换后 450ms 强制检查一次（不依赖任何事件）
-                const arm = function () {
-                    if (timer) clearTimeout(timer);
-                    timer = setTimeout(swap, 450);
-                };
-                const wrapArm = function (name) {
-                    if (typeof viewer[name] !== 'function') return;
-                    const raw = viewer[name].bind(viewer);
-                    viewer[name] = function () {
-                        const r = raw.apply(null, arguments);
-                        arm();
-                        return r;
-                    };
-                };
-                ['show', 'view', 'next', 'prev', 'reset'].forEach(wrapArm);
+                setInterval(upgrade, 500);
+                upgrade();
             })();
 
             /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
