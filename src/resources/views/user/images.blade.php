@@ -40,6 +40,15 @@
              *   （render.js initBody），那时文档还没溢出，量到的是 0，所以它补的 paddingRight
              *   恒为 0px（真机实测确认过），指望它补是不行的。 */
             html { scrollbar-gutter: stable; }
+                        /* ★ 砍掉「从小变大」的过渡动画（2026-10-03 最激进版）
+             *   本机实测：切图卡顿来自「一张新图第一次被画上屏」（首开 258ms / 切图 ~130ms），
+             *   与动画用什么属性无关（width/height 与 transform 驱动的动画都只 1-2ms）、
+             *   与解码无关（预解码实测无效）。已试并被否决的四个方案见技能库。
+             *   ⇒ 既然动画本身不是成本、而那 130ms 又必然发生（只是位置可挪），
+             *     就直接不做这段几何动画：库把图瞬间摆到终态，页面立刻就能看到整张图，
+             *     没有"补间帧"⇒ 没有掉帧窗口。
+             *   只用 CSS 覆盖、不动库：遮罩淡入、缩略图条等其它过渡不受影响。 */
+            .viewer-canvas > img { transition: none !important; }
                         .viewer-canvas > img:not([style]) {
                 width: 1px;
                 height: 1px;
