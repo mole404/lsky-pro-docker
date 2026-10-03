@@ -704,6 +704,15 @@
                         }
                     }
                     if (!full) return;
+                    // 时间闸门：过渡动画固定 0.3s（CSS 写死、与设备无关）。
+                    // 若网速极快或原图已缓存，onload 可能在动画中途就回来，那时换图会把
+                    // 巨图提前塞进动画帧 ⇒ 又变卡。故给每个 <img> 打上"出现时刻"，
+                    // 450ms 内一律不换，确保动画期间显示的始终是缩略图。
+                    if (!shown.getAttribute('data-shown-at')) {
+                        shown.setAttribute('data-shown-at', String(Date.now()));
+                        return;
+                    }
+                    if (Date.now() - Number(shown.getAttribute('data-shown-at')) < 450) return;
                     const rec = state[full] || {};
                     if (rec.done) {                                       // 之前成功过，直接换（走缓存）
                         shown.setAttribute('data-full', '1');
