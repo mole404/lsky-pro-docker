@@ -993,10 +993,51 @@ jobs:
           set -euo pipefail
           # pin 从 Dockerfile 解析（不要再写死：曾经漂移过一次，把新镜像贴上了旧 pin 的 tag）
           PIN="${{ steps.pin.outputs.pin }}"
-          docker buildx imagetools create \
-            -t "${IMAGE}:latest" \
-            -t "${IMAGE}:${PIN}" \
-            "${IMAGE}:sha-${GITHUB_SHA}"
-          echo "已把 sha-${GITHUB_SHA} 提升为 :latest 与 :${PIN}"
+
+          # ================= 版本号 tag（vX.Y.Z）=================
+          # 目的（老师 2026-10-03 定）：
+          #   · `latest` 永远 = master 最新正式版；
+          #   · 同时每个正式版都留一个**不可变**的版本号 tag，日后能靠它拉回旧正式版；
+          #   · **无论如何都不能靠版本号拉到 test 分支的镜像** —— 这不是靠约定，而是结构保证：
+          #     本步骤的 if 里写死了 github.ref == 'refs/heads/master'，分支构建根本执行不到这里。
+          #     下面再加两道守卫，挡住「手动 workflow_dispatch 在别的 ref 上跑」这类旁路。
+          #
+          # 版本号来源 = 应用自己的 config/app.php（单一事实来源，避免 workflow 与代码漂移；
+          # 与上面 PIN 从 Dockerfile 解析同一个原则）。
+          VER=$(grep -oE "'version'[[:space:]]*=>[[:space:]]*'[^']+'" src/config/app.php \
+                | head -1 | sed -E "s/.*'([^']+)'.*/\1/")
+          [ -n "$VER" ] || { echo "::error::读不到 src/config/app.php 里的 version"; exit 1; }
+          echo "本次版本号：$VER"
+          # 守卫①：格式必须是 v<数字>.<数字>.<数字>，免得手滑写出怪 tag
+          [[ "$VER" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::版本号格式不对（期望 vX.Y.Z，实际 '$VER'）"; exit 1; }
+
+          # 守卫②：这个 commit 必须真的在 master 上。
+          #   只信 github.ref 不够 —— workflow_dispatch 可以在任意 ref 上手动触发。
+          #   用 Compare API 判断（checkout 是浅克隆，本地 git 历史不足以做 merge-base）。
+          #   以本 commit 为 base、master 为 head：identical（就是 master 顶端）或 ahead（master 更新）
+          #   都说明本 commit 在 master 的历史里。
+          CMP=$(curl -fsS \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/compare/${GITHUB_SHA}...master" \
+            | python3 -c 'import sys,json;print(json.load(sys.stdin).get("status",""))')
+          case "$CMP" in
+            identical|ahead) echo "守卫②通过：${GITHUB_SHA:0:12} 在 master 上（compare=$CMP）" ;;
+            *) echo "::error::${GITHUB_SHA:0:12} 不在 master 上（compare=$CMP）—— 拒绝打版本号 tag"; exit 1 ;;
+          esac
+
+          # 守卫③：版本号 tag **不可变** —— 已存在就保留原样、绝不覆盖。
+          #   这正是「靠版本号拉旧正式版」能成立的前提：老 tag 永远指向老镜像。
+          TAGS=(-t "${IMAGE}:latest" -t "${IMAGE}:${PIN}")
+          if docker buildx imagetools inspect "${IMAGE}:${VER}" >/dev/null 2>&1; then
+            echo "::notice::${IMAGE}:${VER} 已存在 —— 保留原样，不覆盖（版本号 tag 不可变）"
+          else
+            TAGS+=(-t "${IMAGE}:${VER}")
+            echo "将新建版本号 tag：${VER}"
+          fi
+
+          docker buildx imagetools create "${TAGS[@]}" "${IMAGE}:sha-${GITHUB_SHA}"
+          echo "已把 sha-${GITHUB_SHA} 提升为 latest + ${PIN} + 版本号 ${VER}"
           docker buildx imagetools inspect "${IMAGE}:latest" > /tmp/promoted.txt
           head -20 /tmp/promoted.txt
