@@ -581,14 +581,18 @@
                         dragBaseIndex = viewer.index;
                     }
                 }, true);
+                /* 注意：这个监听器**必须**是 passive，绝不能 preventDefault。
+                 * 在 document 上注册「非 passive 的 touchmove」会让 Chrome 失去"不等 JS 就滚动/绘制"
+                 * 的快路径 —— 表现是远离手指的元素（比如屏幕底部的缩略图条）不重绘：一直空白，
+                 * 手指一碰它才突然画出来（安卓上尤其明显）。老师说"像被什么卡住了"就是这个。
+                 * 而缩略图条本来就是 touch-action:none、浏览器不会滚它，所以根本不用 preventDefault。 */
                 document.addEventListener('touchmove', (e) => {
                     if (!navDown) return;
                     const t = e.changedTouches && e.changedTouches[0];
                     if (!t) return;
-                    if (e.cancelable) e.preventDefault();
                     // 往左拖 = 下一张，往右拖 = 上一张；按"已经滑过的距离"连续跟随，拖回来也切回去
                     goTo(dragBaseIndex + Math.trunc((dragStartX - t.clientX) / DRAG_STEP));
-                }, {capture: true, passive: false});
+                }, {capture: true, passive: true});
                 document.addEventListener('touchend', () => { navDown = false; }, true);
                 document.addEventListener('touchcancel', () => { navDown = false; }, true);
             })();
