@@ -687,6 +687,44 @@
                 const MAX_FAILS = 3;        // 连续失败几次就放弃（保持缩略图）
                 const state = {};           // 原图地址 -> { pending, fails, done, t }
 
+                // 「立刻按真实分辨率修正」：打开/切图的那一刻就能用卡片里*已知的*宽高
+                // 把库的尺寸认知与标题设对，不必等原图下载、也不解码。
+                // 库是在图片加载完成时才写标题，所以这里多补几次（0/60/200/500ms），
+                // 防止我们刚设好又被库覆盖；每次都是幂等赋值，代价可忽略。
+                const fixSizeNow = function (url) {
+                    if (!url) return;
+                    let realW = 0, realH = 0;
+                    const cards = document.querySelectorAll('#images-grid .images-item, .images-item');
+                    for (let k = 0; k < cards.length; k++) {
+                        const im = cards[k].querySelector('img');
+                        if (!im) continue;
+                        if (im.getAttribute('data-original') === url || im.getAttribute('data-view-src') === url || im.getAttribute('src') === url) {
+                            let meta = {};
+                            try { meta = JSON.parse(cards[k].getAttribute('data-json') || '{}') || {}; } catch (e) { meta = {}; }
+                            realW = Number(meta.width) || 0;
+                            realH = Number(meta.height) || 0;
+                            break;
+                        }
+                    }
+                    if (!realW || !realH) return;
+                    const apply = function () {
+                        try {
+                            if (viewer.imageData) {
+                                viewer.imageData.naturalWidth = realW;
+                                viewer.imageData.naturalHeight = realH;
+                            }
+                            const tEl = document.querySelector('.viewer-title');
+                            if (tEl) {
+                                const nm = (tEl.textContent || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+                                const want = nm + ' (' + realW + ' × ' + realH + ')';
+                                if (tEl.textContent !== want) tEl.textContent = want;
+                            }
+                        } catch (e) {}
+                    };
+                    apply();
+                    [60, 200, 500].forEach(function (d) { setTimeout(apply, d); });
+                };
+
                 const upgrade = function () {
                     const shown = document.querySelector(canvasSel);
                     if (!shown) return;
@@ -804,6 +842,24 @@
                     };
                     probe.src = full;
                 };
+
+                // 打开/切图的那一刻就修正尺寸认知与标题（用已知数据，不等加载）
+                ['show', 'view', 'next', 'prev'].forEach(function (name) {
+                    if (typeof viewer[name] !== 'function') return;
+                    const raw = viewer[name].bind(viewer);
+                    viewer[name] = function () {
+                        const r = raw.apply(null, arguments);
+                        try {
+                            let idx = viewer.index;
+                            if (name === 'view' && typeof arguments[0] === 'number') idx = arguments[0];
+                            const items = viewer.items;
+                            const item = items && items[idx];
+                            const url = item && (item.getAttribute('data-original') || item.getAttribute('data-view-src') || item.src);
+                            fixSizeNow(url);
+                        } catch (e) {}
+                        return r;
+                    };
+                });
 
                 setInterval(upgrade, 500);
                 upgrade();
