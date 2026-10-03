@@ -1,0 +1,108 @@
+name: Backfill version tag (manual)
+
+# 一次性补打：给**已经发布过的历史镜像**补一个版本号 tag（vX.Y.Z）。
+#
+# 为什么单独一个文件（而不是塞进 build-image.yaml 里）：
+#   · 本工作流**只有手动触发**（下面 on: 里只有 workflow_dispatch），推代码不会启动它
+#     —— 所以补打能力不会给正常发布流程增加任何触发面；
+#   · 也就不用碰主发布流程那段已经被反复验证过的 promote 逻辑（改动风险 = 0）。
+#
+# 为什么它不会成为「用版本号拉到 test 镜像」的后门：
+#   · 有三道守卫（见 job 里的 ① ② ③），其中 ② 用 Compare API 强制要求目标 commit 在 master 上
+#     —— test 分支的 commit 会被直接拒绝，打不出任何版本号 tag。
+#
+# 用法：Actions → 左侧选 "Backfill version tag (manual)" → Run workflow →
+#   目标 commit sha：填要补打的镜像的 commit（如 0caef9cac01a4e41040aa97d770db75eb7152044）
+#   版本号        ：填 vX.Y.Z（如 v3.5.0）；留空则从该 commit 的 config/app.php 里读
+on:
+  workflow_dispatch:
+    inputs:
+      backfill_sha:
+        description: '目标镜像的 commit sha（完整或短 sha 都行）'
+        required: true
+        type: string
+      backfill_version:
+        description: '要打的版本号 vX.Y.Z；留空=从该 commit 的 config/app.php 读'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write    # 打 tag 必需；这也是本地补打会 401 的原因
+    env:
+      IMAGE: ghcr.io/mole404/lsky-pro-docker
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Backfill version tag (guarded, immutable)
+        env:
+          BACKFILL_SHA: ${{ inputs.backfill_sha }}
+          BACKFILL_VERSION: ${{ inputs.backfill_version }}
+        run: |
+          set -euo pipefail
+
+          git fetch -q --tags origin master || true
+          SHA=$(git rev-parse --verify "${BACKFILL_SHA}^{commit}") \
+            || { echo "::error::解析不了这个 sha：$BACKFILL_SHA"; exit 1; }
+          echo "目标 commit：$SHA"
+
+          # 版本号：优先用输入；留空则从该 commit 的 config/app.php 读（单一事实来源）
+          VER="${BACKFILL_VERSION:-}"
+          if [ -z "$VER" ]; then
+            VER=$(git show "${SHA}:src/config/app.php" \
+                  | grep -oE "'version'[[:space:]]*=>[[:space:]]*'[^']+'" | head -1 \
+                  | sed -E "s/.*'([^']+)'.*/\1/")
+          fi
+          [ -n "$VER" ] || { echo "::error::拿不到版本号（输入留空，且从该 commit 读不到 config/app.php 的 version）"; exit 1; }
+          echo "版本号：$VER"
+
+          # 守卫①：格式必须 vX.Y.Z
+          [[ "$VER" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::版本号格式不对（期望 vX.Y.Z，实际 '$VER'）"; exit 1; }
+          echo "守卫①通过：格式 vX.Y.Z"
+
+          # 守卫②：目标 commit 必须在 master 上 —— 这是「版本号永远拉不到 test 镜像」的硬保证
+          CMP=$(curl -fsS \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/compare/${SHA}...master" \
+            | python3 -c 'import sys,json;print(json.load(sys.stdin).get("status",""))')
+          case "$CMP" in
+            identical|ahead) echo "守卫②通过：$SHA 在 master 上（compare=$CMP）" ;;
+            *) echo "::error::$SHA 不在 master 上（compare=$CMP）—— 拒绝打版本号 tag"; exit 1 ;;
+          esac
+
+          # 守卫③：目标镜像必须真的存在，不能凭空造 tag
+          if ! docker buildx imagetools inspect "${IMAGE}:sha-${SHA}" >/dev/null 2>&1; then
+            echo "::error::${IMAGE}:sha-${SHA} 不存在 —— 这个 commit 没有发布过的镜像"
+            exit 1
+          fi
+          echo "守卫③通过：${IMAGE}:sha-${SHA} 存在"
+
+          # 守卫④：版本号 tag 不可变 —— 已存在就保留原样（这正是「靠版本号拉回旧正式版」的前提）
+          if docker buildx imagetools inspect "${IMAGE}:${VER}" >/dev/null 2>&1; then
+            echo "::notice::${IMAGE}:${VER} 已存在 —— 保留原样，不覆盖"
+            docker buildx imagetools inspect "${IMAGE}:${VER}" | head -6
+            exit 0
+          fi
+
+          docker buildx imagetools create -t "${IMAGE}:${VER}" "${IMAGE}:sha-${SHA}"
+          echo "已补打：${VER} → sha-${SHA}"
+          docker buildx imagetools inspect "${IMAGE}:${VER}" | head -8
