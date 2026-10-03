@@ -761,6 +761,37 @@
                         if (my.getAttribute('data-full')) return;
                         my.setAttribute('data-full', '1');
                         my.src = full;                                      // 同位置换高清
+                        // 换图只改了 src，但库在 view() 那一刻就用「当时那张图」（缩略图）算好了
+                        // 两样东西，之后不会自己更新：
+                        //   ① 看图器标题里的分辨率（形如「名称 (400 × 275)」）
+                        //   ② 库缓存的尺寸认知（放大上限据此计算）
+                        // 这里用卡片 data-json 里*已知的*真实宽高把它们修正过来。
+                        // 关键：绝不去读刚赋值图片的 naturalWidth —— 那会逼浏览器当场同步解码，
+                        // 对千万像素级就是一次长帧（老师实测的「像掉帧」正是它）。
+                        try {
+                            let realW = 0, realH = 0;
+                            const cards3 = document.querySelectorAll('#images-grid .images-item, .images-item');
+                            for (let k3 = 0; k3 < cards3.length; k3++) {
+                                const im3 = cards3[k3].querySelector('img');
+                                if (im3 && im3.getAttribute('data-original') === full) {
+                                    const meta3 = JSON.parse(cards3[k3].getAttribute('data-json') || '{}') || {};
+                                    realW = Number(meta3.width) || 0;
+                                    realH = Number(meta3.height) || 0;
+                                    break;
+                                }
+                            }
+                            if (realW > 0 && realH > 0) {
+                                if (viewer.imageData) {
+                                    viewer.imageData.naturalWidth = realW;
+                                    viewer.imageData.naturalHeight = realH;
+                                }
+                                const tEl = document.querySelector('.viewer-title');
+                                if (tEl) {
+                                    const name = (tEl.textContent || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+                                    tEl.textContent = name + ' (' + realW + ' × ' + realH + ')';
+                                }
+                            }
+                        } catch (e) {}
                     };
                     probe.onerror = function () {
                         const r = state[full] || {};
