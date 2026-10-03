@@ -52,12 +52,12 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/resources/js/context-js.js
 #   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/public/js/context-js/context-js.js
-#   219d2ff07b212175b2ec0f3c15a15335  src/resources/views/user/images.blade.php
+#   3d0c5c6d28aa4d44d9a075b7e5ffdd56  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
 #   bab81ff5e43b50a760935c7b3ae6475c  public/js/context-js/context-js.js
-#   219d2ff07b212175b2ec0f3c15a15335  resources/views/user/images.blade.php
+#   3d0c5c6d28aa4d44d9a075b7e5ffdd56  resources/views/user/images.blade.php
 
 # 2026-10-01 第二轮（老师试完测试版提的意见）：两个标签窗口合并成一个（旧 tag-manage-modal 删除）、
 #   三态勾选改成两态、加「显示图片标签」开关、修好卡片拖动框选（图片穿透 + 拖动起点放宽 +

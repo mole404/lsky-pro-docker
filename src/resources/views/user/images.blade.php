@@ -213,7 +213,7 @@
                  角标一旦接住点击，DragSelect 的选中与「点开预览」都会被抢掉。
                  （这里别写尖括号标签名：这段模板会被静态测试当纯文本取出来渲染。）--}}
             <div class="image-tags pointer-events-none absolute left-0 right-0 bottom-0 z-[1] flex flex-wrap items-end gap-1 p-2">__tags__</div>
-            <img alt="__name__" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
+            <img alt="__name__" data-original="__url__" data-view-src="__view_src__" src="__thumb_url__" width="__width__" height="__height__">
         </a>
     </script>
 
@@ -552,7 +552,7 @@
                 ).join('');
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {
-                url: 'src',   // 先用页面里已有的缩略图当显示图（小位图，过渡才丝滑）；原图由下方第二阶段换上
+                url: 'data-view-src',   // 看图显示用图：小图=原图（第一帧就清晰），其余=缩略图（大图过渡才丝滑，原图由下方第二阶段换上）
                     slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
 
                 // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
@@ -698,21 +698,50 @@
                     let full = '';
                     for (let k = 0; k < cards.length; k++) {
                         const c = cards[k];
-                        if ((c.getAttribute('src') || '') === cur) {
+                        const csrc = c.getAttribute('src') || '';
+                        const cview = c.getAttribute('data-view-src') || '';
+                        if (csrc === cur || cview === cur) {
                             full = c.getAttribute('data-original') || '';
                             break;
                         }
                     }
                     if (!full) return;
+
+                    // ── 小图分流（老师定的规则）───────────────────────────────
+                    //   像素 ≥ 1,440,000  或  体积 ≥ 1024KB(1MB)  ⇒ 达标：走缩略图路 + 450ms 闸门
+                    //   两个都 < 及以上阈值                     ⇒ 未达标：小图优化，不等闸门直接上原图
+                    //   读不到元数据 ⇒ 保守当作"达标"，走安全路（绝不卡顿）
+                    let small = false;
+                    {
+                        const card = shown.closest ? null : null;
+                        const cards2 = document.querySelectorAll('#images-grid .images-item, .images-item');
+                        let host = null;
+                        for (let k2 = 0; k2 < cards2.length; k2++) {
+                            const im2 = cards2[k2].querySelector('img');
+                            if (im2 && im2.getAttribute('src') === cur) { host = cards2[k2]; break; }
+                        }
+                        if (host) {
+                            let meta = {};
+                            try { meta = JSON.parse(host.getAttribute('data-json')) || {}; } catch (e) { meta = {}; }
+                            const w = Number(meta.width) || 0, h = Number(meta.height) || 0;
+                            const kb = Number(meta.size) || 0;
+                            if (w > 0 && h > 0 && kb > 0) {
+                                const px = w * h;
+                                small = (px < 1440000) && (kb < 1024);
+                            }
+                        }
+                    }
+
                     // 时间闸门：过渡动画固定 0.3s（CSS 写死、与设备无关）。
                     // 若网速极快或原图已缓存，onload 可能在动画中途就回来，那时换图会把
-                    // 巨图提前塞进动画帧 ⇒ 又变卡。故给每个 <img> 打上"出现时刻"，
-                    // 450ms 内一律不换，确保动画期间显示的始终是缩略图。
+                    // 巨图提前塞进动画帧 ⇒ 又变卡。故给每个 <img> 打上"出现时刻"：
+                    // 达标的图 450ms 内一律不换；小图优化则闸门为 0（立刻换，不产生那一下延迟）。
+                    const gate = small ? 0 : 450;
                     if (!shown.getAttribute('data-shown-at')) {
                         shown.setAttribute('data-shown-at', String(Date.now()));
-                        return;
+                        if (gate > 0) return;      // 达标的图：先记录时刻，下一轮再来
                     }
-                    if (Date.now() - Number(shown.getAttribute('data-shown-at')) < 450) return;
+                    if (Date.now() - Number(shown.getAttribute('data-shown-at')) < gate) return;
                     const rec = state[full] || {};
                     if (rec.done) {                                       // 之前成功过，直接换（走缓存）
                         shown.setAttribute('data-full', '1');
@@ -932,6 +961,10 @@
                             .replace(/__date__/g, images[i].date)
                             .replace(/__url__/g, images[i].url)
                             .replace(/__thumb_url__/g, images[i].thumb_url)
+                            // 看图时该显示谁：小图（像素<144万 且 体积<1MB）直接用原图，
+                            // 免得先亮一帧缩略图再换；达标图仍用缩略图过渡（防大图逐帧重绘卡顿）。
+                            // 图墙缩略图不受影响 —— 卡片 <img src> 始终是缩略图。
+                            .replace(/__view_src__/g, ((images[i].width * images[i].height < 1440000) && (images[i].size < 1024)) ? images[i].url : images[i].thumb_url)
                             .replace(/__width__/g, images[i].width)
                             .replace(/__height__/g, images[i].height)
                             // 卡片角标 = 这张图的标签（列表接口已带 tags）
