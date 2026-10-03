@@ -161,7 +161,17 @@ window.utils = {
                     const $sentinel = $(selector).find('.infinite-scroll').last();
                     if ($sentinel.length > 0) {
                         if ($sentinel[0].getBoundingClientRect().top <= window.innerHeight + offset) {
-                            load();
+                            // ★ 保险闸 1：距上次「用户真实向下滚动」不足 150ms 不放行。
+                            //   浏览器为了维持滚动位置自动补的那一滚，不会更新这个时间戳，
+                            //   所以补滚最多带出已有的那一页，不会连锁到最底。
+                            // ★ 保险闸 2：刚重置过（清空重排中）不放行 —— 那段时间页面高度剧烈
+                            //   变化，最容易被带着连发请求。窗口由页面侧在 resetImages 里开。
+                            const gate = window.__lskyScrollGate;
+                            const idleOK = !gate || !gate.ready || (Date.now() - gate.ready >= 150);
+                            const resetOK = !window.__lskyResetGuardUntil || Date.now() >= window.__lskyResetGuardUntil;
+                            if (idleOK && resetOK) {
+                                load();
+                            }
                         }
                         return;
                     }
