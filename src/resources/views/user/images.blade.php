@@ -552,7 +552,7 @@
                 ).join('');
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {
-                url: 'data-original',
+                url: 'src',   // 先用页面里已有的缩略图当显示图（小位图，过渡才丝滑）；原图由下方第二阶段换上
                     slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
 
                 // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
@@ -662,7 +662,49 @@
                 document.addEventListener('touchcancel', () => { navDown = false; }, true);
             })();
 
-                                    /* 切图前先把目标图"解码完"，再放行动画（治大图过渡卡顿）。
+                                    /* 第二阶段：过渡结束后，在后台把"原图"换上（治大图过渡卡顿的主手段）。
+             * 病因：库的过渡补间 width/height/margin，每帧都要按当前尺寸重新缩放并重绘整张位图。
+             *       一张 10MB 的 JPEG 常有数千万像素，于是每帧都极重 —— 越大越卡、且线性变化。
+             *       「预解码」只能省掉开头那一下的固定开销（实测不足以消除卡顿），逐帧重绘才是主因。
+             * 做法：显示用图改成页面里本来就有的缩略图（约 400px）—— 小位图逐帧重绘代价小两个数量级，
+             *       过渡自然丝滑；过渡结束（viewed）后再在后台加载原图，加载完成把 <img> 的 src 换成原图，
+             *       并同步一次库的内部尺寸（临时关掉 transition，避免再放一次动画）。
+             *       结果：视觉上是「丝滑地长出来 → 随即变清晰」，且不产生任何新的图片文件。
+             * 兜底：整个过程只在后台进行；原图加载失败就保持缩略图显示，不影响任何手势。 */
+            (function () {
+                if (!viewer || typeof viewer.on !== 'function') return;   // 测试替身：跳过
+                let token = 0;
+                const upgrade = function () {
+                    if (!viewer.image || !viewer.items) return;
+                    const item = viewer.items[viewer.index];
+                    if (!item) return;
+                    const full = item.getAttribute('data-original');
+                    if (!full || viewer.image.src === full) return;
+                    if (viewer.image.getAttribute('data-full-loaded') === full) return;
+                    const my = ++token;
+                    const probe = new Image();
+                    probe.onload = function () {
+                        if (my !== token) return;                        // 期间又切图了，放弃这次
+                        if (!viewer.image || viewer.image.src === full) return;
+                        viewer.image.setAttribute('data-full-loaded', full);
+                        viewer.image.src = full;                         // 同位置换高清，尺寸不变
+                        try {
+                            const keep = viewer.options.transition;
+                            if (viewer.initImage) {
+                                viewer.options.transition = false;       // 不重放动画
+                                viewer.initImage();
+                                viewer.options.transition = keep;
+                            }
+                        } catch (e) {}
+                    };
+                    probe.onerror = function () {};
+                    probe.src = full;
+                };
+                viewer.on('viewed', upgrade);
+                if (typeof viewer.on === 'function') viewer.on('shown', upgrade);
+            })();
+
+            /* 切图前先把目标图"解码完"，再放行动画（治大图过渡卡顿）。
              * 病因：库的过渡补间 width/height/margin，每帧都要按当前尺寸重新缩放并重绘整张位图。
              *       一张 10MB 的 JPEG 常有数千万像素，"边解码边缩放"每帧都极重 —— 越大越卡、线性变化。
              *       注意：解码只是开头那一下的成本，逐帧重绘才是主因；这一步能省掉一个可观的固定开销，

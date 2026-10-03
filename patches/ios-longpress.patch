@@ -5,7 +5,7 @@
 #   └ 构建用的就是仓库里 src/ 下这三个文件本身（改它们 = 改产品）。
 #      随时可用 `bash tools/diff-vs-upstream.sh` 重新生成/核对这份 diff。
 #
-# 上游基线：lsky-org/lsky-pro @ b0548556cd8ec7067f5313243000792655174953
+# 上游基线：lsky-org/lsky-pro @ 4c8f5f6b046b182f33a2f62dd703ce4555174953
 #           （2025-11-24 的 master；上游随后再无提交，且 README 已声明"开源版本已停止维护"）
 #
 # 补丁内容：
