@@ -128,7 +128,7 @@
             <p class="text-center pt-2 text-ink">
                 {{ $version }}@if($commit) <span class="text-ink-2 font-mono">{{ $commit }}</span>@endif
             </p>
-            <p class="text-center pb-2 text-sm text-ink-2">by {{ $author }}</p>
+            <p class="text-center pb-2 text-sm text-ink-2">By {{ $author }}</p>
         </div>
     </div>
 
