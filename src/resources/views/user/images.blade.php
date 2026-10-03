@@ -759,8 +759,28 @@
                         state[full] = { pending: false, fails: 0, done: true, t: Date.now() };
                         if (document.querySelector(canvasSel) !== my) return;   // 期间又切图了
                         if (my.getAttribute('data-full')) return;
-                        my.setAttribute('data-full', '1');
-                        my.src = full;                                      // 同位置换高清
+                        // 先把原图"解码"进内存，再换 src。
+                        // 病因：直接赋 src 时，浏览器要在关键路径上做「解码 + 光栅化」——
+                        // 对 1200 万像素的图是一次很长的帧，表现为动画后紧接着卡一下
+                        // （体积几十 MB 的图反而看不出，因为那时换图发生在动画很久之后）。
+                        // decode() 是异步的：解码完再换，关键路径上只剩贴图。失败/不支持则直接换。
+                        const doSwap = function () {
+                            if (document.querySelector(canvasSel) !== my) return;
+                            if (my.getAttribute('data-full')) return;
+                            my.setAttribute('data-full', '1');
+                            my.src = full;                                  // 同位置换高清
+                            try {
+                                const keep = viewer.options.transition;
+                                viewer.options.transition = false;
+                                if (typeof viewer.initImage === 'function') viewer.initImage();
+                                viewer.options.transition = keep;
+                            } catch (e) {}
+                        };
+                        if (typeof probe.decode === 'function') {
+                            probe.decode().then(doSwap, doSwap);
+                        } else {
+                            doSwap();
+                        }
                     };
                     probe.onerror = function () {
                         const r = state[full] || {};
