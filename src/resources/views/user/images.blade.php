@@ -32,6 +32,14 @@
              *   浏览器会把哨兵当锚点、上方内容变高就自动往下补 scrollTop，于是哨兵又进视口、
              *   又触发下一页 —— 连锁滚到底。安卓 Edge 上尤其明显（安卓 Chrome / iOS 不这样）。 */
             html, body, #images-scroll, #images-scroll .infinite-scroll { overflow-anchor: none; }
+            /* ★ 让滚动条的位置**永远被预留**（桌面端）。
+             *   看图器打开时库会给 body 加 .viewer-open{overflow:hidden}，滚动条消失 ⇒
+             *   布局宽度凭空多出 9px（Win11 细滚动条）⇒ 内容右移/重排，关闭时再跳一次。
+             *   预留 gutter 后，滚动条即使消失，那 9px 也还在 ⇒ 布局宽度不变 ⇒ 不重排。
+             *   与库量到多少无关：viewerjs 的 scrollbarWidth 只在建实例那一刻量一次
+             *   （render.js initBody），那时文档还没溢出，量到的是 0，所以它补的 paddingRight
+             *   恒为 0px（真机实测确认过），指望它补是不行的。 */
+            html { scrollbar-gutter: stable; }
                         .viewer-canvas > img:not([style]) {
                 width: 1px;
                 height: 1px;
