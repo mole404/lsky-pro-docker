@@ -213,7 +213,7 @@
                  角标一旦接住点击，DragSelect 的选中与「点开预览」都会被抢掉。
                  （这里别写尖括号标签名：这段模板会被静态测试当纯文本取出来渲染。）--}}
             <div class="image-tags pointer-events-none absolute left-0 right-0 bottom-0 z-[1] flex flex-wrap items-end gap-1 p-2">__tags__</div>
-            <img alt="__name__" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
+            <img alt="__name__" data-original="__url__" data-view-src="__view_src__" src="__thumb_url__" width="__width__" height="__height__">
         </a>
     </script>
 
@@ -552,7 +552,7 @@
                 ).join('');
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {
-                url: 'src',   // 先用页面里已有的缩略图当显示图（小位图，过渡才丝滑）；原图由下方第二阶段换上
+                url: 'data-view-src',   // 看图显示用图：小图=原图（第一帧就清晰），其余=缩略图（大图过渡才丝滑，原图由下方第二阶段换上）
                     slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
 
                 // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
@@ -698,7 +698,9 @@
                     let full = '';
                     for (let k = 0; k < cards.length; k++) {
                         const c = cards[k];
-                        if ((c.getAttribute('src') || '') === cur) {
+                        const csrc = c.getAttribute('src') || '';
+                        const cview = c.getAttribute('data-view-src') || '';
+                        if (csrc === cur || cview === cur) {
                             full = c.getAttribute('data-original') || '';
                             break;
                         }
@@ -959,6 +961,10 @@
                             .replace(/__date__/g, images[i].date)
                             .replace(/__url__/g, images[i].url)
                             .replace(/__thumb_url__/g, images[i].thumb_url)
+                            // 看图时该显示谁：小图（像素<144万 且 体积<1MB）直接用原图，
+                            // 免得先亮一帧缩略图再换；达标图仍用缩略图过渡（防大图逐帧重绘卡顿）。
+                            // 图墙缩略图不受影响 —— 卡片 <img src> 始终是缩略图。
+                            .replace(/__view_src__/g, ((images[i].width * images[i].height < 1440000) && (images[i].size < 1024)) ? images[i].url : images[i].thumb_url)
                             .replace(/__width__/g, images[i].width)
                             .replace(/__height__/g, images[i].height)
                             // 卡片角标 = 这张图的标签（列表接口已带 tags）
