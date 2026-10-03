@@ -642,27 +642,24 @@
                 document.addEventListener('touchcancel', () => { navDown = false; }, true);
             })();
 
-            /* 触摸端切图阈值接管（老师定的三条规则）：
-             *   未放大：横划跟手，松手时 |dx| ≥ 40px 且明显横向才切图，否则弹回原位；
-             *   放大后：拖动看图照旧（库自己的 ACTION_MOVE），横划 ≥ 80px 且明显横向才切图；
-             *   竖直滑永远不切图。
-             * 为什么要在外面接管：库把阈值硬编码成 1px（others.js 的 change()：
-             * absoluteOffsetX > 1 && > |offsetY|），而且"这一下是切图还是拖动"在 pointerdown
-             * 就按"图片有没有超出屏幕"定死了 ⇒ 未放大时几乎必然判成切图（稍动就切）、
-             * 放大后又必然判成拖动（切不了）。老师反馈"阈值区间摸不透"就是这个不自洽。
-             * 做法：库的"跟手滑动"保留不动，只在松手时若不够格就把切过去的那张 view() 回来
-             *（观感就是弹回原位）；放大后库不切，由本层按 80px 判定补一次 view()。
-             * 注意用 pointer 事件（与库同一套），判断范围限定在 .viewer-canvas 内，不碰缩略图条。 */
+                        /* 触摸端切图阈值接管（最小侵入版）：只拦事件，绝不写库的内部状态。
+             * 为什么必须这样 —— 血的教训：库的捏合、双击、移动过渡全靠它自己的
+             * this.action 状态机（handlers.js:367-375 在 pointerdown 时一次性定值，
+             * 且移动时若 action 为 'move' 会摘掉过渡类）。从外面改写这个值 ⇒
+             * 双指捏合被覆盖失效、拖动带上 CSS 过渡延迟、切图行为也乱 —— 全崩。
+             * 所以这里只做一件事：单指触摸、且位移还没到阈值时，在捕获阶段
+             * stopPropagation，让库收不到这次移动（它就不会切图）；一旦划够阈值就
+             * 立刻放行，之后全部交给库原样处理（跟手切图本来就是它自带的）。
+             * 多指（捏合）一根手指都不干预；库的内部状态自始至终不碰。 */
             (function () {
-                const SWIPE_NOT_ZOOMED = 60;   // 未放大：划够这么多才开始跟手/切图（老师反馈 40 仍太灵敏，加大）
+                const SWIPE_NOT_ZOOMED = 60;   // 未放大：划够这么多才切图
                 const SWIPE_ZOOMED = 120;      // 放大后：更钝，避免和拖动打架
                 const DIRECTION_RATIO = 1.2;   // |dx| 要明显大于 |dy| 才算横划
+                let active = 0;                // 当前按下的手指数
                 let downX = 0;
                 let downY = 0;
-                let downIndex = null;
                 let zoomed = false;
-                let qualified = false;
-                let savedAction = null;        // 库在 pointerdown 时算出的动作值，划够后再还给它们
+                let qualified = true;          // 默认放行（非画布/多指都走放行）
                 const inCanvas = (el) => el instanceof Element && !!el.closest('.viewer-canvas');
                 const isZoomed = () => {
                     const im = document.querySelector('.viewer-canvas img');
@@ -671,46 +668,26 @@
                     return im.getBoundingClientRect().width > c.getBoundingClientRect().width + 2;
                 };
                 document.addEventListener('pointerdown', (e) => {
-                    if (!inCanvas(e.target)) return;
+                    active += 1;
+                    if (active > 1 || !inCanvas(e.target)) { qualified = true; return; }
                     downX = e.clientX;
                     downY = e.clientY;
-                    downIndex = viewer.index;
                     zoomed = isZoomed();
                     qualified = false;
-                    savedAction = null;        // 库的 pointerdown 在本层之后才跑，故延到第一次 move 再取
                 }, true);
                 document.addEventListener('pointermove', (e) => {
-                    if (downIndex === null) return;
-                    if (savedAction === null) savedAction = viewer.action;   // 第一次 move 时库已经定好动作了
+                    if (active > 1 || qualified) return;      // 捏合中 / 已放行：不干预
                     const dx = e.clientX - downX;
                     const dy = e.clientY - downY;
                     const need = zoomed ? SWIPE_ZOOMED : SWIPE_NOT_ZOOMED;
-                    qualified = Math.abs(dx) >= need && Math.abs(dx) > Math.abs(dy) * DIRECTION_RATIO;
-                    /* 关键：给库"规范动作值"，不去读它内部的状态。
-                     * 为什么不能"读回来再还回去"：库的 change() 一进 SWITCH 分支就把
-                     * this.action 改成 'switched'（others.js:217，即那个"闩"），而这个值
-                     * 在外层 switch 里没有 case ⇒ 还给库等于让它什么都不做，切图就失效了
-                     *（上一版正是栽在这里）。所以这里直接用两个确定的字面量：
-                     *   未划够 / 已放大未够格 → 'move'：库只平移，绝不切图；
-                     *   未放大且划够      → 'switch'：库跟手切图（跟手也是库自带的行为）。
-                     * 另外不要动 options.movable / slideOnTouch，可见性判断交给库。 */
-                    viewer.action = (qualified && !zoomed) ? 'switch' : 'move';
-                }, true);
-                document.addEventListener('pointerup', (e) => {
-                    if (downIndex === null) return;
-                    const from = downIndex;
-                    const dx = e.clientX - downX;
-                    downIndex = null;
-                    savedAction = null;
-                    if (qualified) {
-                        // 放大时库判成拖动（只平移不切），由这里补一次
-                        if (zoomed) viewer.view(viewer.index + (dx < 0 ? 1 : -1));
+                    if (Math.abs(dx) >= need && Math.abs(dx) > Math.abs(dy) * DIRECTION_RATIO) {
+                        qualified = true;                     // 划够了：从这一下起放行
                         return;
                     }
-                    // 兜底：万一还是切过去了，弹回原位（正常路径下不会走到）
-                    if (!zoomed && viewer.index !== from) viewer.view(from);
+                    e.stopPropagation();                      // 没划够：库收不到 ⇒ 不会切图
                 }, true);
-                document.addEventListener('pointercancel', () => { downIndex = null; savedAction = null; }, true);
+                document.addEventListener('pointerup', () => { active = Math.max(0, active - 1); }, true);
+                document.addEventListener('pointercancel', () => { active = Math.max(0, active - 1); }, true);
             })();
 
             /* 双击放大：库里的「模拟双击」（handlers.js:424-451）只看两次抬手的间隔（硬编码 500ms），
