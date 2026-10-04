@@ -52,16 +52,23 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/resources/js/context-js.js
 #   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/public/js/context-js/context-js.js
-#   28c8e00027748f9d7c48662b47c6760f  src/resources/views/user/images.blade.php
+#   d9ffacb2bbd8905703c279965a07ddbf  src/resources/views/user/images.blade.php
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
 #   bab81ff5e43b50a760935c7b3ae6475c  public/js/context-js/context-js.js
-#   28c8e00027748f9d7c48662b47c6760f  resources/views/user/images.blade.php
+#   22c896eb7322ec2ff37d5eddd7ca0dec  resources/views/user/images.blade.php
 
 # 2026-10-01 第二轮（老师试完测试版提的意见）：两个标签窗口合并成一个（旧 tag-manage-modal 删除）、
 #   三态勾选改成两态、加「显示图片标签」开关、修好卡片拖动框选（图片穿透 + 拖动起点放宽 +
 #   由卡片自己开预览）。
+#
+# 2026-10-04（正式版 3.5.2）：images.blade.php 再改一处 —— 删除选中图片后，把卡片**同时**从
+#   DragSelect 的 SelectedSet / SelectableSet 里摘掉（ds.removeSelectables + ds.removeSelection +
+#   bindOperates 兜底）。原来只 $(item).remove() 留在库里的是「幽灵选中项」，导致删除后顶部
+#   选中状态不重置（操作栏不收回、任何一次重画又显示「已选择 N 张图片」、再选一张计数虚高）。
+#   同时修正本文件此前记错的一行：上游原文件 resources/views/user/images.blade.php 的真实 md5
+#   是 22c896eb7322ec2ff37d5eddd7ca0dec（旧值 28c8e000… 实为我们改后那份的值，写错了）。
 ---- src/resources/js/context-js.js
 --- /root/.hermes/cache/scratch/tmp.BQ92ALlEpf/up/resources/js/context-js.js	2026-10-02 14:31:26.703747972 +0800
 +++ src/resources/js/context-js.js	2026-10-01 15:40:13.406864745 +0800
@@ -2302,9 +2309,9 @@
 +    return api;
 +})();
 ---- src/resources/views/user/images.blade.php
---- /root/.hermes/cache/scratch/tmp.BQ92ALlEpf/up/resources/views/user/images.blade.php	2026-10-02 14:31:26.707747969 +0800
-+++ src/resources/views/user/images.blade.php	2026-10-02 14:28:58.367831314 +0800
-@@ -4,45 +4,79 @@
+--- lsky-org/lsky-pro@38d52c4609eb85236b45ac75acac2ced55174953:resources/views/user/images.blade.php
++++ src/resources/views/user/images.blade.php
+@@ -4,45 +4,109 @@
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
@@ -2323,6 +2330,36 @@
 +            不再需要 @media (hover: none) 那条「给触摸设备常显操作按钮」的补丁 —— 已删掉，
 +            别再写回来：按钮本来就常显，触摸端与桌面端行为一套。--}}
 +    <style>
++            /* 让"切图过渡"的起点稳定在屏幕中心。
++             * 库每切一张都新建 <img>：刚插进画布时用的是默认 CSS（满宽、贴顶，来自库自带的
++             * .viewer-container img{width:100%;height:auto} + margin:15px auto）。之后图片加载完成，
++             * 库才写内联样式：先写成"屏幕中心的一个点"，再写最终尺寸，靠 CSS 过渡补间。
++             * 而过渡的起点 = 浏览器「上一次真正渲染过的样式」：若只渲染到"满宽贴顶"那一帧，
++             * 动画就从屏幕上方飞进来。哪一帧被渲染由缓存/网速/主线程决定 —— 这就是"忽上忽下"。
++             * 对策：用 :not([style]) 只命中"还没有内联样式"的那一瞬（库一写内联样式立刻失效，
++             * 因此绝不影响最终显示、也不会和库打架），把这一瞬做成"屏幕中心的小点" ——
++             * 无论渲染到哪一帧，起点都是中心。过渡照旧用库自带的，所以动画保留。 */
++            /* ★ 关掉浏览器「滚动锚定」（scroll anchoring）：换排序/刷新后列表清空重排，
++             *   浏览器会把哨兵当锚点、上方内容变高就自动往下补 scrollTop，于是哨兵又进视口、
++             *   又触发下一页 —— 连锁滚到底。安卓 Edge 上尤其明显（安卓 Chrome / iOS 不这样）。 */
++            html, body, #images-scroll, #images-scroll .infinite-scroll { overflow-anchor: none; }
++            /* ★ 让滚动条的位置**永远被预留**（桌面端）。
++             *   看图器打开时库会给 body 加 .viewer-open{overflow:hidden}，滚动条消失 ⇒
++             *   布局宽度凭空多出 9px（Win11 细滚动条）⇒ 内容右移/重排，关闭时再跳一次。
++             *   预留 gutter 后，滚动条即使消失，那 9px 也还在 ⇒ 布局宽度不变 ⇒ 不重排。
++             *   与库量到多少无关：viewerjs 的 scrollbarWidth 只在建实例那一刻量一次
++             *   （render.js initBody），那时文档还没溢出，量到的是 0，所以它补的 paddingRight
++             *   恒为 0px（真机实测确认过），指望它补是不行的。 */
++            html { scrollbar-gutter: stable; }
++                        .viewer-canvas > img:not([style]) {
++                width: 1px;
++                height: 1px;
++                margin-left: 50vw;
++                margin-top: 50vh;
++                opacity: 0;
++            }
++
++
 +        #album-switch-modal .infinite-scroll {
 +            display: none;
 +        }
@@ -2397,7 +2434,7 @@
                      </a>
                  </x-slot>
  
-@@ -57,151 +91,382 @@
+@@ -57,151 +121,382 @@
                      </x-dropdown-link>
                  </x-slot>
              </x-dropdown>
@@ -2773,10 +2810,10 @@
 +            <div class="mt-4 flex justify-end gap-2">
 +                <button type="button" id="movements-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
 +                <button type="button" id="movements-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>移动</button>
-+            </div>
-+        </div>
-+    </script>
-+
+             </div>
+         </div>
+     </script>
+ 
 +    {{-- 相册列表行：整行是一个点击区（min-h-[44px]），**行内一个 span 都不用** —— 名称是 <div>、
 +         「当前」徽标（JS 拼的 .ls-badge）也是 <div>，免得被无限加载「点 span 加载更多」的委托命中
 +         （点一下相册名就多拉一页相册）。列表末尾那条哨兵是 utils.infiniteScroll 插的
@@ -2808,10 +2845,10 @@
 +            <div class="mt-4 flex justify-end gap-2">
 +                <button type="button" id="image-tags-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
 +                <button type="button" id="image-tags-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>确定</button>
-             </div>
-         </div>
-     </script>
- 
++            </div>
++        </div>
++    </script>
++
 +    {{-- 标签重命名的行内表单（在那一行下方就地展开，再点一次收起）。
 +         名称不写进模板 —— 由 JS 用 .val() 填，避免标签名里的引号/尖括号破坏属性。 --}}
 +    <script type="text/html" id="image-tags-edit-tpl">
@@ -2865,8 +2902,13 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -219,42 +484,77 @@
+@@ -217,44 +512,335 @@
+ 
+             const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
++            // ★ 关掉浏览器「刷新时恢复滚动位置」：刷新图库时我们要的是回到顶部从头看，
++            //   而恢复机制会把页面拽回原位置，配合无限加载就是又一轮连锁。
++            try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) {}
              const IMAGES_GRID = '#images-grid';
              const IMAGES_ITEM = '.images-item';
 -            const ALBUM_ITEM = '.albums-item';
@@ -2943,7 +2985,260 @@
 +                    + escapeHtml(tag.name) + '</span>'
 +                ).join('');
 +            };
-+            const viewer = new Viewer(document.getElementById('images-grid'), {url: 'data-original'});
++            const viewer = new Viewer(document.getElementById('images-grid'), {
++                url: 'data-original',
++                    slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
++
++                // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
++                // 控件重建画布/缩略图条 ⇒ iOS 整个界面左偏、安卓缩略图全空，见后续修复记录）
++                loop: false,
++                // focus: false —— Claude 定位 + 真机对照验证：
++                // view() 在摆放缩略图条之前会先对目标缩略图的 <li> 调 .focus()（源码 s.focus&&h.focus()），
++                // 而 .viewer-navbar 虽然 overflow:hidden 但仍是滚动容器 ⇒ 浏览器为了"让焦点可见"把导航条
++                // 滚走（scrollLeft 推到最大）；随后 renderList() 再叠一层 translateX ⇒ 位置被偏移两次，
++                // 整条列表跑到屏幕外，只剩空黑底。表现就是"从靠前的图跳到很靠后的图（或关掉再打开靠后的图）后，
++                // 缩略图条里后面那批不显示，前面的还在"——因为前面那批本来就在初始可视区，不触发滚动。
++                // 加 focus:false 后：navScrollLeft 由 2439 → 0，可见缩略图 0 → 43（真 Chromium 实测）。
++                // 代价：关掉"打开后聚焦容器 + 焦点陷阱"，对鼠标/触屏无影响，仅纯键盘 Tab 导航有差别
++                //（键盘切图与 Esc 关闭实测不受影响）。
++                focus: false,
++            });
++
++            /* 修 Viewer.js 的另一个坑：update() 重建缩略图条却不重算它的位置。
++             * Claude 定位 + jsdom 复现（我核对了源码与线上压缩产物）：
++             *   update() 会把 .viewer-list 的 width 设成 auto 并重建所有 <li>，
++             *   但当前图没变时不会调 renderList() ⇒ 位置（width + translateX((容器宽-30)/2 - 31*index)）
++             *   还是旧值。图越靠后这个负偏移越大，超过一屏宽后整个列表被推出导航条可视区，
++             *   只剩一条空的黑底 —— 就是老师看到的"缩略图条不显示"；手指一滑（goTo → view → renderList）
++             *   位置被重算，缩略图立刻回来。
++             * 谁会在看图时调 update()：images.blade.php 里无限滚动每次请求结束的 complete 回调
++             * （看图时后台正好加载完一批就会触发），以及侧栏折叠。所以是"偶尔"。
++             * 修法：包一层 update()，让它跑完补一次 renderList()，并把丢失的 active 状态找回来。
++             * 注意不要依赖 viewer.items / isShown —— 线上压缩产物里查不到这两个名字（可能被改名），
++             * 改成查 DOM，稳。
++             * 注意这是 fork 侧的自证：Dockerfile 里钉的 images.blade.php md5 不变的话构建会失败。 */
++            (function () {
++                if (typeof viewer.update !== 'function' || typeof viewer.renderList !== 'function') {
++                    return;                                 // 产物变了就安静退出，不折腾
++                }
++                const rawUpdate = viewer.update.bind(viewer);
++                viewer.update = function () {
++                    const ret = rawUpdate.apply(null, arguments);
++                    try {
++                        const list = document.querySelector('.viewer-navbar .viewer-list');
++                        if (!list || !viewer.ready) return ret;
++                        // 重建出来的 <li> 会丢掉 active 状态，按当前 index 补回去
++                        if (!list.querySelector('li.viewer-active') && list.children[viewer.index]) {
++                            list.children[viewer.index].classList.add('viewer-active');
++                        }
++                        viewer.renderList();                // 重算 width 与 translateX
++                    } catch (e) { /* 兜底：绝不因为补一刀而让看图界面挂掉 */ }
++                    return ret;
++                };
++            })();
++
++            /* 底部缩略图条上的快捷切图（老师要的功能）。
++             *   · 电脑：光标在缩略图条上滚轮 ⇒ 滚一格切一张。
++             *     控件自己在外层容器上绑了"滚轮缩放"（捕获阶段），所以这里也在 document 捕获
++             *     阶段抢在它之前，并且**只对落在缩略图条上的滚轮生效**：图上滚轮依旧是缩放。
++             *   · 手机：在缩略图条上左右拖动 ⇒ 连续切图（每滑过 DRAG_STEP 像素切一张，
++             *     拖回来也会切回去）。缩略图条被库设成 touch-action:none、本来就划不动，
++             *     所以不存在"抢走缩略图条自己的滚动"这个问题（它靠自动跟随当前图）。
++             * 一律从外面调它的对外 API viewer.view(index)，不改库；到头即止（loop 已关）。 */
++            (function () {
++                const BAR = '.viewer-navbar';
++                const WHEEL_GAP = 260;   // 滚轮节流：一格切一张，别被惯性滚轮连着切
++                const DRAG_STEP = 40;    // 手机上每滑过这么多像素切一张
++                let lastWheel = 0;
++                let navDown = false;
++                let dragStartX = 0;
++                let dragBaseIndex = 0;
++                const inBar = (el) => el instanceof Element && !!el.closest(BAR);
++                const count = () => document.querySelectorAll(BAR + ' .viewer-list > li').length;
++                const goTo = (i) => {
++                    const n = count();
++                    if (!n || !Number.isFinite(i)) return;
++                    const target = Math.max(0, Math.min(n - 1, i));
++                    if (target !== viewer.index) viewer.view(target);
++                };
++                document.addEventListener('wheel', (e) => {
++                    if (!inBar(e.target)) return;
++                    e.stopPropagation();        // 足够：控件"把滚轮当缩放"是在它自己的监听器里做的，
++                                                // 拦住传播它就收不到。这里**不能**用 preventDefault ——
++                                                // document 上的非 passive wheel 同样会让浏览器失去
++                                                // "不等 JS 就滚动/绘制"的快路径（与 touchmove 那个坑同源）。
++                    const now = Date.now();
++                    if (now - lastWheel < WHEEL_GAP) return;
++                    lastWheel = now;
++                    goTo(viewer.index + (e.deltaY > 0 ? 1 : -1));
++                }, {capture: true, passive: true});
++                document.addEventListener('touchstart', (e) => {
++                    navDown = inBar(e.target);
++                    const t = e.changedTouches && e.changedTouches[0];
++                    if (navDown && t) {
++                        dragStartX = t.clientX;
++                        dragBaseIndex = viewer.index;
++                    }
++                }, true);
++                /* 注意：这个监听器**必须**是 passive，绝不能 preventDefault。
++                 * 在 document 上注册「非 passive 的 touchmove」会让 Chrome 失去"不等 JS 就滚动/绘制"
++                 * 的快路径 —— 表现是远离手指的元素（比如屏幕底部的缩略图条）不重绘：一直空白，
++                 * 手指一碰它才突然画出来（安卓上尤其明显）。老师说"像被什么卡住了"就是这个。
++                 * 而缩略图条本来就是 touch-action:none、浏览器不会滚它，所以根本不用 preventDefault。 */
++                document.addEventListener('touchmove', (e) => {
++                    if (!navDown) return;
++                    const t = e.changedTouches && e.changedTouches[0];
++                    if (!t) return;
++                    // 往左拖 = 下一张，往右拖 = 上一张；按"已经滑过的距离"连续跟随，拖回来也切回去
++                    goTo(dragBaseIndex + Math.trunc((dragStartX - t.clientX) / DRAG_STEP));
++                }, {capture: true, passive: true});
++                document.addEventListener('touchend', () => { navDown = false; }, true);
++                document.addEventListener('touchcancel', () => { navDown = false; }, true);
++            })();
++
++                                    /* 触摸端切图判定（接管 slideOnTouch 后的配套逻辑）：
++             * 库里 slideOnTouch:false ⇒ 单指动作永远是 'move'，库自己的平移就是跟手拖动，
++             * 不再出现 'switch' 动作 ⇒ 1px 判据与"闩锁"都不存在。切图还是回弹由松手时决定。
++             * 为什么不拦事件：库用 HAS_POINTER_EVENT ? 'pointermove' : 'touchmove' 选通道，
++             * 拦 pointermove 在真机上可能整段失效（踩过）。这里只读 viewer.action 判定是否放权，
++             * 一个字都不写库的内部状态 —— 捏合/双击/过渡因此完全不受影响。 */
++            (function () {
++                const FAR_RATIO = 0.18;    // 够远：视口宽的这个比例
++                const FAR_MIN = 56;        // 或至少这么多 px
++                const FAST_SPEED = 0.5;    // 够快：px/ms
++                let g = null;
++                let guardClick = 0;   // 刚切过图的时刻：用来吞掉随后那发背景 click
++                const inCanvas = (el) => el instanceof Element && !!el.closest('.viewer-canvas');
++                const isFit = () => {
++                    const d = viewer.imageData;
++                    const v = viewer.viewerData;
++                    if (!d || !v) return false;
++                    return d.x >= 0 && d.y >= 0 && d.width <= v.width && d.height <= v.height;
++                };
++                document.addEventListener('pointerdown', (e) => {
++                    if (!e.isPrimary) { if (g) g.multi = true; return; }   // 第二指 ⇒ 捏合，放权给库
++                    g = (e.pointerType !== 'mouse' && inCanvas(e.target))
++                        ? { x: e.clientX, y: e.clientY, t: e.timeStamp, fit: isFit(), multi: false }
++                        : null;
++                }, true);
++                document.addEventListener('pointerup', (e) => {
++                    if (!g || !e.isPrimary) return;
++                    const s = g;
++                    g = null;
++                    if (!s.fit || s.multi) return;                        // 放大态 / 捏合：一律交给库
++                    const dx = e.clientX - s.x;
++                    const dy = e.clientY - s.y;
++                    const dt = Math.max(1, e.timeStamp - s.t);
++                    const far = Math.abs(dx) > Math.max(FAR_MIN, window.innerWidth * FAR_RATIO);
++                    const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 30;
++                    if ((far || fast) && Math.abs(dx) > Math.abs(dy) * 1.5) {
++                        if (dx < 0) viewer.next(false); else viewer.prev(false);
++                        guardClick = Date.now();                          // 标记：刚刚切过图
++                    } else if (dx !== 0 || dy !== 0) {
++                        viewer.reset();                                   // 带动画的回弹
++                    }
++                }, false);
++                /* 手指在图片外空白处结束时，浏览器会补一发 click 落到背景上，库因此关闭查看器 ——
++                 * 于是"切图成功"和"退出查看"同时发生。这里只吞紧跟切图之后那 400ms 内的背景 click，
++                 * 且点在图片上的不算，避免误伤正常点击关闭。 */
++                document.addEventListener('click', (e) => {
++                    if (Date.now() - guardClick > 400) return;
++                    if (e.target instanceof Element && e.target.closest('.viewer-canvas img')) return;
++                    guardClick = 0;
++                    e.stopPropagation();
++                    e.preventDefault();
++                }, true);
++            })();
++
++            /* 双击放大：库里的「模拟双击」（handlers.js:424-451）只看两次抬手的间隔（硬编码 500ms），
++             * 完全不检查中间有没有拖动 ⇒ 连续拖动两下也会被当成双击放大。这里在外面收口（不改库）：
++             *   1. 抬手时用「起点→终点」的位移判断这一下是轻点还是拖动。阈值 30px 的依据是实测：
++             *      真滑动位移 130~300px（中位 214px），轻点抖动一般 <15px，30px 正好把两者分开。
++             *   2. 是拖动 ⇒ 立刻清掉库的 imageClicked，让拖动永远不能充当"第一次轻点"；
++             *      若这一下之前已经有"第一次轻点"了（imageClicked 曾被置位），说明是"轻点+拖动"，
++             *      那发 50ms 后要派发的合成 dblclick 也一并拦掉。
++             *   3. 两次都不动的轻点 ⇒ 真双击，放行；并按老师要求把有效期从 500ms 收到 300ms
++             *      （300ms 后清掉库的 imageClicked，等效于缩短双击判定窗口）。
++             * 注意必须用 touchstart/touchend 的坐标差，**不能**靠 touchmove：安卓上控件在指针处理里
++             * preventDefault 之后 touchmove 可能根本收不到。 */
++            (function () {
++                const TAP_SLOP = 30;      // 超过它就当"拖动"
++                const TAP_WINDOW = 300;   // 等效双击窗口（老师定）
++                let startX = 0;
++                let startY = 0;
++                let tapTimer = 0;
++                let swallowDblUntil = 0;
++                const isViewer = (el) => el instanceof Element && !!el.closest('.viewer-container');
++                document.addEventListener('touchstart', (e) => {
++                    const t = e.changedTouches && e.changedTouches[0];
++                    if (t) { startX = t.clientX; startY = t.clientY; }
++                }, true);
++                document.addEventListener('touchend', (e) => {
++                    const t = e.changedTouches && e.changedTouches[0];
++                    if (!t || !isViewer(e.target)) return;
++                    const moved = Math.abs(t.clientX - startX) > TAP_SLOP
++                        || Math.abs(t.clientY - startY) > TAP_SLOP;
++                    clearTimeout(tapTimer);
++                    if (moved) {
++                        if (viewer.imageClicked) swallowDblUntil = Date.now() + 150;   // 轻点+拖动 ≠ 双击
++                        viewer.imageClicked = false;
++                    } else if (viewer.imageClicked) {
++                        tapTimer = setTimeout(() => { viewer.imageClicked = false; }, TAP_WINDOW);
++                    }
++                }, true);
++                document.addEventListener('dblclick', (e) => {
++                    if (Date.now() < swallowDblUntil && isViewer(e.target)) e.stopPropagation();
++                }, true);
++            })();
++
++            /* 修 Viewer.js 的「闩锁」bug（真机打点 + 源码逐行核对 + jsdom 复现确认）：
++             *   others.js:216-223  change() 里
++             *       case ACTION_SWITCH: {
++             *         this.action = 'switched';                       // ← 第一次 pointermove 就先上闩
++             *         if (|offsetX| > 1 && |offsetX| > |offsetY|) { … this.view(index) }
++             *   上闩之后 action 成了字符串 'switched'，而外层 switch 没有这个分支 ⇒ 之后
++             *   每一次 pointermove 全部落空：不切图、不平移、不放大 =「纹丝不动」。
++             *   判据又只看开头那次采样，真手指刚落下天然带纵向抖动（dy ≥ dx）⇒ 大多数手势
++             *   一开始就被闩死，偶尔开头偏横向才成功 —— 这就是「大多数失败、少数成功、无规律」。
++             * 从外面把闩松开：手势期间发现 action 变成那个闩值，就恢复成刚才那个动作值，
++             * 后续采样继续参与判定（切图判据看的是"最近一次位移"，所以横滑一定能切到）。
++             * 不改 viewer.min.js（压缩产物，改了没法维护）。 */
++            (function () {
++                let inViewer = false;
++                let lastAction = null;
++                let switchAction = null;
++                const isViewer = (el) => el instanceof Element && !!el.closest('.viewer-container');
++                document.addEventListener('pointerdown', (e) => {
++                    inViewer = isViewer(e.target);
++                    lastAction = null;
++                }, true);
++                document.addEventListener('pointermove', (e) => {
++                    if (!inViewer) return;
++                    const a = viewer.action;
++                    if (a === 'switched') {
++                        // 学到切图动作的真值后，把闩松开
++                        if (!switchAction && lastAction) switchAction = lastAction;
++                        if (switchAction && viewer.action !== switchAction) viewer.action = switchAction;
++                    } else if (a) {
++                        lastAction = a;      // 手势开始时 Viewer 刚算出来的动作值
++                    }
++                }, true);
++                document.addEventListener('pointerup', () => { inViewer = false; }, true);
++                document.addEventListener('pointercancel', () => { inViewer = false; }, true);
++            })();
++
++            
++            /* 桌面 110% 缩放下看图控件（Viewer.js）的整体偏移：**不在这里用 JS 打补丁**。
++             * 真因：<html>{zoom:1.1} 让 Viewer 内部「以为的 1px」只有屏幕上的 1/1.1 ——
++             *   它按视觉尺寸（window.innerWidth = 1280）算居中与适配，却把结果当【布局值】
++             *   写进内联样式（布局空间只有 1164），渲染时浏览器又乘 1.1 ⇒
++             *   ① 图片整体偏右下（1280 宽下约 +64px）；
++             *   ② 按视觉算出的适配尺寸偏大，图片会盖住下方导航条/缩略图，且放大后拖不动。
++             * 正解在外壳上做**反向缩放**（common.less 的 `html .viewer-container { zoom: ... }`）：
++             *   让 Viewer 的子坐标系与屏幕 1:1，它自己的居中/适配/平移数学就全对了 ——
++             *   点开、键盘 ←→ 切图、滚轮放大、拖拽平移都不必再各修一遍。
++             * （教训：第三方控件遇到根节点 zoom，就把它那层缩回去，别逐条路径打补丁。） */
++
  
              $photos.justifiedGallery(gridConfigs);
  
@@ -2968,7 +3263,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,7 +576,11 @@
+@@ -276,7 +862,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
@@ -2981,7 +3276,38 @@
                      }
  
                      $photos.append(html);
-@@ -308,14 +612,42 @@
+@@ -300,22 +890,73 @@
+                 }
+             });
+ 
++            // ★ B 保险：告诉无限加载「用户是不是真的在往下滚 + 是不是刚重置过」。
++            //   浏览器为了维持滚动位置偷偷补的那一滚，不满足这两个条件，于是不会连锁。
++            {
++                // 只做记录、不做拦截。
++                // ★ 教训：曾经这里做过一道「必须由用户手指驱动（touchmove/wheel）才放行」的闸，
++                //   结果把真实滑到底一起堵死了 —— 用户滑到底那一刻可能刚处在窗口边缘，当场被拦
++                //   后又不再有 scroll 事件 ⇒ 永远不加载；程序化滚动（测试、浏览器补滚）更是永远
++                //   挤不进这条路径。守卫测试 infinite-scroll 三套当时全红，失败项正是「到底了不
++                //   触发」。说明那道闸方向就是错的，别再往这里加法。
++                //   拦截只保留 app.js 里那一道「重置窗口」。
++                window.__lskyScrollGate = window.__lskyScrollGate || { lastY: window.scrollY };
++                window.addEventListener('scroll', function () {
++                    window.__lskyScrollGate.lastY = window.scrollY;
++                }, { passive: true });
++            }   // ★ 重置窗口的截止时间戳（见 resetImages）
+             const resetImages = (params) => {
++                // ★ 顺序很重要：清空内容之前先回顶部。
++                //   清空后页面高度塌缩，浏览器的滚动位置会被夹到某个浅位置，再叠加重排补滚，
++                //   就是「无脑滚到底」的起点。换排序/刷新本来也该从头看。
++                try { window.scrollTo(0, 0); } catch (e) {}
+                 $photos.addClass('reset').html('').justifiedGallery('destroy');
+                 ds.clearSelection();
+                 params = $.extend({page: 1}, params)
++                // ★ 重置窗口：从清空到第一页真正落地这段时间里，忽略滚动触发的加载。
++                //   这段时间页面高度剧烈变化（塌缩 → 逐页长回来），最容易被补齐/重排带着连发。
++                resetGuardUntil = Date.now() + 800;
++                try { window.__lskyResetGuardUntil = resetGuardUntil; } catch (e) {}
+                 imagesInfinite.refresh(params);
              }
  
              const getAlbums = (options, callback) => {
@@ -3028,7 +3354,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +660,40 @@
+@@ -328,29 +969,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -3079,7 +3405,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +701,13 @@
+@@ -358,12 +1010,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -3095,7 +3421,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +716,14 @@
+@@ -372,13 +1025,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -3113,7 +3439,7 @@
                              );
                          }
                      });
-@@ -386,6 +731,12 @@
+@@ -386,6 +1040,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -3126,7 +3452,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +746,14 @@
+@@ -395,12 +1055,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -3143,7 +3469,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +785,18 @@
+@@ -432,15 +1094,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -3165,7 +3491,7 @@
                  });
              }
  
-@@ -449,9 +805,366 @@
+@@ -449,9 +1114,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -3535,7 +3861,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +1181,158 @@
+@@ -468,11 +1490,158 @@
              });
          </script>
          <script>
@@ -3563,8 +3889,8 @@
                  area: $(IMAGES_SCROLL).get(0),
                  keyboardDrag: false,
 +                zoom: dsPageZoom(),
-+            });
-+
+             });
+ 
 +            /* ---------------- 框选失效的真因与修法（fork 修复） ----------------
 +             * 现象：图片墙上按住左键拖动，怎么拖都框不出选择框（按在图片上、按在缝隙上都不行）。
 +             * 真因：DragSelect 会给区域套一层 .ds-selector-area 包装盒，并把这个盒子的矩形**缓存**下来
@@ -3586,8 +3912,8 @@
 +                } catch (e) {
 +                    console.warn('ds re-measure skipped:', e);
 +                }
-             });
- 
++            });
++
 +            /* ---- 自己记选择框：让"库的判定矩形"与"屏幕上那只框"都绑到原始指针坐标上 ----
 +             * 真因（实测，别再走回头路）：
 +             *  页面 = <html>{zoom:1.1} + 整页滚动。DragSelect 内部把**布局单位**的滚动量混进了
@@ -3694,7 +4020,7 @@
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +1346,10 @@
+@@ -486,10 +1655,10 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -3707,7 +4033,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -502,17 +1362,68 @@
+@@ -502,17 +1671,68 @@
                      ds.stop();
                  }
  
@@ -3777,7 +4103,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +1444,246 @@
+@@ -533,27 +1753,246 @@
                  toastr.warning('复制失败')
              });
  
@@ -4041,7 +4367,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +1694,9 @@
+@@ -564,7 +2003,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -4052,7 +4378,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +1704,19 @@
+@@ -572,47 +2013,19 @@
                          }
                      });
                  },
@@ -4109,7 +4435,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +1753,10 @@
+@@ -649,6 +2062,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -4120,7 +4446,33 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -683,7 +1791,11 @@
+@@ -662,13 +2079,23 @@
+                                 data: selected,
+                             }).then(response => {
+                                 if (response.data.status) {
++                                    // ★ 删除后必须把卡片**也从 DragSelect 里摘干净**（2026-10-04 修）：
++                                    //   只做 $(item).remove() 的话，库的 SelectedSet / SelectableSet 里会留下
++                                    //   「已不在 DOM 的幽灵卡片」—— DS 的 getSelection() 实现就是
++                                    //   `return SelectedSet.elements`，它从不检查元素是否还在文档里（全库没有一处
++                                    //   isConnected 判断）。于是之后任何一次 elementselect / elementunselect 触发的
++                                    //   bindOperates() 都会把幽灵算进去：顶部又显示「已选择 N 张图片」、操作栏不收回、
++                                    //   再选一张时计数虚高（实测：屏幕上 1 张却显示「已选择 2 张图片」）。
++                                    let selected = ds.getSelection();
+                                     let size = 0;
+-                                    ds.getSelection().map(item => {
++                                    selected.forEach(item => {
+                                         size += $(item).data('json').size;
+                                         $(item).remove();
+                                     });
++                                    ds.removeSelectables(selected);   // 从「可选集合」摘掉（第二个参数默认 false，不动选中集合）
++                                    ds.removeSelection(selected);     // 从「选中集合」摘掉（发 Selected:removed → elementunselect → 自动重画顶部）
++                                    bindOperates();                   // 兜底：标题与操作栏统一回到「未选中」形态
+                                     utils.setCapacityProgress(-size);
+-                                    $headerTitle.text('我的图片');
+                                     $photos.justifiedGallery(gridConfigs).removeClass('reset');
+                                     toastr.success(response.data.message);
+                                 } else {
+@@ -683,7 +2110,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -4132,7 +4484,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +1806,13 @@
+@@ -694,10 +2125,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -4148,7 +4500,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -783,9 +1898,9 @@
+@@ -783,9 +2217,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -4161,7 +4513,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,7 +1918,7 @@
+@@ -803,7 +2237,7 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -4170,7 +4522,7 @@
                      actions.detail,
                      {divider: true},
                      actions.rename,
-@@ -844,8 +1959,8 @@
+@@ -844,8 +2278,8 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;
@@ -4181,7 +4533,7 @@
                          break;
                      case 'detail':
                          methods.detail(selected[0]);
-@@ -853,8 +1968,15 @@
+@@ -853,8 +2287,15 @@
                      case 'delete': // 删除
                          methods.delete();
                          break;

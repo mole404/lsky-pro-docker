@@ -2079,13 +2079,23 @@
                                 data: selected,
                             }).then(response => {
                                 if (response.data.status) {
+                                    // ★ 删除后必须把卡片**也从 DragSelect 里摘干净**（2026-10-04 修）：
+                                    //   只做 $(item).remove() 的话，库的 SelectedSet / SelectableSet 里会留下
+                                    //   「已不在 DOM 的幽灵卡片」—— DS 的 getSelection() 实现就是
+                                    //   `return SelectedSet.elements`，它从不检查元素是否还在文档里（全库没有一处
+                                    //   isConnected 判断）。于是之后任何一次 elementselect / elementunselect 触发的
+                                    //   bindOperates() 都会把幽灵算进去：顶部又显示「已选择 N 张图片」、操作栏不收回、
+                                    //   再选一张时计数虚高（实测：屏幕上 1 张却显示「已选择 2 张图片」）。
+                                    let selected = ds.getSelection();
                                     let size = 0;
-                                    ds.getSelection().map(item => {
+                                    selected.forEach(item => {
                                         size += $(item).data('json').size;
                                         $(item).remove();
                                     });
+                                    ds.removeSelectables(selected);   // 从「可选集合」摘掉（第二个参数默认 false，不动选中集合）
+                                    ds.removeSelection(selected);     // 从「选中集合」摘掉（发 Selected:removed → elementunselect → 自动重画顶部）
+                                    bindOperates();                   // 兜底：标题与操作栏统一回到「未选中」形态
                                     utils.setCapacityProgress(-size);
-                                    $headerTitle.text('我的图片');
                                     $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                     toastr.success(response.data.message);
                                 } else {
