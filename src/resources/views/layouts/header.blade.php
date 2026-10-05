@@ -20,16 +20,17 @@
              所以任何情况下标题左缘都不得小于 容器左缘 + 43（= 3 + 32 + 8）。 --}}
         <a href="javascript:void(0)" @click="$store.sidebar.toggleSmart()" title="开关侧栏"
            class="absolute left-2 top-0 mt-3 w-8 h-8 rounded-lg flex justify-center items-center text-ink-2 hover:bg-surface-2">
-            {{-- 手机：抽屉（☰）；桌面：左侧栏图案（矩形 + 靠左的栏分隔线），
-                 栏里的小箭头表示点下去侧栏会往哪边收 —— 比裸箭头直观：一眼能看出这是「侧栏」开关。
-                 x-cloak 只挂在「折叠态」那条上：Alpine 起来之前不会两条箭头同时出现。 --}}
-            <i class="fas fa-bars text-lg sm:hidden"></i>
-            <svg class="hidden sm:block w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+            {{-- 侧栏图案（矩形 + 靠左的栏分隔线）：桌面与竖屏共用同一个图标。
+                 栏里那个小箭头表示点下去侧栏会往哪边收，两态由 CSS 按 <html> 上的 .sidebar-collapsed 切换
+                 （规则在 resources/css/common.less；store 的 applyCollapsed() 一直在贴这个类）——
+                 不用 Alpine 的 x-show/x-cloak：JS 没起来时图标也一定正确（不会两条箭头同时出现或一个都没有）。
+                 竖屏是抽屉、只有「展开」一种形态：那边由媒体查询把箭头固定住（见 common.less）。 --}}
+            <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor"
                  stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="2.5" y="3.5" width="15" height="13" rx="2.6"/>
                 <path d="M9.2 3.5v13"/>
-                <path x-show="! $store.sidebar.collapsed" d="M14.1 8.3 12.6 10l1.5 1.7"/>
-                <path x-cloak x-show="$store.sidebar.collapsed" d="M12.6 8.3 14.1 10l-1.5 1.7"/>
+                <path class="ls-sidebar-arrow-expanded" d="M14.1 8.3 12.6 10l1.5 1.7"/>
+                <path class="ls-sidebar-arrow-collapsed" d="M12.6 8.3 14.1 10l-1.5 1.7"/>
             </svg>
         </a>
         {{-- 标题左边距「按路由区分」，与 x-container 的 routeIs 分支同源（一行三元，保持可读）：

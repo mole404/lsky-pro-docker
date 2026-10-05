@@ -80,17 +80,19 @@ console.log('\n[单位] 中文标签/占位符里的 KB 一律大写');
 }
 
 // ---------------------------------------------------------------- 4 侧栏图案
-console.log('\n[顶栏] 桌面换「左侧栏」图案，手机仍是 ☰ 抽屉');
+console.log('\n[顶栏] 侧栏开关图案：桌面与竖屏共用一个「左侧栏」图案（2026-10-05 起竖屏也换掉 ☰）');
 {
     const toggle = header.slice(header.indexOf('toggleSmart'), header.indexOf('</a>', header.indexOf('toggleSmart')));
-    check('手机：还是 fa-bars（抽屉语义不变）', toggle.includes('fas fa-bars text-lg sm:hidden'));
-    check('桌面：矩形 + 靠左的栏分隔线（不是裸箭头了）',
-        toggle.includes('<rect x="2.5" y="3.5" width="15" height="13" rx="2.6"/>') && toggle.includes('M9.2 3.5v13'));
+    check('竖屏不再用 ☰：fa-bars 已整段移除（含 header 全部）', ! toggle.includes('fa-bars') && ! header.includes('fa-bars'));
+    check('共用一个图案：矩形 + 靠左的栏分隔线，且不再按断点隐藏（旧的 hidden sm:block 分叉已去掉）',
+        toggle.includes('<svg class="w-5 h-5"') && toggle.includes('<rect x="2.5" y="3.5" width="15" height="13" rx="2.6"/>')
+        && toggle.includes('M9.2 3.5v13'));
     check('旧的 chevron 图标已完全移除', ! header.includes('fa-chevron-left') && ! header.includes('fa-chevron-right'));
-    check('方向提示仍在：两条箭头路径按 $store.sidebar.collapsed 互斥显示（折叠态那条带 x-cloak 防闪）',
-        toggle.includes('x-show="! $store.sidebar.collapsed"')
-        && toggle.includes('x-cloak x-show="$store.sidebar.collapsed"'));
-    check('图标尺寸用已编译过的 w-5 h-5（不是任意值类）', /class="hidden sm:block w-5 h-5"/.test(toggle));
+    const toggleNoComment = toggle.replace(/\{\{--[\s\S]*?--\}\}/g, ''); // 注释里也会提到 x-show/x-cloak，别误判
+    check('方向提示改由 CSS 切：两条箭头带类名，不再用 Alpine 的 x-show/x-cloak（JS 没起来也正确）',
+        toggle.includes('class="ls-sidebar-arrow-expanded"') && toggle.includes('class="ls-sidebar-arrow-collapsed"')
+        && ! /\sx-show=/.test(toggleNoComment) && ! /\sx-cloak/.test(toggleNoComment));
+    check('图标尺寸用已编译过的 w-5 h-5（不是任意值类）', /<svg class="w-5 h-5"/.test(toggle));
 }
 
 // ---------------------------------------------------------------- 6 窄桌面收拢
@@ -208,9 +210,9 @@ console.log('\n[顶栏/登录页] 两个胶囊居中 + 所有宽度竖向居中'
     check('存储策略胶囊：去掉多余的 px-2（两侧都剩按钮自己的 12px）',
         /<span class="sm:block hidden" id="strategy-selected"/.test(read('resources', 'views', 'layouts', 'strategies.blade.php'))
         && ! /<span class="px-2 sm:block hidden" id="strategy-selected"/.test(read('resources', 'views', 'layouts', 'strategies.blade.php')));
-    check('用户胶囊：左右内边距对称（sm:pl-1 sm:pr-1）+ 用户名去掉多余右内边距（pl-1 pr-0）',
-        userNav.includes('sm:pl-1 sm:pr-1') && ! userNav.includes('sm:pr-2')
-        && userNav.includes('class="ls-user-name pl-1 pr-0 sm:block hidden text-ink-2"'));
+    check('用户胶囊：可见间距对称 —— 按钮 sm:pl-2 sm:pr-2（外 8）+ 用户名 span 不带内边距（图文间距 = 按钮的 gap-2 = 8px）',
+        userNav.includes('sm:pl-2 sm:pr-2') && ! userNav.includes('sm:pl-1 sm:pr-1')
+        && userNav.includes('class="ls-user-name sm:block hidden text-ink-2"'));
     const authCard = read('resources', 'views', 'components', 'auth-card.blade.php');
     check('登录页卡片：所有宽度都竖向居中（去掉 sm: 限制）+ 上下留白 py-6',
         authCard.includes('flex flex-col justify-center items-center py-6')
@@ -244,6 +246,25 @@ console.log('\n[镜像上限] post_max_size 512M（upload_max_filesize 与 max_e
     check('Dockerfile 钉的 images.blade.php md5 == 文件实算值（自证段 + .code-revision 两处都要）',
         pinnedImgs.includes(realImgs) && revisionPin === realImgs,
         `自证段=${pinnedImgs.join('/')} code-revision=${revisionPin} 实算=${realImgs}`);
+}
+
+console.log('\n[第九批] 默认保存质量 100 / 侧栏图标桌面竖屏统一 / 用户胶囊可见间距对称');
+{
+    const conv = read('config', 'convention.php');
+    check('convention.php：默认保存质量 75 → 100（新建角色组 + 全新安装都取这里；存量组取库里存的值，不受影响）',
+        /GroupConfigKey::ImageSaveQuality => 100,/.test(conv) && ! /ImageSaveQuality => 75/.test(conv));
+
+    const less = read('resources', 'css', 'common.less');
+    check('common.less：折叠态按 html.sidebar-collapsed 切箭头 + 竖屏 <640 固定「展开」箭头（!important 压过桌面态）',
+        less.includes('html .ls-sidebar-arrow-collapsed {') && less.includes('html.sidebar-collapsed .ls-sidebar-arrow-expanded {')
+        && less.includes('html.sidebar-collapsed .ls-sidebar-arrow-collapsed {')
+        && /@media \(max-width: 639\.98px\) \{[\s\S]{0,200}?ls-sidebar-arrow-collapsed \{\s*display: none !important/.test(less)
+        && /ls-sidebar-arrow-expanded \{\s*display: inline !important/.test(less));
+    // 产物里必须有这三段（LESS 写了但没重建 = 等于没写，第 67 条）
+    const commonCss = fs.readFileSync(path.join(SRC, 'public', 'css', 'common.css'), 'utf8');
+    check('重建后的 common.css 真含这三段（选择器合并允许：折叠两条会并成一条 display:none）',
+        commonCss.includes('.ls-sidebar-arrow-collapsed') && commonCss.includes('.sidebar-collapsed .ls-sidebar-arrow-expanded')
+        && commonCss.includes('max-width:639.98px'));
 }
 
 // ---------------------------------------------------------------- 汇总

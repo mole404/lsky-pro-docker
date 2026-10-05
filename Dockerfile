@@ -119,7 +119,7 @@ RUN printf '%s\n' \
 # 改了不更新这行 md5 就构建失败。
 # 这几个文件以后只要被改动（哪怕手滑），构建就会红 —— md5 必须随改动同步更新。
 RUN printf '%s\n' \
-        '8136e73b50315d783f105dd4ac9971bb  ./config/convention.php' \
+        '1087b3697db7d075b83199fe764d89a6  ./config/convention.php' \
         '881fdbaed19ef39027783f093448875d  ./routes/web.php' \
         'c1ab546f3e7f5237c1d45435171858ce  ./routes/auth.php' \
         'ea2977cb9090ee60bebbf383057ab7c3  ./app/Services/ImageService.php' \

@@ -764,3 +764,34 @@ html.dark {
         max-width: calc(100% - 14rem);
     }
 }
+
+/* ---------------------------------------------------------------------------
+ * fork（2026-10-05）：侧栏开关按钮里那两个小箭头的显示/隐藏改由 CSS 决定
+ * 图标本身桌面/竖屏共用一个（矩形 + 靠左的栏分隔线），只有「栏里的小箭头」分两态：
+ *   · 桌面：看 <html> 上的 .sidebar-collapsed —— 侧栏 store 的 applyCollapsed() 一直在贴这个类；
+ *   · 竖屏（<640px）：侧栏是抽屉、只有「展开」一种形态，箭头固定不翻 ——
+ *     即使 localStorage 里残留了桌面端的折叠状态也不受影响（媒体查询里的 !important 压过上面两条）。
+ * 为什么不用 Alpine 的 x-show/x-cloak（原实现）：JS 没起来时会出现「两条箭头同时显示」或「一个都没有」；
+ * 图标是页面的固定零件，用 CSS 表达它任何时候都正确，也不依赖框架初始化时序。
+ * ------------------------------------------------------------------------- */
+html .ls-sidebar-arrow-collapsed {
+    display: none;
+}
+
+html.sidebar-collapsed .ls-sidebar-arrow-expanded {
+    display: none;
+}
+
+html.sidebar-collapsed .ls-sidebar-arrow-collapsed {
+    display: inline;
+}
+
+@media (max-width: 639.98px) {
+    html .ls-sidebar-arrow-collapsed {
+        display: none !important;
+    }
+
+    html .ls-sidebar-arrow-expanded {
+        display: inline !important;
+    }
+}
