@@ -100,11 +100,11 @@ console.log('\n[顶栏] 640~1080px：右上角那组不再压住折叠按钮与�
         /@media \(min-width: 640px\) and \(max-width: 1079\.98px\)/.test(commonLess)
         && commonLess.includes('html .ls-app-header #strategy-selected')
         && commonLess.includes('html .ls-app-header .ls-user-name')
-        && commonLess.includes('max-width: calc(100% - 18rem)'));
+        && commonLess.includes('max-width: calc(100% - 14rem)'));
     check('编译后的 common.css 里这三条都在（LESS 真的编出来了；lessc 是未压缩输出，空白要放宽）',
         /\.ls-app-header\s*#strategy-selected/.test(compiledCommon)
         && /\.ls-app-header\s*\.ls-user-name/.test(compiledCommon)
-        && /max-width:\s*calc\(100% - 18rem\)/.test(compiledCommon));
+        && /max-width:\s*calc\(100% - 14rem\)/.test(compiledCommon));
     // 手机端零变化：区间从 640 起，<640 的策略名/用户名本来就由 sm:block hidden 管着
     check('区间下界是 640（手机端 <640 不受影响）',
         /@media \(min-width: 640px\) and \(max-width: 1079\.98px\)/.test(commonLess));
