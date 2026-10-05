@@ -29,8 +29,9 @@ services:
       # ---- PHP memory_limit（测试版默认 64M）：不写就用镜像默认 64M ----
       # 运行期覆盖、**不用重建镜像**。只接受 <数字>[KMG] 形状（如 256M / 1G），
       # 脏值只忽略这一项并警告，不会让容器起不来。
-      # ⚠ 上传/表单上限仍是 100M（post_max_size / upload_max_filesize）：处理大图若撞到
-      #    64M 上限，把它抬高（或调低那两个上传上限）。
+      # ⚠ 上传上限：post_max_size 与 upload_max_filesize 都已调到 512M
+      #    —— 反向代理（nginx 等）的 client_max_body_size 也要 ≥ 你想传的大小，否则请求会先被代理挡成 413。
+      #    处理大图若撞到 64M 内存上限，把它抬高（或调低上面那两个上传上限）。
       # - PHP_MEMORY_LIMIT=256M
     volumes:
       - $PWD/web:/var/www/html/

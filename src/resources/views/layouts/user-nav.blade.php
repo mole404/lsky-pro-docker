@@ -1,7 +1,7 @@
 <!-- Profile dropdown -->
 <x-dropdown>
     <x-slot name="trigger">
-        <button type="button" class="flex items-center justify-center gap-2 h-10 w-10 p-0 rounded-full border border-line hover:bg-surface-2 text-[14px] text-ink sm:w-auto sm:pl-1 sm:pr-2" id="user-menu-button" aria-expanded="false" aria-haspopup="true">
+        <button type="button" class="flex items-center justify-center gap-2 h-10 w-10 p-0 rounded-full border border-line hover:bg-surface-2 text-[14px] text-ink sm:w-auto sm:pl-1 sm:pr-1" id="user-menu-button" aria-expanded="false" aria-haspopup="true">
             <span class="sr-only">Open user menu</span>
             {{-- 头像占位框：固定 28×28（h-7 w-7 + width/height 属性），图片没到/挂了都不抖动。
                  里面两层：底下的「名字首字」色块圆圈（兜底）与盖在它上面的 img。
@@ -19,7 +19,7 @@
                      onload="this.previousElementSibling && this.previousElementSibling.remove(); this.classList.remove('opacity-0');"
                      onerror="this.remove();">
             </span>
-            <span class="ls-user-name px-1 sm:block hidden text-ink-2">{{ Auth::user()->name }}</span>
+            <span class="ls-user-name pl-1 pr-0 sm:block hidden text-ink-2">{{ Auth::user()->name }}</span>
         </button>
     </x-slot>
 

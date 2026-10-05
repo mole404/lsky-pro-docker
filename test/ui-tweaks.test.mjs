@@ -14,11 +14,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
 const here = path.dirname(decodeURIComponent(new URL(import.meta.url).pathname));
 const SRC = path.join(here, '..', 'src');
 const read = (...p) => fs.readFileSync(path.join(SRC, ...p), 'utf8');
+const dockerfile = fs.readFileSync(path.join(here, '..', 'Dockerfile'), 'utf8');
 
 const results = [];
 function check(name, pass, detail = '') {
@@ -143,6 +145,105 @@ console.log('\n[登录页] 品牌区 = LOGO 图案（透明底）+ 站名，整�
     check('6 个 auth 页统一传「只给文字用的类」，不再塞固定宽高（w-20 h-20 会把整块撑歪）',
         authPages.every(([, src]) => src.includes('<x-application-logo class="text-ink-2 text-4xl" />'))
         && authPages.every(([, src]) => ! src.includes('w-20 h-20')));
+}
+
+// ---------------------------------------------------------------- 第八批（2026-10-05）
+console.log('\n[后台文案] 「填 0 表示…」提示 16 处（系统设置 1 / 编辑角色组 7 / 新建角色组 7 / 编辑用户 1）');
+{
+    const count = (src) => (src.match(/text-ink-3">填 0/g) || []).length;
+    const ids = [
+        ['admin/setting/index.blade.php', 'user_initial_capacity'], ['admin/user/edit.blade.php', 'capacity'],
+    ];
+    check('系统设置：用户初始容量下 1 行「填 0 表示不可上传」',
+        count(setting) === 1 && setting.includes('填 0 表示不可上传')
+        && /user_initial_capacity[\s\S]{0,220}?text-ink-3">填 0 表示不可上传/.test(setting));
+    check('编辑用户：总容量下 1 行「填 0 表示不可上传」',
+        count(userEdit) === 1 && userEdit.includes('填 0 表示不可上传')
+        && /id="capacity"[\s\S]{0,220}?text-ink-3">填 0 表示不可上传/.test(userEdit));
+
+    const want = [
+        ['configs[maximum_file_size]', '填 0 表示不可上传'],
+        ['configs[concurrent_upload_num]', '填 0 表示不限制并发数（不推荐）'],
+        ['configs[limit_per_minute]', '填 0 表示无限制'],
+        ['configs[limit_per_hour]', '填 0 表示无限制'],
+        ['configs[limit_per_day]', '填 0 表示无限制'],
+        ['configs[limit_per_week]', '填 0 表示无限制'],
+        ['configs[limit_per_month]', '填 0 表示无限制'],
+    ];
+    for (const [file, src] of [['编辑角色组', groupEdit], ['新建角色组', groupAdd]]) {
+        check(`${file}：7 处提示、每处紧跟对应字段且文案逐字正确`,
+            count(src) === 7 && want.every(([name, text]) =>
+                new RegExp(name.replace(/[[\]]/g, '\\$&') + '[\\s\\S]{0,240}?text-ink-3">' + text).test(src)));
+    }
+    check('没有把「最大文件大小」写成无限制（0 的语义是「不可上传」）',
+        ! /maximum_file_size[\s\S]{0,240}?填 0 表示无限制/.test(groupEdit));
+}
+
+console.log('\n[仪表盘] 0 → 灰色「无限制」（含并发）+ 策略列表按右侧卡片限高');
+{
+    const dash = read('resources', 'views', 'user', 'dashboard.blade.php');
+    check('限额格子：六个键统一用 (int) 取值判 0，0 → 灰字「无限制」且不带单位',
+        dash.includes('@php $limitValue = (int) $configs->get($key); @endphp')
+        && dash.includes("@if($limitValue === 0)")
+        && dash.includes('无限制')
+        && dash.includes("{{ $limitValue === 0 ? 'text-ink-3' : 'text-ink' }}"));
+    check('并发也在同一循环里（不再特判排除）', dash.includes('GroupConfigKey::ConcurrentUploadNum'));
+    check('策略列表/我的信息两个锚点类都在',
+        dash.includes('ls-strategy-list') && dash.includes('ls-info-card'));
+    check('限高脚本：只在 ≥844.8px 生效（<844.8 清空 → 竖屏全展开）',
+        dash.includes("window.matchMedia('(min-width: 844.8px)')") && dash.includes("list.style.maxHeight = ''"));
+    check('限高脚本：处理了 zoom（视觉 px / 布局 px 换算）',
+        dash.includes('getBoundingClientRect().width / el.offsetWidth') && dash.includes('z > 1.0001'));
+    check('限高脚本：挂了 resize 与侧栏折叠事件（后者延迟 320ms）',
+        dash.includes("window.addEventListener('resize', sync)") && dash.includes('lsky:sidebar-toggled') && dash.includes('setTimeout(sync, 320)'));
+    check('限高脚本：chrome 只算「列表上方 + 卡片底部内边距」，不含会被 grid 拉伸污染的「卡片底边−列表底边」',
+        dash.includes('getComputedStyle(list.parentElement).paddingBottom') && ! dash.includes('(sRect.bottom - lRect.bottom)'));
+    check('限高脚本：量不到布局（x-cloak 罩着 / 所有 rect 为 0）时直接放弃，绝不把列表压成 0px',
+        dash.includes('if (! (infoH > 0) || ! (lRect.top > 0) || ! (sRect.top > 0)) { return; }')
+        && dash.includes("if (document.readyState === 'complete') { sync(); } else { window.addEventListener('load', sync); }"));
+}
+
+console.log('\n[顶栏/登录页] 两个胶囊居中 + 所有宽度竖向居中');
+{
+    check('存储策略胶囊：去掉多余的 px-2（两侧都剩按钮自己的 12px）',
+        /<span class="sm:block hidden" id="strategy-selected"/.test(read('resources', 'views', 'layouts', 'strategies.blade.php'))
+        && ! /<span class="px-2 sm:block hidden" id="strategy-selected"/.test(read('resources', 'views', 'layouts', 'strategies.blade.php')));
+    check('用户胶囊：左右内边距对称（sm:pl-1 sm:pr-1）+ 用户名去掉多余右内边距（pl-1 pr-0）',
+        userNav.includes('sm:pl-1 sm:pr-1') && ! userNav.includes('sm:pr-2')
+        && userNav.includes('class="ls-user-name pl-1 pr-0 sm:block hidden text-ink-2"'));
+    const authCard = read('resources', 'views', 'components', 'auth-card.blade.php');
+    check('登录页卡片：所有宽度都竖向居中（去掉 sm: 限制）+ 上下留白 py-6',
+        authCard.includes('flex flex-col justify-center items-center py-6')
+        && ! authCard.includes('sm:justify-center') && ! authCard.includes('pt-6 sm:pt-0'));
+}
+
+console.log('\n[工具栏] 断点 lg→xl + 永不折行');
+{
+    const imgs = read('resources', 'views', 'user', 'images.blade.php');
+    check('桌面那排开关断点抬到 xl（<1408 走「⋯」菜单，正是老师要的语义）',
+        imgs.includes('flex-row hidden xl:flex') && imgs.includes('block xl:hidden')
+        && ! imgs.includes('flex-row hidden lg:flex') && ! imgs.includes('block lg:hidden'));
+    const nowrap = (imgs.match(/class="whitespace-nowrap[^"]*"[^>]*>(?:移动到相册|移出当前相册|标签管理|详细信息|重命名|删除|取消选择)</g) || []).length;
+    check('7 个操作项都带 whitespace-nowrap；「相册」也一样（共 8 处）',
+        nowrap === 7 && /class="whitespace-nowrap text-sm[^"]*"[^>]*>[\s\S]{0,60}?相册</.test(imgs));
+}
+
+console.log('\n[镜像上限] post_max_size 512M（upload_max_filesize 与 max_execution_time 都不动）');
+{
+    check('Dockerfile：post_max_size 与 upload_max_filesize 都是 512M（都抬到 512M；前者是请求体、后者是单文件）',
+        dockerfile.includes("echo 'post_max_size = 512M;'") && dockerfile.includes("echo 'upload_max_filesize = 512M;'"));
+    check('Dockerfile：max_execution_time 维持 600S（老师 2026-10-05 拍板不动，别写成 300）',
+        dockerfile.includes("echo 'max_execution_time = 600S;'") && ! dockerfile.includes("echo 'max_execution_time = 300"));
+    check('构建期自证：真读回 post_max_size（不是只 grep 文件）',
+        dockerfile.includes('post_max_size 自证失败') && dockerfile.includes('ini_get("post_max_size")'));
+    // 「事实的副本」守卫：Dockerfile 里钉的 images.blade.php md5 必须等于当前文件实算值
+    // （两处：自证段的 '<md5>  ./resources/views/…' 行 + .code-revision 生成段的 images_blade_md5=）
+    const pinnedImgs = (dockerfile.match(/([0-9a-f]{32})\s+\.\/resources\/views\/user\/images\.blade\.php/g) || []).map((l) => l.slice(0, 32));
+    const realImgs = crypto.createHash('md5').update(read('resources', 'views', 'user', 'images.blade.php')).digest('hex');
+    const revisionPin = (dockerfile.match(/images_blade_md5=([0-9a-f]{32})/) || [])[1];
+    check('Dockerfile 钉的 images.blade.php md5 == 文件实算值（自证段 + .code-revision 两处都要）',
+        pinnedImgs.includes(realImgs) && revisionPin === realImgs,
+        `自证段=${pinnedImgs.join('/')} code-revision=${revisionPin} 实算=${realImgs}`);
 }
 
 // ---------------------------------------------------------------- 汇总

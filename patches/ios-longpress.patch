@@ -52,7 +52,8 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/resources/js/context-js.js
 #   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/public/js/context-js/context-js.js
-#   fe0852b7b6f4e71d1569ef08db16d480  src/resources/views/user/images.blade.php
+#   4e5d5a4d805632acb2ea5364517e4020  src/resources/views/user/images.blade.php
+#   （2026-10-05 第八批：该文件又改了「工具栏断点 lg→xl + 文字永不折行」，md5 由 fe0852b7b6f4e71d1569ef08db16d480 更新为现值）
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
@@ -2316,9 +2317,9 @@
 +    return api;
 +})();
 ---- src/resources/views/user/images.blade.php
---- /root/.hermes/cache/scratch/tmp.baMb44EyLi/up/resources/views/user/images.blade.php	2026-10-05 12:24:46.500466410 +0800
-+++ src/resources/views/user/images.blade.php	2026-10-05 12:17:50.933233150 +0800
-@@ -4,45 +4,109 @@
+--- /root/.hermes/cache/scratch/tmp.qUkLzmWevn/up/resources/views/user/images.blade.php	2026-10-05 14:38:43.620818172 +0800
++++ src/resources/views/user/images.blade.php	2026-10-05 14:33:35.801236086 +0800
+@@ -4,45 +4,112 @@
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
@@ -2391,23 +2392,28 @@
 +    <div class="sticky top-14 flex justify-between items-center px-2 py-2 z-[3] left-0 right-0 bg-surface border-solid border-b">
          <div class="space-x-2 flex justify-between items-center">
 -            <a class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:getAlbums()"><i class="fas fa-bars text-blue-500"></i> 相册</a>
-+            <a class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:getAlbums()"><i class="fas fa-bars text-brand"></i> 相册</a>
-             <div class="flex-row hidden lg:flex">
+-            <div class="flex-row hidden lg:flex">
 -                <a data-operate="movements" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">移动到相册</a>
 -                <a data-operate="remove" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">移出当前相册</a>
 -                <a data-operate="permission" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">设置权限</a>
 -                <a data-operate="detail" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">详细信息</a>
 -                <a data-operate="rename" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">重命名</a>
 -                <a data-operate="delete" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">删除</a>
-+                <a data-operate="movements" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移动到相册</a>
-+                <a data-operate="remove" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移出当前相册</a>
-+                <a data-operate="tag" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">标签管理</a>
-+                <a data-operate="detail" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
-+                <a data-operate="rename" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
-+                <a data-operate="delete" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
-+                <a data-operate="deselect" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">取消选择</a>
++            <a class="whitespace-nowrap text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:getAlbums()"><i class="fas fa-bars text-brand"></i> 相册</a>
++            {{-- 这排 7 项一行约需 1000px 布局宽（≈1360px 窗口），lg(1126px) 会把文字挤成两行，
++                 故断点抬到 xl(1408px)；并给每个文字按钮加 whitespace-nowrap，保证永不折行。 --}}
++            <div class="flex-row hidden xl:flex">
++                <a data-operate="movements" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移动到相册</a>
++                <a data-operate="remove" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移出当前相册</a>
++                <a data-operate="tag" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">标签管理</a>
++                <a data-operate="detail" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
++                <a data-operate="rename" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
++                <a data-operate="delete" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
++                <a data-operate="deselect" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">取消选择</a>
              </div>
-             <div class="block lg:hidden">
+-            <div class="block lg:hidden">
++            {{-- 与上排互斥：<xl 才收起成一格「⋯」菜单 --}}
++            <div class="block xl:hidden">
                  <x-dropdown direction="right">
                      <x-slot name="trigger">
 -                        <a class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)"><i class="fas fa-ellipsis-h text-blue-500"></i></a>
@@ -2441,7 +2447,7 @@
                      </a>
                  </x-slot>
  
-@@ -57,151 +121,387 @@
+@@ -57,151 +124,387 @@
                      </x-dropdown-link>
                  </x-slot>
              </x-dropdown>
@@ -2914,7 +2920,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +517,335 @@
+@@ -217,44 +520,335 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -3275,7 +3281,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,7 +867,11 @@
+@@ -276,7 +870,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
@@ -3288,7 +3294,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +895,73 @@
+@@ -300,22 +898,73 @@
                  }
              });
  
@@ -3366,7 +3372,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +974,40 @@
+@@ -328,29 +977,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -3417,7 +3423,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +1015,13 @@
+@@ -358,12 +1018,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -3433,7 +3439,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +1030,14 @@
+@@ -372,13 +1033,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -3451,7 +3457,7 @@
                              );
                          }
                      });
-@@ -386,6 +1045,12 @@
+@@ -386,6 +1048,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -3464,7 +3470,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +1060,14 @@
+@@ -395,12 +1063,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -3481,7 +3487,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +1099,18 @@
+@@ -432,15 +1102,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -3503,7 +3509,7 @@
                  });
              }
  
-@@ -449,9 +1119,366 @@
+@@ -449,9 +1122,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -3873,7 +3879,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +1495,158 @@
+@@ -468,11 +1498,158 @@
              });
          </script>
          <script>
@@ -4032,7 +4038,7 @@
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +1660,10 @@
+@@ -486,10 +1663,10 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4045,7 +4051,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -502,17 +1676,68 @@
+@@ -502,17 +1679,68 @@
                      ds.stop();
                  }
  
@@ -4115,7 +4121,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +1758,246 @@
+@@ -533,27 +1761,246 @@
                  toastr.warning('复制失败')
              });
  
@@ -4379,7 +4385,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2008,9 @@
+@@ -564,7 +2011,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -4390,7 +4396,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2018,19 @@
+@@ -572,47 +2021,19 @@
                          }
                      });
                  },
@@ -4447,7 +4453,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2067,10 @@
+@@ -649,6 +2070,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -4458,7 +4464,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2084,23 @@
+@@ -662,13 +2087,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -4484,7 +4490,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2115,11 @@
+@@ -683,7 +2118,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -4496,7 +4502,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2130,13 @@
+@@ -694,10 +2133,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -4512,7 +4518,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -783,9 +2222,9 @@
+@@ -783,9 +2225,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -4525,7 +4531,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,7 +2242,7 @@
+@@ -803,7 +2245,7 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -4534,7 +4540,7 @@
                      actions.detail,
                      {divider: true},
                      actions.rename,
-@@ -844,8 +2283,8 @@
+@@ -844,8 +2286,8 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;
@@ -4545,7 +4551,7 @@
                          break;
                      case 'detail':
                          methods.detail(selected[0]);
-@@ -853,8 +2292,15 @@
+@@ -853,8 +2295,15 @@
                      case 'delete': // 删除
                          methods.delete();
                          break;

@@ -6,7 +6,7 @@
             <div class="flex items-center justify-center">
                 <i class="fas fa-server text-ink-2 text-[13.5px]"></i>
             </div>
-            <span class="px-2 sm:block hidden" id="strategy-selected" data-id="0">获取中...</span>
+            <span class="sm:block hidden" id="strategy-selected" data-id="0">获取中...</span>
         </button>
     </x-slot>
 

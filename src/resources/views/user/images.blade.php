@@ -71,17 +71,20 @@
     {{-- 整页滚动后工具栏要吸在固定顶栏下面（top-14 = 56px），否则一滚就没了 --}}
     <div class="sticky top-14 flex justify-between items-center px-2 py-2 z-[3] left-0 right-0 bg-surface border-solid border-b">
         <div class="space-x-2 flex justify-between items-center">
-            <a class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:getAlbums()"><i class="fas fa-bars text-brand"></i> 相册</a>
-            <div class="flex-row hidden lg:flex">
-                <a data-operate="movements" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移动到相册</a>
-                <a data-operate="remove" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移出当前相册</a>
-                <a data-operate="tag" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">标签管理</a>
-                <a data-operate="detail" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
-                <a data-operate="rename" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
-                <a data-operate="delete" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
-                <a data-operate="deselect" class="hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">取消选择</a>
+            <a class="whitespace-nowrap text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:getAlbums()"><i class="fas fa-bars text-brand"></i> 相册</a>
+            {{-- 这排 7 项一行约需 1000px 布局宽（≈1360px 窗口），lg(1126px) 会把文字挤成两行，
+                 故断点抬到 xl(1408px)；并给每个文字按钮加 whitespace-nowrap，保证永不折行。 --}}
+            <div class="flex-row hidden xl:flex">
+                <a data-operate="movements" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移动到相册</a>
+                <a data-operate="remove" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移出当前相册</a>
+                <a data-operate="tag" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">标签管理</a>
+                <a data-operate="detail" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
+                <a data-operate="rename" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
+                <a data-operate="delete" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
+                <a data-operate="deselect" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">取消选择</a>
             </div>
-            <div class="block lg:hidden">
+            {{-- 与上排互斥：<xl 才收起成一格「⋯」菜单 --}}
+            <div class="block xl:hidden">
                 <x-dropdown direction="right">
                     <x-slot name="trigger">
                         <a class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)"><i class="fas fa-ellipsis-h text-brand"></i></a>

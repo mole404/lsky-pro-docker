@@ -63,6 +63,7 @@
                 <div>
                     <label for="user_initial_capacity" class="block text-sm font-medium text-ink">用户初始容量(KB)</label>
                     <x-input type="number" name="user_initial_capacity" id="user_initial_capacity" step="0.01" value="{{ $configs->get('user_initial_capacity') }}" placeholder="请输入用户初始容量(KB)"/>
+                    <p class="mt-1.5 text-[13px] text-ink-3">填 0 表示不可上传</p>
                 </div>
 
                 <div class="text-right">

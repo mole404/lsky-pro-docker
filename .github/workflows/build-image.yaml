@@ -543,6 +543,19 @@ jobs:
             echo "::error::PHP memory_limit 不是 64M（读到：$(cat /tmp/php-memlimit.txt 2>/dev/null)）—— 检查 zz-lsky-hardening.ini 与 entrypoint 的 PHP_MEMORY_LIMIT 渲染"
             exit 1
           fi
+          # ② post_max_size 与 upload_max_filesize 必须都是 512M（2026-10-05 老师指定）
+          docker exec lsky-smoke sh -c 'php -r "echo ini_get(\"post_max_size\");"' > /tmp/php-postmax.txt 2>&1 || true
+          echo "容器里 post_max_size 生效值：$(cat /tmp/php-postmax.txt 2>/dev/null)"
+          if [ "$(cat /tmp/php-postmax.txt 2>/dev/null)" != "512M" ]; then
+            echo "::error::PHP post_max_size 不是 512M（读到：$(cat /tmp/php-postmax.txt 2>/dev/null)）—— 检查 docker-php-upload.ini"
+            exit 1
+          fi
+          docker exec lsky-smoke sh -c 'php -r "echo ini_get(\"upload_max_filesize\");"' > /tmp/php-uploadmax.txt 2>&1 || true
+          echo "容器里 upload_max_filesize 生效值：$(cat /tmp/php-uploadmax.txt 2>/dev/null)"
+          if [ "$(cat /tmp/php-uploadmax.txt 2>/dev/null)" != "512M" ]; then
+            echo "::error::PHP upload_max_filesize 不是 512M（读到：$(cat /tmp/php-uploadmax.txt 2>/dev/null)）—— 检查 docker-php-upload.ini"
+            exit 1
+          fi
           docker exec lsky-smoke cat /etc/apache2/conf-enabled/mpm.conf > /tmp/smoke-mpm.txt 2>&1 || true
           echo "== 容器里渲染出的 mpm.conf =="
           cat /tmp/smoke-mpm.txt 2>/dev/null || true

@@ -165,7 +165,7 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 RUN printf '%s\n' \
         'c0e513ec8e93fd81b34b3c6de5cf5eb8  ./public/js/context-js/context-js.js' \
         'c0e513ec8e93fd81b34b3c6de5cf5eb8  ./resources/js/context-js.js' \
-        'fe0852b7b6f4e71d1569ef08db16d480  ./resources/views/user/images.blade.php' \
+        '4e5d5a4d805632acb2ea5364517e4020  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -208,7 +208,7 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
         "context_js_md5=c0e513ec8e93fd81b34b3c6de5cf5eb8" \
-        "images_blade_md5=fe0852b7b6f4e71d1569ef08db16d480" \
+        "images_blade_md5=4e5d5a4d805632acb2ea5364517e4020" \
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
@@ -302,6 +302,12 @@ RUN printf '%s\n' \
 #   调低没有收益、调高没有意义（64MB 的脚本缓存也装不下全树）。这组值下 opcache 不会因容量不足频繁重启。
 #   validate_timestamps 保持 1（显式写死，防基镜像默认变化）：单机热更新靠它 —— 卷里代码一改，
 #   带 mtime 校验的请求就会重新编译；关掉它换镜像后要重启容器才生效。
+# 上传/表单上限（2026-10-05 按老师要求调整）—— ⚠ 这段注释必须写在 RUN 之前：
+#   `RUN ... && \` 续行链里插 `#` 不是注释、是命令的一部分 → `syntax error: unexpected end of file`（本仓踩过，见教训 34）
+#   · post_max_size 100M → **512M**（它是「整个请求体」的上限，控制台/系统设置里
+#     「POST 数据最大限制」显示的就是它）
+#   · upload_max_filesize 100M → **512M**（2026-10-05 老师追加：单个上传文件的上限也抬到 512M；它必须 ≤ post_max_size）
+#   · max_execution_time 维持原来的 **600S 不动**（老师 2026-10-05 拍板：不要改成 300；CLI 下 ini_get 恒为 0，只有 Web 侧吃这个值）
 RUN apt-get update && \
     apt-get install -y gettext && \
     apt-get clean && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/*  && \
@@ -309,8 +315,8 @@ RUN apt-get update && \
     install-php-extensions imagick bcmath pdo_mysql pdo_pgsql redis ftp && \
     \
     { \
-    echo 'post_max_size = 100M;';\
-    echo 'upload_max_filesize = 100M;';\
+    echo 'post_max_size = 512M;';\
+    echo 'upload_max_filesize = 512M;';\
     echo 'max_execution_time = 600S;';\
     } > /usr/local/etc/php/conf.d/docker-php-upload.ini; \
     \
@@ -346,12 +352,15 @@ RUN apt-get update && \
 #   zz- 文件即可生效（排最后、覆盖 memory-limit.ini），不必去改那份上游 ini。
 #   默认 64M 而不是写死：entrypoint.sh 运行期会把 PHP_MEMORY_LIMIT（默认 64M）渲染进这一项，
 #   在 compose 里改一个 env 就能回 128M/256M、不用重建镜像（脏值只忽略该项并警告）。
-#   其余 ini 未动：upload（100M 上传上限）保持原样；opcache-recommended.ini 的
-#   memory_consumption 本次从 128 收到 64（依据见上面 opcache 段的实测注释）。
+#   其余 ini：opcache-recommended.ini 的 memory_consumption 本次从 128 收到 64（依据见上面 opcache 段）；
+#   docker-php-upload.ini 的 post_max_size 本次 100M → **512M**；max_execution_time 维持 600S 不动
+#   （upload_max_filesize 同步 100M → 512M：单文件上限由它决定 —— 见上面那段注释）。
 #   构建期自证：用 php -r **真读回 ini_get()** 断言已是目标值 —— 不是 grep 配置文件里有没有那几行
 #   （那只证明"文件写了"，证明不了"PHP 真的读到了"）。expose_php/display_errors 判定用
 #   filter_var(FILTER_VALIDATE_BOOL)，兼容 Off / false / 0 / 空串 几种写法；memory_limit 直接比对
 #   字符串 "64M"。CLI 与 Apache 模块用的是同一份 /usr/local/etc/php/conf.d。
+#   ⚠ 只有 max_execution_time 没法用 ini_get 验：PHP 对 CLI 强制把它的读回值变成 "0"，
+#     所以那一条只能核配置文件原文，Web 侧生效值交给 CI 起真容器再读。
 # ---------------------------------------------------------------------------
 RUN printf '%s\n' \
         '; fork 加固（F23 + 测试版）：不泄露版本号 / 错误不直出 / 收紧内存上限' \
@@ -361,7 +370,11 @@ RUN printf '%s\n' \
         > /usr/local/etc/php/conf.d/zz-lsky-hardening.ini \
     && test -f /usr/local/etc/php/conf.d/zz-lsky-hardening.ini \
     && php -r 'foreach (["expose_php", "display_errors"] as $k) { if (filter_var(ini_get($k), FILTER_VALIDATE_BOOL)) { fwrite(STDERR, "ini 加固自证失败：".$k." 仍开着 (".var_export(ini_get($k), true).")".PHP_EOL); exit(1); } echo $k."=".var_export(ini_get($k), true)." 已关闭".PHP_EOL; }' \
-    && php -r '$m = ini_get("memory_limit"); if ($m !== "64M") { fwrite(STDERR, "memory_limit 自证失败：读回 ".var_export($m, true)."，期望 64M（zz-lsky-hardening.ini 是否被别的 ini 覆盖？）".PHP_EOL); exit(1); } echo "memory_limit=".$m."（entrypoint 可用 PHP_MEMORY_LIMIT 运行期覆盖）".PHP_EOL;'
+    && php -r '$m = ini_get("memory_limit"); if ($m !== "64M") { fwrite(STDERR, "memory_limit 自证失败：读回 ".var_export($m, true)."，期望 64M（zz-lsky-hardening.ini 是否被别的 ini 覆盖？）".PHP_EOL); exit(1); } echo "memory_limit=".$m."（entrypoint 可用 PHP_MEMORY_LIMIT 运行期覆盖）".PHP_EOL;' \
+    && php -r '$p = ini_get("post_max_size"); if ($p !== "512M") { fwrite(STDERR, "post_max_size 自证失败：读回 ".var_export($p, true)."，期望 512M（docker-php-upload.ini 是否被别的 ini 覆盖？）".PHP_EOL); exit(1); } echo "post_max_size=".$p."（整个请求体上限）".PHP_EOL;' \
+    && php -r '$u = ini_get("upload_max_filesize"); if ($u !== "512M") { fwrite(STDERR, "upload_max_filesize 自证失败：读回 ".var_export($u, true)."，期望 512M".PHP_EOL); exit(1); } echo "upload_max_filesize=".$u."（单个文件上限，必须 ≤ post_max_size）".PHP_EOL;' \
+    && grep -qx 'max_execution_time = 600S;' /usr/local/etc/php/conf.d/docker-php-upload.ini \
+    && echo 'max_execution_time=600S（只核配置文件：CLI 读回恒为 0，Web 侧生效值由 CI 起真容器再验）'
 
 # F21：不再随镜像发货证书。
 # 原来这里是 `COPY ./ssl /etc/ssl` —— 把仓库里那对 Debian snakeoil 证书（ssl/certs + ssl/private，
