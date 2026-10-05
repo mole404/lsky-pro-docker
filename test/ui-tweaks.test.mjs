@@ -90,7 +90,7 @@ console.log('\n[顶栏] 侧栏开关图案：桌面与竖屏共用一个「左�
     check('旧的 chevron 图标已完全移除', ! header.includes('fa-chevron-left') && ! header.includes('fa-chevron-right'));
     const toggleNoComment = toggle.replace(/\{\{--[\s\S]*?--\}\}/g, ''); // 注释里也会提到 x-show/x-cloak，别误判
     check('方向提示改由 CSS 切：两条箭头带类名，不再用 Alpine 的 x-show/x-cloak（JS 没起来也正确）',
-        toggle.includes('class="ls-sidebar-arrow-expanded"') && toggle.includes('class="ls-sidebar-arrow-collapsed"')
+        toggle.includes('class="ls-sidebar-arrow-left"') && toggle.includes('class="ls-sidebar-arrow-right"')
         && ! /\sx-show=/.test(toggleNoComment) && ! /\sx-cloak/.test(toggleNoComment));
     check('图标尺寸用已编译过的 w-5 h-5（不是任意值类）', /<svg class="w-5 h-5"/.test(toggle));
 }
@@ -210,8 +210,8 @@ console.log('\n[顶栏/登录页] 两个胶囊居中 + 所有宽度竖向居中'
     check('存储策略胶囊：去掉多余的 px-2（两侧都剩按钮自己的 12px）',
         /<span class="sm:block hidden" id="strategy-selected"/.test(read('resources', 'views', 'layouts', 'strategies.blade.php'))
         && ! /<span class="px-2 sm:block hidden" id="strategy-selected"/.test(read('resources', 'views', 'layouts', 'strategies.blade.php')));
-    check('用户胶囊：可见间距对称 —— 按钮 sm:pl-2 sm:pr-2（外 8）+ 用户名 span 不带内边距（图文间距 = 按钮的 gap-2 = 8px）',
-        userNav.includes('sm:pl-2 sm:pr-2') && ! userNav.includes('sm:pl-1 sm:pr-1')
+    check('用户胶囊：与策略胶囊同一节奏 —— 外 12（sm:pl-3 sm:pr-3）+ 图文间距 = 按钮的 gap-2 = 8px（用户名 span 不带内边距）',
+        userNav.includes('sm:pl-3 sm:pr-3') && ! userNav.includes('sm:pl-2 sm:pr-2')
         && userNav.includes('class="ls-user-name sm:block hidden text-ink-2"'));
     const authCard = read('resources', 'views', 'components', 'auth-card.blade.php');
     check('登录页卡片：所有宽度都竖向居中（去掉 sm: 限制）+ 上下留白 py-6',
@@ -255,16 +255,41 @@ console.log('\n[第九批] 默认保存质量 100 / 侧栏图标桌面竖屏统�
         /GroupConfigKey::ImageSaveQuality => 100,/.test(conv) && ! /ImageSaveQuality => 75/.test(conv));
 
     const less = read('resources', 'css', 'common.less');
-    check('common.less：折叠态按 html.sidebar-collapsed 切箭头 + 竖屏 <640 固定「展开」箭头（!important 压过桌面态）',
-        less.includes('html .ls-sidebar-arrow-collapsed {') && less.includes('html.sidebar-collapsed .ls-sidebar-arrow-expanded {')
-        && less.includes('html.sidebar-collapsed .ls-sidebar-arrow-collapsed {')
-        && /@media \(max-width: 639\.98px\) \{[\s\S]{0,200}?ls-sidebar-arrow-collapsed \{\s*display: none !important/.test(less)
-        && /ls-sidebar-arrow-expanded \{\s*display: inline !important/.test(less));
+    check('common.less：折叠态按 html.sidebar-collapsed 切箭头 + 竖屏 <640 固定「朝右」箭头（!important 压过桌面态）',
+        less.includes('html .ls-sidebar-arrow-right {') && less.includes('html.sidebar-collapsed .ls-sidebar-arrow-left {')
+        && less.includes('html.sidebar-collapsed .ls-sidebar-arrow-right {')
+        && /@media \(max-width: 639\.98px\) \{[\s\S]{0,200}?ls-sidebar-arrow-left \{\s*display: none !important/.test(less)
+        && /ls-sidebar-arrow-right \{\s*display: inline !important/.test(less));
     // 产物里必须有这三段（LESS 写了但没重建 = 等于没写，第 67 条）
     const commonCss = fs.readFileSync(path.join(SRC, 'public', 'css', 'common.css'), 'utf8');
     check('重建后的 common.css 真含这三段（选择器合并允许：折叠两条会并成一条 display:none）',
-        commonCss.includes('.ls-sidebar-arrow-collapsed') && commonCss.includes('.sidebar-collapsed .ls-sidebar-arrow-expanded')
+        commonCss.includes('.ls-sidebar-arrow-left') && commonCss.includes('.sidebar-collapsed .ls-sidebar-arrow-right')
         && commonCss.includes('max-width:639.98px'));
+}
+
+console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮保持正圆 / 竖屏箭头朝右 / 后台搜索框留白');
+{
+    const nav = read('resources', 'views', 'layouts', 'user-nav.blade.php');
+    const strat = read('resources', 'views', 'layouts', 'strategies.blade.php');
+    check('用户胶囊与策略胶囊同一节奏：外内边距都是 12（sm:pl-3 sm:pr-3 / sm:px-3）+ 图文 gap-2 = 8px',
+        nav.includes('sm:pl-3 sm:pr-3') && /ls-btn[^"]*sm:px-3/.test(strat) && nav.includes('gap-2') && strat.includes('gap-2'));
+    check('两个按钮都靠 justify-center 让内容居中（不是靠左右 padding 凑）',
+        nav.includes('justify-center') && strat.includes('justify-center'));
+
+    const less = read('resources', 'css', 'common.less');
+    check('640~1080px：两个胶囊的文字收起后强制 40×40 + 无内边距（都保持正圆，不再被撑成椭圆）',
+        /html \.ls-app-header #user-menu-button,\s*\n\s*html \.ls-app-header #strategy-menu-button \{\s*width: 2\.5rem;\s*padding: 0;/.test(less)
+        && read('resources', 'views', 'layouts', 'strategies.blade.php').includes('id="strategy-menu-button"'));
+    check('竖屏箭头固定「朝右」（ls-sidebar-arrow-right），桌面展开态仍是「朝左」',
+        less.includes('html .ls-sidebar-arrow-right {') && less.includes('html.sidebar-collapsed .ls-sidebar-arrow-left {'));
+    const commonCss = fs.readFileSync(path.join(SRC, 'public', 'css', 'common.css'), 'utf8');
+    check('重建后的 common.css 含正圆规则 + 两个方向的箭头类',
+        commonCss.includes('#user-menu-button') && commonCss.includes('.ls-sidebar-arrow-left') && commonCss.includes('.ls-sidebar-arrow-right'));
+
+    for (const [f, label] of [['group', '角色组'], ['user', '用户管理'], ['strategy', '存储策略']]) {
+        check(`后台「${label}」页：搜索框那一行加了 gap-4（与左侧元素留出 16px，不再紧贴）`,
+            /class="mb-3 flex justify-between[^"]*gap-4"/.test(read('resources', 'views', 'admin', f, 'index.blade.php')));
+    }
 }
 
 // ---------------------------------------------------------------- 汇总

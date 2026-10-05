@@ -760,6 +760,15 @@ html.dark {
         display: none;
     }
 
+    /* 两个胶囊里的文字收起来之后，它们必须回到「正圆」：40×40 + 无内边距。
+       否则会保持 sm:w-auto + 左右内边距、只剩图标却被撑成椭圆（老师反馈用户按钮「不圆了」）。
+       权重：html + .ls-app-header + #id 压过 app.css 的 sm:w-auto / sm:px-3 / sm:pl-3 / sm:pr-3。 */
+    html .ls-app-header #user-menu-button,
+    html .ls-app-header #strategy-menu-button {
+        width: 2.5rem;
+        padding: 0;
+    }
+
     html .ls-app-header .ls-header-title {
         max-width: calc(100% - 14rem);
     }
@@ -769,29 +778,30 @@ html.dark {
  * fork（2026-10-05）：侧栏开关按钮里那两个小箭头的显示/隐藏改由 CSS 决定
  * 图标本身桌面/竖屏共用一个（矩形 + 靠左的栏分隔线），只有「栏里的小箭头」分两态：
  *   · 桌面：看 <html> 上的 .sidebar-collapsed —— 侧栏 store 的 applyCollapsed() 一直在贴这个类；
- *   · 竖屏（<640px）：侧栏是抽屉、只有「展开」一种形态，箭头固定不翻 ——
- *     即使 localStorage 里残留了桌面端的折叠状态也不受影响（媒体查询里的 !important 压过上面两条）。
+ *     展开态显示「尖朝左」（点它往左收起），折叠态显示「尖朝右」。
+ *   · 竖屏（<640px）：侧栏是抽屉、只有「点它把侧栏拉出来」一种行为 ⇒ 固定显示「尖朝右」，
+ *     既符合直觉，也不受 localStorage 里残留的桌面折叠态影响（媒体查询里的 !important 压过上面两条）。
  * 为什么不用 Alpine 的 x-show/x-cloak（原实现）：JS 没起来时会出现「两条箭头同时显示」或「一个都没有」；
  * 图标是页面的固定零件，用 CSS 表达它任何时候都正确，也不依赖框架初始化时序。
  * ------------------------------------------------------------------------- */
-html .ls-sidebar-arrow-collapsed {
+html .ls-sidebar-arrow-right {
     display: none;
 }
 
-html.sidebar-collapsed .ls-sidebar-arrow-expanded {
+html.sidebar-collapsed .ls-sidebar-arrow-left {
     display: none;
 }
 
-html.sidebar-collapsed .ls-sidebar-arrow-collapsed {
+html.sidebar-collapsed .ls-sidebar-arrow-right {
     display: inline;
 }
 
 @media (max-width: 639.98px) {
-    html .ls-sidebar-arrow-collapsed {
+    html .ls-sidebar-arrow-left {
         display: none !important;
     }
 
-    html .ls-sidebar-arrow-expanded {
+    html .ls-sidebar-arrow-right {
         display: inline !important;
     }
 }

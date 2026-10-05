@@ -3,7 +3,7 @@
 <x-app-layout>
     <div class="my-6 md:my-9">
         <form action="{{ route('admin.groups') }}" method="get">
-            <div class="mb-3 flex justify-between w-full">
+            <div class="mb-3 flex justify-between w-full gap-4">
                 <x-button type="button" onclick="window.location.href = '{{ route('admin.group.create') }}'">创建角色组</x-button>
                 <input class="px-2 text-sm rounded-md ls-input h-9 text-[13px]" name="keywords" placeholder="输入名称回车搜索..." value="{{ request('keywords') }}" />
             </div>

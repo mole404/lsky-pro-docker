@@ -23,14 +23,15 @@
             {{-- 侧栏图案（矩形 + 靠左的栏分隔线）：桌面与竖屏共用同一个图标。
                  栏里那个小箭头表示点下去侧栏会往哪边收，两态由 CSS 按 <html> 上的 .sidebar-collapsed 切换
                  （规则在 resources/css/common.less；store 的 applyCollapsed() 一直在贴这个类）——
-                 不用 Alpine 的 x-show/x-cloak：JS 没起来时图标也一定正确（不会两条箭头同时出现或一个都没有）。
-                 竖屏是抽屉、只有「展开」一种形态：那边由媒体查询把箭头固定住（见 common.less）。 --}}
+                 不用 Alpine 的 x-show/x-cloak：JS 没起来时图标也一定正确。
+                 方向：桌面展开态朝左（点它往左收起）、折叠态朝右；竖屏是抽屉，固定用朝右那个
+                 （点它把侧栏从左边拉出来，朝右才符合直觉）—— 见 common.less 的媒体查询。 --}}
             <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor"
                  stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="2.5" y="3.5" width="15" height="13" rx="2.6"/>
                 <path d="M9.2 3.5v13"/>
-                <path class="ls-sidebar-arrow-expanded" d="M14.1 8.3 12.6 10l1.5 1.7"/>
-                <path class="ls-sidebar-arrow-collapsed" d="M12.6 8.3 14.1 10l-1.5 1.7"/>
+                <path class="ls-sidebar-arrow-left" d="M14.1 8.3 12.6 10l1.5 1.7"/>
+                <path class="ls-sidebar-arrow-right" d="M12.6 8.3 14.1 10l-1.5 1.7"/>
             </svg>
         </a>
         {{-- 标题左边距「按路由区分」，与 x-container 的 routeIs 分支同源（一行三元，保持可读）：

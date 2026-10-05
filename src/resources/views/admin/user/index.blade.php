@@ -3,7 +3,7 @@
 <x-app-layout>
     <div class="my-6 md:my-9">
         <form id="search-form" action="{{ route('admin.users') }}" method="get">
-            <div class="mb-3 flex justify-between">
+            <div class="mb-3 flex justify-between gap-4">
                 <select name="status" class="text-sm rounded-md ls-input h-9 text-[13px]" onchange="$('#search-form').submit()">
                     @foreach($statuses as $key => $status)
                         <option value="{{ $key }}" {{ request('status', -1) == $key ? 'selected' : '' }}>{{ $status }}</option>
