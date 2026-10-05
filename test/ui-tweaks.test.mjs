@@ -297,12 +297,13 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         svg.includes('<circle cx="48" cy="34" r="16"') && svg.includes('<circle cx="48" cy="84" r="28"')
         && svg.includes('clip-path="url(#avatar-clip)"')
         && ! svg.includes('transform=') && ! svg.includes('<ellipse'));
-    check('头像 img 单独抬 2px（-top-0.5）做视觉居中：人形居中、方框/圆圈仍几何居中（不许改 SVG）',
-        nav.includes('absolute inset-0 -top-0.5 h-7 w-7') && nav.includes('relative flex h-7 w-7 shrink-0')
-        && ! nav.includes('relative -top-0.5 flex h-7 w-7'));
-    check('头像 img 仍是 28×28 铺满（只做 -top-0.5 的垂直视觉补偿，不靠 transform / 负偏移放大尺寸）',
-        nav.includes('absolute inset-0 -top-0.5 h-7 w-7 rounded-full object-cover')
-        && ! nav.includes('scale-150') && ! nav.includes('-top-2 -left-2'));
+    // 注意：断言前必须先剥掉 Blade 注释 —— 注释里解释「别用 -top-0.5」正好会命中下面这条否定断言
+    const navNoCmt = nav.replace(/\{\{--[\s\S]*?--\}\}/g, '');
+    check('头像保持几何居中：img 不许有任何垂直偏移（-top-0.5 已被老师否决，2026-10-05 终裁）',
+        navNoCmt.includes('absolute inset-0 h-7 w-7 rounded-full object-cover')
+        && ! navNoCmt.includes('-top-0.5') && ! navNoCmt.includes('translate-y'));
+    check('头像 img 仍是 28×28 铺满（不靠 transform / 负偏移放大或位移尺寸）',
+        ! nav.includes('scale-150') && ! nav.includes('-top-2 -left-2'));
 }
 
 // ---------------------------------------------------------------- 汇总
