@@ -1,12 +1,12 @@
 <!-- Profile dropdown -->
 <x-dropdown>
     <x-slot name="trigger">
-        {{-- 左内边距 10px、右 12px（故意不等）：default-avatar.svg 里的人形自带 ~3px 透明留白，
-             两边都用 12 时头像「可见左缘」会比文字右侧多出约 3px，两个胶囊看着不齐（老师反馈）。
-             10px 是补偿「图内留白」的取值 —— 实测可见左缘 ≈ 15.6px、文字右侧 ≈ 14px、
-             旁边策略胶囊（图标几乎无留白）≈ 15px，三者对齐。
-             换头像图 / 换那个 SVG 时，这个补偿值要重新量。 --}}
-        <button type="button" class="flex items-center justify-center gap-2 h-10 w-10 p-0 rounded-full border border-line hover:bg-surface-2 text-[14px] text-ink sm:w-auto sm:pl-2.5 sm:pr-3" id="user-menu-button" aria-expanded="false" aria-haspopup="true">
+        {{-- 左内边距 6px、右 12px（故意不等）：default-avatar.svg 里的人形自带 ~5.8px 透明留白
+             （那颗脑袋+身体只占画布 58%，左右各留 ~20%）。这个文件**保持原样、不许改**（老师明确
+             要以前那个样式），所以两边的视觉间距只能靠按钮 padding 补 —— 左 6px 正好让头像
+             「可见左缘」≈12.8px（实测估算 13.3，与策略胶囊 12.9 对齐），与文字右侧（≈13px）、旁边策略胶囊（≈13.6px）对齐。
+             换头像图 / 换那个 SVG 时，这个补偿值要重新量（原来不补偿时是 20px vs 15px，肉眼能看出不齐）。 --}}
+        <button type="button" class="flex items-center justify-center gap-2 h-10 w-10 p-0 rounded-full border border-line hover:bg-surface-2 text-[14px] text-ink sm:w-auto sm:pl-1.5 sm:pr-3" id="user-menu-button" aria-expanded="false" aria-haspopup="true">
             <span class="sr-only">Open user menu</span>
             {{-- 头像占位框：固定 28×28（h-7 w-7 + width/height 属性），图片没到/挂了都不抖动。
                  里面两层：底下的「名字首字」色块圆圈（兜底）与盖在它上面的 img。
@@ -16,9 +16,13 @@
             {{-- overflow-hidden 是必需的：flex 项的 min-width:auto 会按内容最小宽度撑开，
                  名字首字要是被换成长字符串（或字体异常），整个按钮会被顶宽 —— 加了它之后
                  内容再大也只在这个 28×28 的圆圈里裁掉，按钮尺寸不受影响。 --}}
+            {{-- 关于「头像看着偏下」：这个 SVG 的人形自己画偏下 —— 头顶在 18/96、底边贴着 96/96，
+                 人形重心比画布中线低 ~2.7px。文件不能动（老师要的就是原来那份），所以把**里面的 img**
+                 抬 2px（-top-0.5）做视觉居中：人形居中了，而外面这个 28×28 的方框/圆圈仍然几何居中
+                 （刚开始我误抬了整个 span，圈就变成上4下8 —— 别那么干）。 --}}
             <span class="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-2 text-[11px] font-medium text-ink-2" id="user-avatar">
                 <span aria-hidden="true" data-avatar-fallback>{{ mb_substr(trim(Auth::user()->name), 0, 1) ?: '?' }}</span>
-                <img class="absolute inset-0 h-7 w-7 rounded-full object-cover opacity-0 transition-opacity duration-200"
+                <img class="absolute inset-0 -top-0.5 h-7 w-7 rounded-full object-cover opacity-0 transition-opacity duration-200"
                      id="user-avatar-img" alt="" width="28" height="28" decoding="async"
                      data-avatar-src="{{ Auth::user()->avatar }}"
                      onload="this.previousElementSibling && this.previousElementSibling.remove(); this.classList.remove('opacity-0');"
