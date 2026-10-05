@@ -210,8 +210,8 @@ console.log('\n[顶栏/登录页] 两个胶囊居中 + 所有宽度竖向居中'
     check('存储策略胶囊：去掉多余的 px-2（两侧都剩按钮自己的 12px）',
         /<span class="sm:block hidden" id="strategy-selected"/.test(read('resources', 'views', 'layouts', 'strategies.blade.php'))
         && ! /<span class="px-2 sm:block hidden" id="strategy-selected"/.test(read('resources', 'views', 'layouts', 'strategies.blade.php')));
-    check('用户胶囊：与策略胶囊同一节奏 —— 外 12（sm:pl-3 sm:pr-3）+ 图文间距 = 按钮的 gap-2 = 8px（用户名 span 不带内边距）',
-        userNav.includes('sm:pl-3 sm:pr-3') && ! userNav.includes('sm:pl-2 sm:pr-2')
+    check('用户胶囊：用 左10/右12 补偿头像图自带的 ~3px 透明留白（可见左缘 15.6 ≈ 策略胶囊 15）',
+        userNav.includes('sm:pl-2.5 sm:pr-3') && ! userNav.includes('sm:pl-3 sm:pr-3')
         && userNav.includes('class="ls-user-name sm:block hidden text-ink-2"'));
     const authCard = read('resources', 'views', 'components', 'auth-card.blade.php');
     check('登录页卡片：所有宽度都竖向居中（去掉 sm: 限制）+ 上下留白 py-6',
@@ -271,8 +271,8 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
 {
     const nav = read('resources', 'views', 'layouts', 'user-nav.blade.php');
     const strat = read('resources', 'views', 'layouts', 'strategies.blade.php');
-    check('用户胶囊与策略胶囊同一节奏：外内边距都是 12（sm:pl-3 sm:pr-3 / sm:px-3）+ 图文 gap-2 = 8px',
-        nav.includes('sm:pl-3 sm:pr-3') && /ls-btn[^"]*sm:px-3/.test(strat) && nav.includes('gap-2') && strat.includes('gap-2'));
+    check('用户胶囊：左 10 / 右 12 补偿头像图自带的留白；两个按钮图文间距都是 gap-2 = 8px',
+        nav.includes('sm:pl-2.5 sm:pr-3') && nav.includes('gap-2') && strat.includes('gap-2'));
     check('两个按钮都靠 justify-center 让内容居中（不是靠左右 padding 凑）',
         nav.includes('justify-center') && strat.includes('justify-center'));
 
@@ -291,12 +291,13 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
             /class="mb-3 flex justify-between[^"]*gap-4"/.test(read('resources', 'views', 'admin', f, 'index.blade.php')));
     }
 
-    // 默认头像：人形放大（原始版本只占画布 58%，在 28px 胶囊里可见左缘离胶囊 18px，与策略胶囊的 13px 不齐）
+    // 默认头像：造型保持原样（同一个头 + 同一个身体圆），只整体等比放大 —— 老师说「格式可以了、但头像样式变了」
     const svg = fs.readFileSync(path.join(SRC, 'public', 'static', 'default-avatar.svg'), 'utf8');
-    check('default-avatar.svg：人形已放大（头 r20 / 身体椭圆 rx52 ry42），底部仍交给外圈裁切以免平底尖角',
-        svg.includes('<circle cx="48" cy="30" r="20"') && svg.includes('<ellipse cx="48" cy="96" rx="52" ry="42"')
+    check('default-avatar.svg：仍是原来的「头(cy34 r16) + 身体(cy84 r28)」造型，且靠 transform 等比放大（不是换造型）',
+        svg.includes('<circle cx="48" cy="34" r="16"') && svg.includes('<circle cx="48" cy="84" r="28"')
+        && /transform="translate\(48 48\) scale\(1\.5\) translate\(-48 -48\)"/.test(svg)
         && svg.includes('clip-path="url(#avatar-clip)"')
-        && ! svg.includes('cx="48" cy="34" r="16"'));
+        && ! svg.includes('<ellipse'));
     check('头像 img 保持原来的 28×28 铺满（不靠 CSS transform / 负偏移放大：headless 截图里 transform 不光栅化）',
         nav.includes('class="absolute inset-0 h-7 w-7 rounded-full object-cover')
         && ! nav.includes('scale-150') && ! nav.includes('-top-2 -left-2'));

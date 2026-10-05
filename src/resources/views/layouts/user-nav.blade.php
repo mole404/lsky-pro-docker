@@ -1,7 +1,12 @@
 <!-- Profile dropdown -->
 <x-dropdown>
     <x-slot name="trigger">
-        <button type="button" class="flex items-center justify-center gap-2 h-10 w-10 p-0 rounded-full border border-line hover:bg-surface-2 text-[14px] text-ink sm:w-auto sm:pl-3 sm:pr-3" id="user-menu-button" aria-expanded="false" aria-haspopup="true">
+        {{-- 左内边距 10px、右 12px（故意不等）：default-avatar.svg 里的人形自带 ~3px 透明留白，
+             两边都用 12 时头像「可见左缘」会比文字右侧多出约 3px，两个胶囊看着不齐（老师反馈）。
+             10px 是补偿「图内留白」的取值 —— 实测可见左缘 ≈ 15.6px、文字右侧 ≈ 14px、
+             旁边策略胶囊（图标几乎无留白）≈ 15px，三者对齐。
+             换头像图 / 换那个 SVG 时，这个补偿值要重新量。 --}}
+        <button type="button" class="flex items-center justify-center gap-2 h-10 w-10 p-0 rounded-full border border-line hover:bg-surface-2 text-[14px] text-ink sm:w-auto sm:pl-2.5 sm:pr-3" id="user-menu-button" aria-expanded="false" aria-haspopup="true">
             <span class="sr-only">Open user menu</span>
             {{-- 头像占位框：固定 28×28（h-7 w-7 + width/height 属性），图片没到/挂了都不抖动。
                  里面两层：底下的「名字首字」色块圆圈（兜底）与盖在它上面的 img。
