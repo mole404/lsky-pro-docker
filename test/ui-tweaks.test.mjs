@@ -115,8 +115,9 @@ console.log('\n[游客首页] 外观切换归位 / 站名可见 / 登录整块�
 {
     check('guest 布局：浮动版外观切换改成受 $floatingThemeSwitch 控制',
         guest.includes('@if($floatingThemeSwitch)') && guest.includes('<x-theme-switch />'));
-    check('GuestLayout 组件新增 $floatingThemeSwitch（默认 true，登录/注册等页行为不变）',
-        guestLayoutPhp.includes('public bool $floatingThemeSwitch = true;'));
+    check('GuestLayout 组件新增 $floatingThemeSwitch（**构造器参数**，默认 true；只写 public 属性不生效）',
+        guestLayoutPhp.includes('public function __construct(public bool $floatingThemeSwitch = true)')
+        && welcome.includes(':floating-theme-switch="false"'));
     check('游客首页把浮动版关掉、把按钮排进顶栏那一行',
         welcome.includes(':floating-theme-switch="false"') && welcome.includes('<x-theme-switch />'));
     check('顶栏那行仍在「公告 / 策略 / 登录注册」之前渲染外观切换（顺序：主题 → 公告 → 策略 → 账号）',
