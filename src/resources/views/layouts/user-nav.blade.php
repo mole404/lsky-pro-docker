@@ -19,7 +19,7 @@
                      onload="this.previousElementSibling && this.previousElementSibling.remove(); this.classList.remove('opacity-0');"
                      onerror="this.remove();">
             </span>
-            <span class="px-1 sm:block hidden text-ink-2">{{ Auth::user()->name }}</span>
+            <span class="ls-user-name px-1 sm:block hidden text-ink-2">{{ Auth::user()->name }}</span>
         </button>
     </x-slot>
 

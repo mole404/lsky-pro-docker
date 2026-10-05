@@ -2,23 +2,30 @@
     <link rel="stylesheet" href="{{ asset('css/markdown-css/github-markdown-light.css') }}">
 @endpush
 
-<x-guest-layout>
+<x-guest-layout :floating-theme-switch="false">
     <div class="py-14">
+        {{-- 这一行与 app 布局顶栏同一套几何：左侧标题吃掉剩余宽度（min-w-0 + truncate，窄屏自动截断，
+             绝不与右侧抢位）、右侧一组 shrink-0。
+             外观切换以前是 guest 布局里「贴视口右上角」的浮动版，与这一行差 8px（纵向，顶栏 56px 内
+             居中 vs top-4+40px）与 24px 以上（横向，图标贴视口 16px vs 容器内边距 40/240px）——
+             现在它排进这一行里，浮动版由 floating-theme-switch=false 关掉。 --}}
         <header class="w-full h-14 bg-surface border-b border-line text-ink flex justify-center fixed top-0 z-[9]">
-            <div class="container mx-auto px-5 sm:px-10 md:px-10 lg:px-10 xl:px-10 2xl:px-60 flex justify-between items-center">
-                <div class="flex justify-start items-center max-w-[70%]">
-                    <a href="{{ route('/') }}" class="text-white text-xl truncate">{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</a>
+            <div class="container mx-auto px-5 sm:px-10 md:px-10 lg:px-10 xl:px-10 2xl:px-60 flex items-center gap-3 justify-between">
+                <div class="flex min-w-0 flex-1 justify-start items-center">
+                    <a href="{{ route('/') }}" class="text-ink text-xl truncate">{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</a>
                 </div>
-                <div class="flex justify-end items-center space-x-4">
+                <div class="flex shrink-0 justify-end items-center space-x-2 sm:space-x-4">
+                    <x-theme-switch />
                     @includeWhen($_is_notice, 'layouts.notice')
                     @includeWhen($_group->strategies->isNotEmpty(), 'layouts.strategies')
 
                     @if(Auth::check())
                         @include('layouts.user-nav')
                     @else
-                        <a href="{{ route('login') }}" class="text-ink-2 hover:bg-surface-2 hover:text-ink px-3 py-2 rounded-lg text-[13.5px] font-medium">登录</a>
+                        {{-- 登录 = 强调色**实心整块**按钮（不是只把文字染色），h-10 与同排其它按钮同一档 --}}
+                        <a href="{{ route('login') }}" class="ls-btn ls-btn-primary h-10 px-4">登录</a>
                         @if(\App\Utils::config(\App\Enums\ConfigKey::IsEnableRegistration))
-                        <a href="{{ route('register') }}" class="text-ink-2 hover:bg-surface-2 hover:text-ink px-3 py-2 rounded-lg text-[13.5px] font-medium">注册</a>
+                        <a href="{{ route('register') }}" class="text-ink-2 hover:bg-surface-2 hover:text-ink px-3 py-2 rounded-lg text-[13.5px] font-medium whitespace-nowrap">注册</a>
                         @endif
                     @endif
                 </div>

@@ -30,7 +30,7 @@
 
                             <div class="col-span-6">
                                 <label for="maximum_file_size" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>最大文件大小(KB)</label>
-                                <x-input type="number" name="configs[maximum_file_size]" id="maximum_file_size" autocomplete="maximum_file_size" placeholder="请输入上传文件的最大限制，单位kb" value="{{ $group->configs->get('maximum_file_size') }}" />
+                                <x-input type="number" name="configs[maximum_file_size]" id="maximum_file_size" autocomplete="maximum_file_size" placeholder="请输入上传文件的最大限制，单位 KB" value="{{ $group->configs->get('maximum_file_size') }}" />
                             </div>
 
                             <div class="col-span-6 sm:col-span-3">

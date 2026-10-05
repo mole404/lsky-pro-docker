@@ -79,6 +79,10 @@ src/composer.lock
 #   （菜单/弹窗/侧栏/图片页…；app/Utils.php 是配套加的「资源版本串 / 本地默认头像」助手方法）]
 #   src/app/Utils.php
 src/app/Utils.php
+#   src/app/View/Components/GuestLayout.php
+#       （2026-10-05：新增 $floatingThemeSwitch 开关 —— 游客首页自带顶栏、外观切换排进那一行里，
+#         登录/注册这类没有顶栏的页面仍用右上角浮动版；两者坐标系不同，混用会错位，所以在组件层分流）
+src/app/View/Components/GuestLayout.php
 #   src/package.json
 src/package.json
 #   src/package-lock.json（前端依赖升级：sweetalert2 11.4.6 → 11.22.4，修掉它的 3 条 npm 公告
@@ -135,6 +139,10 @@ src/resources/views/auth/reset-password.blade.php
 src/resources/views/auth/verify-email.blade.php
 #   src/resources/views/common/api.blade.php
 src/resources/views/common/api.blade.php
+#   src/resources/views/components/application-logo.blade.php
+#       （2026-10-05：品牌区从「纯站名文字」改成「LOGO 图案（透明底 static/lsky-logo.png）+ 站名」
+#         的居中组合；尺寸由组件定，调用方只传文字类）
+src/resources/views/components/application-logo.blade.php
 #   src/resources/views/components/auth-card.blade.php
 src/resources/views/components/auth-card.blade.php
 #   src/resources/views/components/auth-validation-errors.blade.php

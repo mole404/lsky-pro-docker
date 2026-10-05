@@ -239,6 +239,8 @@
     <script type="text/html" id="album-switch-tpl">
         <div class="mx-auto flex w-full flex-col">
             <p class="text-[16px] font-semibold leading-6 text-ink">__title__</p>
+            {{-- 副标题（样式与「标签管理」窗口那行 __hint__ 同一套）：说明这一行两态的语义 --}}
+            <p class="mt-1 text-[13px] leading-5 text-ink-3">点击进入相册，再次点击退出相册</p>
             <input type="text" id="album-switch-search" class="ls-input mt-3" placeholder="搜索相册">
             <div id="album-switch-scroll" class="mt-3 flex max-h-[50vh] w-full flex-col overflow-y-auto pr-1"></div>
         </div>
@@ -289,7 +291,10 @@
          ⚠ 列表末尾那条「我也是有底线的~」哨兵是 utils.infiniteScroll 自己插进去的
          `.infinite-scroll > span`，那才是**有意的**触发器，必须保持 span、不要动。 --}}
     <script type="text/html" id="albums-item-tpl">
-        <div class="albums-row flex items-stretch min-h-[44px] w-full rounded-lg border border-line bg-surface" data-id="__id__" data-json='__json__'>
+        {{-- overflow-hidden 是必需的：右边两个 44×44 常显按钮的 hover 底色是**方形**的，
+             行的圆角是 rounded-lg —— 不裁的话方块会盖住圆角，选中（当前相册）时那条品牌色
+             边框的两个右角看着就像缺角（老师反馈）。标签行（#image-tags-item-tpl）一直是这么写的。 --}}
+        <div class="albums-row flex items-stretch min-h-[44px] w-full overflow-hidden rounded-lg border border-line bg-surface" data-id="__id__" data-json='__json__'>
             <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item group flex min-w-0 flex-1 items-center gap-2.5 rounded-l-lg px-3 py-1">
                 <div class="min-w-0 flex-1 truncate text-[14px] name">__name__</div>
                 __current_badge__

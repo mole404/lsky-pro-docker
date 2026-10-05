@@ -122,7 +122,7 @@ RUN printf '%s\n' \
         '8136e73b50315d783f105dd4ac9971bb  ./config/convention.php' \
         '881fdbaed19ef39027783f093448875d  ./routes/web.php' \
         'c1ab546f3e7f5237c1d45435171858ce  ./routes/auth.php' \
-        'e7edc0fc9dc8c654c4debca0e1d2eac4  ./app/Services/ImageService.php' \
+        'ea2977cb9090ee60bebbf383057ab7c3  ./app/Services/ImageService.php' \
     | md5sum -c -
 
 # 有意偏离上游的另一个文件：composer.lock。
@@ -165,7 +165,7 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 RUN printf '%s\n' \
         'c0e513ec8e93fd81b34b3c6de5cf5eb8  ./public/js/context-js/context-js.js' \
         'c0e513ec8e93fd81b34b3c6de5cf5eb8  ./resources/js/context-js.js' \
-        'd9ffacb2bbd8905703c279965a07ddbf  ./resources/views/user/images.blade.php' \
+        'fe0852b7b6f4e71d1569ef08db16d480  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -208,7 +208,7 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
         "context_js_md5=c0e513ec8e93fd81b34b3c6de5cf5eb8" \
-        "images_blade_md5=d9ffacb2bbd8905703c279965a07ddbf" \
+        "images_blade_md5=fe0852b7b6f4e71d1569ef08db16d480" \
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
