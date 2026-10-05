@@ -28,7 +28,7 @@ final class ConfigKey
     /** @var string 是否允许游客上传 */
     const IsAllowGuestUpload = 'is_allow_guest_upload';
 
-    /** @var string 用户初始容量(kb) */
+    /** @var string 用户初始容量(KB) */
     const UserInitialCapacity = 'user_initial_capacity';
 
     /** @var string 账户是否需要验证 */

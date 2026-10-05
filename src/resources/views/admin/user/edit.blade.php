@@ -27,8 +27,9 @@
                                 <x-input type="text" id="name" name="name" value="{{ $user->name }}" placeholder="请输入用户名" />
                             </div>
                             <div class="col-span-6">
-                                <label for="capacity" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>总容量(kb)</label>
-                                <x-input type="number" id="capacity" name="capacity" step="0.01" value="{{ $user->capacity }}" placeholder="请输入总容量(kb)" />
+                                <label for="capacity" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>总容量(KB)</label>
+                                <x-input type="number" id="capacity" name="capacity" step="0.01" value="{{ $user->capacity }}" placeholder="请输入总容量(KB)" />
+                                <p class="mt-1.5 text-[13px] text-ink-3">填 0 表示不可上传</p>
                             </div>
                             <div class="col-span-6">
                                 <label for="password" class="block text-sm font-medium text-ink">新密码</label>

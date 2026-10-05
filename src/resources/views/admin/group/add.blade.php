@@ -34,37 +34,44 @@
 
                             <div class="col-span-6">
                                 <label for="maximum_file_size" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>最大文件大小(KB)</label>
-                                <x-input type="number" name="configs[maximum_file_size]" id="maximum_file_size" autocomplete="maximum_file_size" placeholder="请输入上传文件的最大限制，单位kb" value="{{ $default->get('maximum_file_size') }}" />
+                                <x-input type="number" name="configs[maximum_file_size]" id="maximum_file_size" autocomplete="maximum_file_size" placeholder="请输入上传文件的最大限制，单位 KB" value="{{ $default->get('maximum_file_size') }}" />
+                                <p class="mt-1.5 text-[13px] text-ink-3">填 0 表示不可上传</p>
                             </div>
 
                             <div class="col-span-6 sm:col-span-3">
                                 <label for="concurrent_upload_num" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>并发上传限制</label>
                                 <x-input type="number" name="configs[concurrent_upload_num]" id="concurrent_upload_num" autocomplete="concurrent_upload_num" placeholder="请输入并发上传数量" value="{{ $default->get('concurrent_upload_num') }}" />
+                                <p class="mt-1.5 text-[13px] text-ink-3">填 0 表示不限制并发数（不推荐）</p>
                             </div>
 
                             <div class="col-span-6 sm:col-span-3">
                                 <label for="limit_per_minute" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>每分钟上传限制</label>
                                 <x-input type="number" name="configs[limit_per_minute]" id="limit_per_minute" autocomplete="limit_per_minute" placeholder="请输入每分钟可以上传的图片数量" value="{{ $default->get('limit_per_minute') }}" />
+                                <p class="mt-1.5 text-[13px] text-ink-3">填 0 表示无限制</p>
                             </div>
 
                             <div class="col-span-6 sm:col-span-3">
                                 <label for="limit_per_hour" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>每小时上传限制</label>
                                 <x-input type="number" name="configs[limit_per_hour]" id="limit_per_hour" autocomplete="limit_per_hour" placeholder="请输入每小时可以上传的图片数量" value="{{ $default->get('limit_per_hour') }}" />
+                                <p class="mt-1.5 text-[13px] text-ink-3">填 0 表示无限制</p>
                             </div>
 
                             <div class="col-span-6 sm:col-span-3">
                                 <label for="limit_per_day" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>每天上传限制</label>
                                 <x-input type="number" name="configs[limit_per_day]" id="limit_per_day" autocomplete="limit_per_day" placeholder="请输入每天可以上传的图片数量" value="{{ $default->get('limit_per_day') }}" />
+                                <p class="mt-1.5 text-[13px] text-ink-3">填 0 表示无限制</p>
                             </div>
 
                             <div class="col-span-6 sm:col-span-3">
                                 <label for="limit_per_week" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>每周上传限制</label>
                                 <x-input type="number" name="configs[limit_per_week]" id="limit_per_week" autocomplete="limit_per_week" placeholder="请输入每周可以上传的图片数量" value="{{ $default->get('limit_per_week') }}" />
+                                <p class="mt-1.5 text-[13px] text-ink-3">填 0 表示无限制</p>
                             </div>
 
                             <div class="col-span-6 sm:col-span-3">
                                 <label for="limit_per_month" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>每月上传限制</label>
                                 <x-input type="number" name="configs[limit_per_month]" id="limit_per_month" autocomplete="limit_per_month" placeholder="请输入每月可以上传的图片数量" value="{{ $default->get('limit_per_month') }}" />
+                                <p class="mt-1.5 text-[13px] text-ink-3">填 0 表示无限制</p>
                             </div>
 
                             <div class="col-span-6 sm:col-span-3">

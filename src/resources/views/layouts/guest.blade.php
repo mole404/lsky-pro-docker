@@ -37,10 +37,13 @@
     <body class="font-sans antialiased">
         {{-- 与 layouts/app.blade.php 同源：桌面默认 110% 缩放，min-h-screen 要除以 1.1（仅 ≥768px）--}}
         <div class="min-h-screen ls-zoom-minh-screen text-ink bg-bg">
-            {{-- 登录/注册这类页面也放一个外观切换（右上角浮动）--}}
+            {{-- 页面自己没有顶栏时（登录/注册/找回密码…），外观切换浮在右上角；
+                 游客首页自带顶栏、把按钮排进那一行里，所以那边传 floatingThemeSwitch=false 关掉它。--}}
+            @if($floatingThemeSwitch)
             <div class="absolute top-4 right-4 z-10" x-data>
                 <x-theme-switch />
             </div>
+            @endif
             {{ $slot }}
         </div>
     </body>

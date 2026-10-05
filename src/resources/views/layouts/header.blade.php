@@ -1,4 +1,4 @@
-<header class="transition-all duration-300 w-full h-14 bg-surface border-b border-line text-ink flex justify-center fixed top-0 z-[9]">
+<header class="ls-app-header transition-all duration-300 w-full h-14 bg-surface border-b border-line text-ink flex justify-center fixed top-0 z-[9]">
     {{-- relative 是必需的：下面那个按钮用 absolute 贴到顶栏最左侧 = 这个容器的盒左缘。 --}}
     {{-- ⚠ 顶栏容器「只传 px-6」，绝不能再在这里补 md:px-10 —— 补过一次，是回归：
          x-container 的默认类在 images/admin.images 两条路由上会切成「全宽变体」（去掉全部
@@ -20,10 +20,19 @@
              所以任何情况下标题左缘都不得小于 容器左缘 + 43（= 3 + 32 + 8）。 --}}
         <a href="javascript:void(0)" @click="$store.sidebar.toggleSmart()" title="开关侧栏"
            class="absolute left-2 top-0 mt-3 w-8 h-8 rounded-lg flex justify-center items-center text-ink-2 hover:bg-surface-2">
-            {{-- 手机：抽屉（☰）；桌面：箭头，方向表示侧栏会往哪边收 --}}
-            <i class="fas fa-bars text-lg sm:hidden"></i>
-            <i class="hidden sm:inline-block fas text-sm"
-               :class="$store.sidebar.collapsed ? 'fa-chevron-right' : 'fa-chevron-left'"></i>
+            {{-- 侧栏图案（矩形 + 靠左的栏分隔线）：桌面与竖屏共用同一个图标。
+                 栏里那个小箭头表示点下去侧栏会往哪边收，两态由 CSS 按 <html> 上的 .sidebar-collapsed 切换
+                 （规则在 resources/css/common.less；store 的 applyCollapsed() 一直在贴这个类）——
+                 不用 Alpine 的 x-show/x-cloak：JS 没起来时图标也一定正确。
+                 方向：桌面展开态朝左（点它往左收起）、折叠态朝右；竖屏是抽屉，固定用朝右那个
+                 （点它把侧栏从左边拉出来，朝右才符合直觉）—— 见 common.less 的媒体查询。 --}}
+            <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="2.5" y="3.5" width="15" height="13" rx="2.6"/>
+                <path d="M9.2 3.5v13"/>
+                <path class="ls-sidebar-arrow-left" d="M14.1 8.3 12.6 10l1.5 1.7"/>
+                <path class="ls-sidebar-arrow-right" d="M12.6 8.3 14.1 10l-1.5 1.7"/>
+            </svg>
         </a>
         {{-- 标题左边距「按路由区分」，与 x-container 的 routeIs 分支同源（一行三元，保持可读）：
              容器内边距图片页恒为 24（该页是全宽变体，水平内边距只剩顶栏自己传的 px-6），
@@ -36,7 +45,7 @@
              = 240，标题 = 左缘 + 248；图片页仍是 +48，离右侧图标组还很远。）
              反例：若统一写 pl-6 md:pl-2，图片页 ≥768px 会按「容器 40」的假设把标题压到
              容器左缘 + 32，比按钮右缘还左 3px —— 就是截图里 ‹ 压在「我」上的样子。 --}}
-        <div class="flex justify-start items-center max-w-[70%] {{ request()->routeIs('images', 'admin.images') ? 'pl-6' : 'pl-6 md:pl-2' }}">
+        <div class="ls-header-title flex justify-start items-center max-w-[70%] {{ request()->routeIs('images', 'admin.images') ? 'pl-6' : 'pl-6 md:pl-2' }}">
             <a href="" class="text-[15px] font-semibold truncate text-ink" id="header-title">@yield('title', \App\Utils::config(\App\Enums\ConfigKey::AppName))</a>
         </div>
         {{-- 与左侧折叠按钮对称：绝对定位贴容器盒右缘内缩 8px。absolute 相对容器的

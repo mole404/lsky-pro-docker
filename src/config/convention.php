@@ -108,7 +108,9 @@ return [
         // （原图直出时是 image/svg+xml，SVG 内嵌脚本 = 同源存储型 XSS）。本机也不需要 SVG 上传。
         GroupConfigKey::AcceptedFileSuffixes => ['jpeg', 'jpg', 'png', 'gif', 'tif', 'bmp', 'ico', 'psd', 'webp'],
         GroupConfigKey::ImageSaveFormat => '',
-        GroupConfigKey::ImageSaveQuality => 75,
+        // fork（2026-10-05）：图床要原汁原味 —— 新建角色组 / 全新安装的默认保存质量 75 → 100
+        // （存量角色组的存库值不受影响：Utils::parseConfigs() 是 array_merge_recursive_distinct(默认, 库里)，库里赢）。
+        GroupConfigKey::ImageSaveQuality => 100,
         GroupConfigKey::PathNamingRule => '{Y}/{m}/{d}',
         GroupConfigKey::FileNamingRule => '{uniqid}',
         GroupConfigKey::ImageCacheTtl => 2626560,

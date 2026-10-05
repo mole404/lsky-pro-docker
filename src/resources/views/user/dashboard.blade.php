@@ -64,8 +64,9 @@
                         <x-no-data message="您所在的组还没有可用的储存策略，请联系管理员。" />
                     @else
                         <p class="px-4 pt-3 text-ink-3 text-[13.5px]">共 {{ $strategies->count() }} 个可用</p>
-                        {{-- 手机上不内滚（一列全展开，靠整页滚动即可）；≥md 与「我的信息」并排，才需要限高 --}}
-                        <div class="divide-y divide-line md:max-h-[18rem] md:overflow-y-auto md:overscroll-contain">
+                        {{-- 手机上不内滚（一列全展开，靠整页滚动即可）；≥md 与「我的信息」并排，才需要限高。
+                             max-height 由页尾脚本按右侧卡片高度动态计算，这里的 18rem 只作无 JS 兜底。 --}}
+                        <div class="divide-y divide-line md:max-h-[18rem] md:overflow-y-auto md:overscroll-contain ls-strategy-list">
                             @foreach ($strategies as $strategy)
                                 <div class="w-full px-4 py-3">
                                     <p class="text-ink text-[14px] font-medium">{{ $strategy->name }}</p>
@@ -82,7 +83,8 @@
             <x-box>
                 <x-slot name="title">我的信息</x-slot>
                 <x-slot name="content">
-                    <div class="px-4 py-3">
+                    {{-- 锚点类给页尾脚本量高度用（本层底边即卡片底边，且不受 grid 拉伸影响） --}}
+                    <div class="ls-info-card px-4 py-3">
                         <div class="divide-y divide-line">
                             <div class="flex items-center gap-4 py-2.5">
                                 <p class="w-20 shrink-0 text-ink-3 text-[13.5px]">姓名</p>
@@ -132,10 +134,16 @@
                     <p class="mt-4 mb-2 text-ink-3 text-[13.5px]">上传限制</p>
                     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                         @foreach($limits as [$label, $key, $unit])
+                            @php $limitValue = (int) $configs->get($key); @endphp
                             <div class="rounded-lg bg-surface-2 px-3 py-2">
                                 <p class="text-ink-2 text-[13px]">{{ $label }}</p>
-                                <p class="mt-0.5 text-ink text-[14px] font-semibold tabular-nums">
-                                    {{ $configs->get($key) }}<span class="ml-0.5 text-ink-2 text-[13px] font-normal">{{ $unit }}</span>
+                                {{-- 值为 0 表示该维度不限量（含「并发」）；灰字「无限制」且不带单位 --}}
+                                <p class="mt-0.5 {{ $limitValue === 0 ? 'text-ink-3' : 'text-ink' }} text-[14px] font-semibold tabular-nums">
+                                    @if($limitValue === 0)
+                                        无限制
+                                    @else
+                                        {{ $configs->get($key) }}<span class="ml-0.5 text-ink-2 text-[13px] font-normal">{{ $unit }}</span>
+                                    @endif
                                 </p>
                             </div>
                         @endforeach
@@ -165,4 +173,59 @@
             </script>
         @endpush
     @endif
+
+    @push('scripts')
+        <script>
+            // 「可使用的策略」列表 ≥md（844.8px，与 tailwind 的 md 断点一致）时按右侧「我的信息」
+            // 卡片高度限高，超出在卡片内滚动；窄屏/竖屏清掉内联 max-height，保持一列全展开。
+            (function () {
+                var mq = window.matchMedia('(min-width: 844.8px)');
+                var list = document.querySelector('.ls-strategy-list');
+                var info = document.querySelector('.ls-info-card');
+                if (! list || ! info) { return; }
+
+                var infoCard = info.closest('.ls-card');
+                var strategyCard = list.closest('.ls-card') || list;
+
+                // zoom:1.1 下 rect 给的是视觉 px，style.maxHeight 要布局 px → 除以 z
+                function zoom() {
+                    var el = document.documentElement;
+                    var z = el.getBoundingClientRect().width / el.offsetWidth;
+                    return z > 1.0001 ? z : 1;
+                }
+
+                function sync() {
+                    if (! mq.matches) {
+                        list.style.maxHeight = ''; // 竖屏/窄屏：一列全展开，交给整页滚动
+                        return;
+                    }
+                    var z = zoom();
+                    var iRect = info.getBoundingClientRect();
+                    var cRect = infoCard.getBoundingClientRect();
+                    // 「我的信息」自然高度 = 内容底边 − 卡片顶边（grid 只拉伸底边，不影响此值）
+                    var infoH = (iRect.bottom - cRect.top) / z;
+                    var sRect = strategyCard.getBoundingClientRect();
+                    var lRect = list.getBoundingClientRect();
+                    // 布局还没铺好时（页面刚解析、[x-cloak] 还罩着 → 内容 display:none）所有 rect 都是 0：
+                    // 这一帧必须直接放弃，否则会算出 maxHeight:0 把列表压没（本地实测正是这样量到 0px 的）。
+                    // 取舍：宁可不限高（等于现状），也绝不把卡片压空。
+                    if (! (infoH > 0) || ! (lRect.top > 0) || ! (sRect.top > 0)) { return; }
+                    // 列表「上方」占掉的高度（卡片头 + 「共 N 个可用」）+ 卡片底部内边距。
+                    // ⚠ 不能用 (卡片底边 − 列表底边) 那一项：卡片是 grid item，会被拉伸到与右侧同高，
+                    //    这一项里含「被拉伸出来的空白」——列表一被限高它就跟着变大 → 自反馈把 maxHeight 压成 0（本地量到过 0px）。
+                    var padB = parseFloat(getComputedStyle(list.parentElement).paddingBottom) || 0;
+                    var chrome = (lRect.top - sRect.top) / z + padB;
+                    if (! (chrome > 0)) { return; }
+                    list.style.maxHeight = Math.max(0, Math.round(infoH - chrome)) + 'px';
+                }
+
+                // 解析期这一帧多半量不到（见上面的护栏），真正生效靠下面这几次调用
+                if (document.readyState === 'complete') { sync(); } else { window.addEventListener('load', sync); }
+                window.addEventListener('resize', sync);
+                // 侧栏折叠动画约 300ms，等结束再量，避免拿到过渡中的高度
+                window.addEventListener('lsky:sidebar-toggled', function () { setTimeout(sync, 320); });
+                if (mq.addEventListener) { mq.addEventListener('change', sync); } else { mq.addListener(sync); }
+            })();
+        </script>
+    @endpush
 </x-app-layout>

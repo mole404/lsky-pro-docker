@@ -732,3 +732,76 @@ html.dark {
         max-width: 1536px;
     }
 }
+
+/* ---------------------------------------------------------------------------
+ | fork（2026-10-05）：app 顶栏在「刚过手机断点」的窄桌面下不再互相覆盖
+ | ---------------------------------------------------------------------------
+ | 背景：右侧那一组（外观切换 / 公告 / 策略 / 用户菜单）是 `absolute right-2`，**不占位**；
+ |       而标题只受 max-w-[70%] 约束 → 在 640 ~ 约 730px 这一段，右侧那组最宽形态
+ |       （策略名 ≈190 + 用户名 ≈110 + 两个圆钮 80 + 间距）≈ 400px，会压到左侧的
+ |       折叠侧栏按钮与页面标题上（老师反馈）。
+ | 做法：这个区间把「只有宽屏放得下」的文字收起来，只留图标 —— 与 <640 的手机端同一形态；
+ |       同时给标题容器一个宽度上限，保证它不会伸到右侧那组底下。
+ |       上限取「容器内容宽 − 14rem(224px)」的由来（实测 660px 宽、侧栏展开时）：
+ |         容器内容盒 [280,636]（宽 356）、右侧那组绝对定位 [492,624]（宽 132）
+ |         ⇒ 标题容器最多能到 492 − 8(右内缩) − 280 = 204px；
+ |         扣掉右侧那组「再挂一个公告按钮」的 52px 余量 ⇒ 取 356 − 224 = 132px（留 20px 余量）。
+ |       这个上限在 640px 宽时仍给标题 112px（4 个中文字的标题只要 84px，含 pl-6 的 24）
+ |       ⇒ 标题在整个区间里都是**完整显示**的，不会被截断；只有超长标题才会出省略号。
+ |       第一版写成 18rem 是「100% 相对的是容器内容盒、不是 padding 盒」算错了一档，
+ |       实测 660px 下标题被压成 1 个字（我…），已改。
+ |       >1080 恢复原名/用户名，与改动前逐像素一致；手机端（<640）不受影响（媒体查询从 640 起）。
+ | 权重：common.css 排在 app.css 之前，所以靠选择器权重赢（html 前缀 + id），与加载顺序无关。
+ | 只作用于 app 布局顶栏（.ls-app-header）；游客首页那一行是自己写的，宽度充裕，保持原名。
+ */
+@media (min-width: 640px) and (max-width: 1079.98px) {
+    html .ls-app-header #strategy-selected,
+    html .ls-app-header .ls-user-name {
+        display: none;
+    }
+
+    /* 两个胶囊里的文字收起来之后，它们必须回到「正圆」：40×40 + 无内边距。
+       否则会保持 sm:w-auto + 左右内边距、只剩图标却被撑成椭圆（老师反馈用户按钮「不圆了」）。
+       权重：html + .ls-app-header + #id 压过 app.css 的 sm:w-auto / sm:px-3 / sm:pl-3 / sm:pr-3。 */
+    html .ls-app-header #user-menu-button,
+    html .ls-app-header #strategy-menu-button {
+        width: 2.5rem;
+        padding: 0;
+    }
+
+    html .ls-app-header .ls-header-title {
+        max-width: calc(100% - 14rem);
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * fork（2026-10-05）：侧栏开关按钮里那两个小箭头的显示/隐藏改由 CSS 决定
+ * 图标本身桌面/竖屏共用一个（矩形 + 靠左的栏分隔线），只有「栏里的小箭头」分两态：
+ *   · 桌面：看 <html> 上的 .sidebar-collapsed —— 侧栏 store 的 applyCollapsed() 一直在贴这个类；
+ *     展开态显示「尖朝左」（点它往左收起），折叠态显示「尖朝右」。
+ *   · 竖屏（<640px）：侧栏是抽屉、只有「点它把侧栏拉出来」一种行为 ⇒ 固定显示「尖朝右」，
+ *     既符合直觉，也不受 localStorage 里残留的桌面折叠态影响（媒体查询里的 !important 压过上面两条）。
+ * 为什么不用 Alpine 的 x-show/x-cloak（原实现）：JS 没起来时会出现「两条箭头同时显示」或「一个都没有」；
+ * 图标是页面的固定零件，用 CSS 表达它任何时候都正确，也不依赖框架初始化时序。
+ * ------------------------------------------------------------------------- */
+html .ls-sidebar-arrow-right {
+    display: none;
+}
+
+html.sidebar-collapsed .ls-sidebar-arrow-left {
+    display: none;
+}
+
+html.sidebar-collapsed .ls-sidebar-arrow-right {
+    display: inline;
+}
+
+@media (max-width: 639.98px) {
+    html .ls-sidebar-arrow-left {
+        display: none !important;
+    }
+
+    html .ls-sidebar-arrow-right {
+        display: inline !important;
+    }
+}

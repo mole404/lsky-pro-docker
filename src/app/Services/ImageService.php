@@ -409,7 +409,7 @@ class ImageService
         $flag = false;
         try {
             if ($driver === 'tencent') {
-                // 图片大小不得超过 5mb
+                // 图片大小不得超过 5MB
                 if ($file->getSize() >= 5242880) {
                     return false;
                 }

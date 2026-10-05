@@ -144,6 +144,8 @@ console.log('\n[相册弹窗] 标题/搜索/行内分区（44px 切换区 + 常�
         && blade.includes("$('#album-switch-search').off('input').on('input', _ => applyFilter());"));
     check('列表容器 max-h-[50vh] + overflow-y-auto（滚到底自动加载下一页）',
         /id="album-switch-scroll"[^>]*class="[^"]*overflow-y-auto[^"]*"/.test(shellTpl) && shellTpl.includes('max-h-[50vh]'));
+    check('标题下的副标题「点击进入相册，再次点击退出相册」（样式同「标签管理」窗口那行 __hint__）',
+        /<p class="mt-1 text-\[13px\] leading-5 text-ink-3">点击进入相册，再次点击退出相册<\/p>/.test(shellTpl));
     // 名称从 <span> 改成 <div>（保留 class name）：app.js 的无限加载对列表容器挂的是
     // 「点里面的 span 就加载更多」的委托，相册名是 span 时点一下名字会顺手多拉一页相册。
     // 行内除哨兵（utils.infiniteScroll 自己插的 .infinite-scroll > span）外不能有 span。
@@ -160,10 +162,18 @@ console.log('\n[相册弹窗] 标题/搜索/行内分区（44px 切换区 + 常�
         && actionsPart.includes('class="update') && actionsPart.includes('class="delete')
         && (itemTpl.match(/data-id="__id__"/g) || []).length === 2
         && (itemTpl.match(/data-json='__json__'/g) || []).length === 2);
-    check('两个操作按钮 44×44（h-11 w-11）+ 无障碍标签，且常显（模板里没有 hidden / group-hover）',
+    // 「按钮常显」断言在**按钮自己**的类上，不扫整块模板：
+    // 行容器上的 overflow-hidden 是必需的（把按钮的方形 hover 底色裁进行圆角，修老师反馈的
+    // 「选中当前相册后、悬浮删除按钮时蓝框缺角」），扫整块模板会把它误判成「按钮被藏起来」。
+    const actionButtonClasses = actionsPart.match(/class="(?:update|delete)[^"]*"/g) || [];
+    check('两个操作按钮 44×44（h-11 w-11）+ 无障碍标签，且常显（按钮自己的类里没有 hidden / group-hover）',
         (actionsPart.match(/class="(?:update|delete) flex h-11 w-11 items-center justify-center/g) || []).length === 2
         && (actionsPart.match(/aria-label="(?:重命名|删除)相册"/g) || []).length === 2
-        && ! itemTpl.includes('hidden') && ! itemTpl.includes('group-hover'));
+        && actionButtonClasses.length === 2
+        && actionButtonClasses.every(c => ! c.includes('hidden') && ! c.includes('group-hover')));
+    check('相册行容器带 overflow-hidden（方形 hover 底色被裁进行圆角；与标签行同一写法）',
+        /class="albums-row[^"]*overflow-hidden/.test(itemTpl)
+        && /class="image-tag-row[^"]*overflow-hidden/.test(blade));
     // 注意用 bladeCode（已去掉注释）：注释里会写「那条 @media (hover: none) 已删」这类说明
     check('触摸端「常显操作按钮」的媒体查询已删（按钮本来就常显，不留无用/矛盾规则）',
         ! bladeCode.includes('hover: none')

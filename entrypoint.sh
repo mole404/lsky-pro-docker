@@ -288,8 +288,10 @@ fi
 # 默认 64M 的理由：本机（1 vCPU / 965MB）内存是瓶颈；Lsky 单请求实际远用不到 64M，
 # 需要做大图处理/批量时用 PHP_MEMORY_LIMIT 临时抬高即可。
 # 脏值处理原则同上：只忽略这一项并警告，绝不让容器启动失败。
-# ⚠ 注意：上传/表单上限仍是 100M（post_max_size / upload_max_filesize，见 docker-php-upload.ini）；
-#   处理大图若撞到 64M 上限，用 PHP_MEMORY_LIMIT 抬高（或调低那两个上传上限）。
+# ⚠ 注意：post_max_size 与 upload_max_filesize 都已调到 **512M**（见 docker-php-upload.ini）
+#   —— 前者是「整个请求体」上限（控制台里显示的那条），后者才是「单个上传文件」的上限。
+#   但宿主 nginx 的 client_max_body_size 仍是 100m ⇒ 真要传 >100MB 的图，nginx 侧也得放宽（属另一个服务，未经老师允许不要动）。
+#   处理大图若撞到 64M 内存上限，用 PHP_MEMORY_LIMIT 抬高（或调低上面那两个上传上限）。
 PHP_DEF_MEMORY_LIMIT=64M
 PHP_HARDENING_INI=/usr/local/etc/php/conf.d/zz-lsky-hardening.ini
 
