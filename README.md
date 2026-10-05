@@ -116,10 +116,10 @@ docker run -d --name lsky-pro --restart unless-stopped \
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `WEB_PORT` | `8089` | 容器内 Web 服务的 HTTP 端口 |
-| `HTTPS_PORT` | `8088` | 容器内 HTTPS 端口（自签证书，仅供内网调试，一般不用，不是反代用的 CA 证书！） |
+| `HTTPS_PORT` | `8088` | 容器内 HTTPS 端口（自签证书，仅供内网调试，一般不用，非公网 HTTPS 访问用途！） |
 
 自签证书不随镜像发放、也不进数据卷：每个容器首次启动自己生成。想用自己的证书，把 `.crt` / `.key` 挂到容器内 `/etc/apache2/ssl/lsky-selfsigned.crt` 与 `.key` 覆盖即可。  
-⚠再次提醒，这个自签证书只服务容器内 Apache 的 443 vhost，不是拿来反代用的那个 CA 证书！
+⚠再次提醒，这个自签证书只服务容器内 Apache 的 443 vhost，不是公网 HTTPS 访问用的！不是拿来反代用的那个 CA 证书！
 
 ### 并发与内存
 
