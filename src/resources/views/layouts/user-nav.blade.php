@@ -16,13 +16,15 @@
             {{-- overflow-hidden 是必需的：flex 项的 min-width:auto 会按内容最小宽度撑开，
                  名字首字要是被换成长字符串（或字体异常），整个按钮会被顶宽 —— 加了它之后
                  内容再大也只在这个 28×28 的圆圈里裁掉，按钮尺寸不受影响。 --}}
-            {{-- 关于「头像看着偏下」：这个 SVG 的人形自己画偏下 —— 头顶在 18/96、底边贴着 96/96，
-                 人形重心比画布中线低 ~2.7px。文件不能动（老师要的就是原来那份），所以把**里面的 img**
-                 抬 2px（-top-0.5）做视觉居中：人形居中了，而外面这个 28×28 的方框/圆圈仍然几何居中
-                 （刚开始我误抬了整个 span，圈就变成上4下8 —— 别那么干）。 --}}
+            {{-- 头像保持**几何居中**（老师 2026-10-05 终裁，别再改回去）：
+                 这个 SVG 的人形自己画偏下（头顶 18/96、底边贴 96/96，重心比画布中线低 ~2.7px），
+                 但「用 -top-0.5 把 img 抬 2px 做视觉居中」和「抬整个 span」两种做法老师都否决了 ——
+                 他实测后认定头像应当几何居中：28×28 方框上留白 = 下留白。
+                 所以这里**不许再加任何垂直偏移 / transform / 尺寸补偿**；人形偏下是那张图自带的，
+                 老师要的就是原图原样 + 方框居中。 --}}
             <span class="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-2 text-[11px] font-medium text-ink-2" id="user-avatar">
                 <span aria-hidden="true" data-avatar-fallback>{{ mb_substr(trim(Auth::user()->name), 0, 1) ?: '?' }}</span>
-                <img class="absolute inset-0 -top-0.5 h-7 w-7 rounded-full object-cover opacity-0 transition-opacity duration-200"
+                <img class="absolute inset-0 h-7 w-7 rounded-full object-cover opacity-0 transition-opacity duration-200"
                      id="user-avatar-img" alt="" width="28" height="28" decoding="async"
                      data-avatar-src="{{ Auth::user()->avatar }}"
                      onload="this.previousElementSibling && this.previousElementSibling.remove(); this.classList.remove('opacity-0');"
