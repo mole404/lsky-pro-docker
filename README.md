@@ -155,6 +155,7 @@ docker run -d --name lsky-pro --restart unless-stopped \
 - 应用本体：[lsky-org/lsky-pro](https://github.com/lsky-org/lsky-pro)（GPL-3.0）；`src/` 保留上游的 `LICENSE` 与全部署名。
 - Docker 打包：fork 自 [HalcyonAzure/lsky-pro-docker](https://github.com/HalcyonAzure/lsky-pro-docker)（AGPL-3.0），本仓库自身的打包脚本沿用该许可。
 
-**非官方镜像，自用为主**  
-**使用前请自行判断是否符合你的需求与合规要求**  
-**如果有其他需求，请自行 Fork 修改，本人不提供维护保障，不保证处理 issue 和 PR**
+## 非官方镜像，自用为主  
+使用前请自行判断是否符合你的需求与合规要求  
+如果有其他需求，请自行 Fork 修改，本人不提供维护保障，不保证处理 issue 和 PR  
+如果您喜欢这个仓库，还请您点个⭐，感谢！
