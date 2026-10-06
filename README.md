@@ -147,13 +147,7 @@ docker run -d --name lsky-pro --restart unless-stopped \
   ```
 
   它会把仓库里的 `src/` 与上游快照逐文件对比，并校验所有偏差都落在"已知偏离清单"内 —— 只要它不报错，改动就恰好是清单里那些。
-- **标签数据自检**（只读，检查有没有残留的关联行）：
 
-  ```bash
-  docker cp tools/check-tag-integrity.php lsky-pro:/tmp/
-  docker exec lsky-pro php /tmp/check-tag-integrity.php
-  ```
-- **本地测试**：`cd test && npm test`（用 jsdom + 真实 jQuery 跑图片页的交互路径）。
 - `patches/` 里是一份"给人看的"补丁存档（不参与构建 —— 构建用的就是 `src/` 里的文件）。
 
 ## 许可与致谢
