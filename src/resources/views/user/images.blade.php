@@ -4,6 +4,7 @@
     <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/cropper-js/cropper.min.css') }}?v={{ \App\Utils::assetVersion('css/cropper-js/cropper.min.css') }}">
     {{-- fork：相册弹窗（#album-switch-modal）自己的样式。本仓库这个补丁只改这一个文件
          （common.less 不动，所以写在页面里）：
          1) 哨兵文案：与 common.less 里「只在这个弹窗里藏掉 .infinite-scroll」那条同一思路
@@ -32,6 +33,8 @@
              *   浏览器会把哨兵当锚点、上方内容变高就自动往下补 scrollTop，于是哨兵又进视口、
              *   又触发下一页 —— 连锁滚到底。安卓 Edge 上尤其明显（安卓 Chrome / iOS 不这样）。 */
             html, body, #images-scroll, #images-scroll .infinite-scroll { overflow-anchor: none; }
+            /* 注：#images-scroll 的左侧内边距曾加过 18px，老师否掉了（图库左侧不该空出一条）——
+             * "左侧拖不出框"要从侧栏/判定那边解决，不能靠给网格加空白。 */
             /* ★ 让滚动条的位置**永远被预留**（桌面端）。
              *   看图器打开时库会给 body 加 .viewer-open{overflow:hidden}，滚动条消失 ⇒
              *   布局宽度凭空多出 9px（Win11 细滚动条）⇒ 内容右移/重排，关闭时再跳一次。
@@ -40,6 +43,22 @@
              *   （render.js initBody），那时文档还没溢出，量到的是 0，所以它补的 paddingRight
              *   恒为 0px（真机实测确认过），指望它补是不行的。 */
             html { scrollbar-gutter: stable; }
+            /* ★ 但真机（不同浏览器/滚动条实现）上仍偶发"抽一下"⇒ 再上一层保险，跟 sweetalert
+             *   那套一致：不让库动 body。看图器打开时 .viewer-open{overflow:hidden} 会拿走滚动条，
+             *   这里用更高的权重（body.viewer-open 权重 (0,1,1) > 库的 .viewer-open (0,1,0)）
+             *   把它按回 visible ⇒ 滚动条一直在、可用宽度不变 ⇒ 必然不重排。
+             *   看图器自身是 fixed 全屏覆盖 + touch-action:none，指针/触摸不会漏到后面；
+             *   滚轮被库自己的 zoomOnWheel 处理（非 passive + preventDefault），背景也不会被滚走。 */
+            body.viewer-open { overflow: visible; }
+            /* ★ 再把库写的那份 body padding-right 按回 0。真机实测（老师浏览器打印）：
+             *   打开看图器时 body 的 padding-right 会变成 8px —— 那正是**槽位**的宽度
+             *   （库 initBody 量的就是 innerWidth − documentElement.clientWidth），
+             *   而槽位已经把空间预留住了，再补一次就把内容挤窄 8px ⇒ 卡片重排
+             *   （实测首卡宽度 123 → 121）。行内样式只能用 CSS !important 盖；
+             *   用 @supports 兜住不支持 gutter 的旧浏览器 —— 那里这份 padding 是必需的。 */
+            @supports (scrollbar-gutter: stable) {
+                body.viewer-open { padding-right: 0 !important; }
+            }
                         .viewer-canvas > img:not([style]) {
                 width: 1px;
                 height: 1px;
@@ -64,6 +83,162 @@
         .image-tags-off .image-tags {
             display: none;
         }
+
+        /* ── fork：图片裁剪层（Cropper.js v1.6.3）──────────────────────────────
+           桌面 html{zoom:1.1}（common.less）下给这一层套「反向缩放」，让它内部的
+           布局单位 == 屏幕像素 —— 与 .viewer-container 用的是同一招，避免 Cropper
+           把视觉坐标当布局坐标用（Viewer.js 当年就是这么整体偏的）。 */
+        #crop-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 60;
+            display: none;
+            flex-direction: column;
+            background: rgba(10, 12, 15, .94);
+        }
+        #crop-layer.is-open { display: flex; }
+        @media (min-width: 768px) {
+            /* 桌面 html{zoom:1.1}（common.less）下的反制，与 .viewer-container 同一招：
+               · 容器自身反向缩放 ⇒ 内部「布局单位 == 屏幕像素」，Cropper 的指针坐标才不偏 10%
+                 （实测：不套它时拖动选框恒定偏 +10%、不跟手）；
+               · 同时把 inset:0 换成显式 width/height —— inset 版在 zoom 下只铺 90.9% 屏
+                 （当年 .viewer-container 踩的就是这个坑）；注意不能用 100vw（会溢出 10%）。 */
+            html #crop-layer {
+                zoom: calc(1 / 1.1);
+                right: auto;
+                bottom: auto;
+                width: 100%;
+                height: 100%;
+            }
+        }
+        #crop-layer .crop-head {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            padding: 10px 14px; color: #e6e9ee; font-size: 14px;
+        }
+        #crop-layer .crop-hint { color: #9aa4b2; font-size: 12.5px; }
+        #crop-layer .crop-stage {
+            flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+            overflow: hidden; padding: 0 8px;
+        }
+        #crop-layer .crop-stage img { max-width: 100%; max-height: 100%; display: block; }
+
+        /* 框外变暗：**不用**库的 .cropper-modal。
+           库那套是「半透明黑盖住整图 + 往 .cropper-view-box 里再塞一张克隆图把框内提亮」——
+           真机实测那一步在 iOS(WebKit) 上不生效，表现就是整张（含框内）都是灰的
+           （老师截图按像素量：框外 127、框内 140，140 正是 127 又叠了库那层 10% 白 highlight）。
+           改成：关闭 modal（Cropper 选项 modal:false），用裁剪框自己的大范围 box-shadow 压暗框外 ——
+           框内直接就是原图本体，没有任何遮罩压在它上面 ⇒ 各平台一致；容器裁掉阴影溢出，
+           工具栏与页面其它部分不受影响。 */
+        #crop-layer .cropper-container { overflow: hidden; }
+        #crop-layer .cropper-view-box { box-shadow: 0 0 0 9999px rgba(0, 0, 0, .5); }
+        #crop-layer .crop-bar {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            flex-wrap: wrap; padding: 10px 14px 14px;
+        }
+        #crop-layer .crop-group { display: flex; align-items: center; gap: 6px; }
+        #crop-layer .crop-group a {
+            color: #e6e9ee; font-size: 13.5px; line-height: 1; padding: 8px 12px;
+            border-radius: 8px; background: rgba(255, 255, 255, .08);
+        }
+        #crop-layer .crop-group a:hover { background: rgba(255, 255, 255, .16); }
+        #crop-layer .crop-group a.active { background: var(--lsky-accent, #3b82f6); color: #fff; }
+        #crop-layer .crop-primary { background: var(--lsky-accent, #3b82f6) !important; color: #fff !important; }
+        #crop-layer.is-busy .crop-bar { opacity: .45; pointer-events: none; }
+
+        /* 桌面：工具组这一层等于没包（子元素直接参与底栏的三列网格） */
+        #crop-layer .crop-tools { display: contents; }
+
+        @media (min-width: 768px) {
+            /* 电脑端底栏改三列网格：左右各占 1fr、中间 auto ⇒「比例」永远正居中。
+               原来用 flex 的 space-between 时，左边那组多出「左右/上下翻转」两个按钮，
+               中间那组就被挤得偏左了。 */
+            #crop-layer .crop-bar {
+                display: grid;
+                grid-template-columns: 1fr auto 1fr;
+                align-items: center;
+            }
+            #crop-layer .crop-actions { justify-content: flex-end; }
+        }
+
+        /* 手机（<768px）：
+           · 「取消 / 裁剪并上传」挪到顶栏右侧（顶栏本来只放标题与尺寸提示，右边空着）；
+           · 底栏只剩两组工具，自然折成两行（比例一行、旋转/翻转一行），不再横向滑动；
+           · 右下角手柄从库的 20×20 收到 14×14 —— 它同时是唯一热区，但库给它配了一层
+             200% 的透明 :before，所以视觉缩小后热区仍有 28×28，手感不变。 */
+        @media (max-width: 767.98px) {
+            #crop-layer .crop-head { padding-right: 168px; }
+            #crop-layer .crop-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+            #crop-layer .crop-tools > .crop-group { flex: none; }
+            #crop-layer .crop-actions { position: absolute; top: 9px; right: 12px; }
+            #crop-layer .cropper-point.point-se { width: 14px; height: 14px; }
+        }
+
+        /* ── fork：看图器「全屏」的观感（老师要的"进去只剩图"）─────────────────
+           进全屏时 JS 给 <html> 加 .ls-viewer-fs：UI 全藏、背景压成纯黑，缩放手势/拖动/切图一概不动。
+           鼠标动一下或轻触一下临时淡入（.ls-fs-ui，2.5s 后自动隐）；点背景关掉看图器即彻底退出全屏。 */
+        html.ls-viewer-fs .viewer-backdrop,
+        html.ls-viewer-fs .viewer-container { background-color: #000; }
+        /* 顺手把**页面自己**那条右侧滚动条也收掉（全屏里页面本来也不该滚），
+           连"给滚动条留出来的那块空白"一起收 —— 只是 overflow:hidden 的话，
+           scrollbar-gutter: stable 仍会在右边留一条 8px 的空白（老师截图里能看到）。
+           全屏期间没有滚动条，也就不需要槽位 ⇒ 两条一起写。 */
+        html.ls-viewer-fs { overflow: hidden; scrollbar-gutter: auto; }
+        html.ls-viewer-fs .viewer-toolbar,
+        html.ls-viewer-fs .viewer-navbar,
+        html.ls-viewer-fs .viewer-title,
+        html.ls-viewer-fs .viewer-button {
+            opacity: 0 !important;
+            visibility: hidden;
+            transition: opacity .25s ease, visibility .25s ease;
+        }
+        html.ls-viewer-fs.ls-fs-ui .viewer-toolbar,
+        html.ls-viewer-fs.ls-fs-ui .viewer-navbar,
+        html.ls-viewer-fs.ls-fs-ui .viewer-title,
+        html.ls-viewer-fs.ls-fs-ui .viewer-button {
+            opacity: 1 !important;
+            visibility: visible;
+        }
+        /* 藏起来的时候别接住指针：否则会挡住"点背景退出"和拖动 */
+        html.ls-viewer-fs:not(.ls-fs-ui) .viewer-toolbar,
+        html.ls-viewer-fs:not(.ls-fs-ui) .viewer-navbar,
+        html.ls-viewer-fs:not(.ls-fs-ui) .viewer-title,
+        html.ls-viewer-fs:not(.ls-fs-ui) .viewer-button {
+            pointer-events: none;
+        }
+
+        /* 看图器工具栏的「裁剪」按钮图标。
+           库的图标是一张 280px 宽的雪碧图，而且只给 14 个内置键分别写了规则
+           （.viewer-zoom-in:before{content:"Zoom In";background-position:0 0} 这种）——
+           自定义键不在那张枚举表里，既没有 content（伪元素根本不生成）也没有 20×20 的盒子，
+           于是只剩 li 那圈黑底、看着「有按钮没图标」。这里把库那套声明补齐，图标换成风格一致的内联 SVG。 */
+        html .viewer-toolbar > ul > li.viewer-crop:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E");
+            /* 图形比盒子小一圈（14px 配 3px 居中偏移）；盒子仍 20×20、按钮仍 24×24 ⇒ 热区不变。 */
+            background-position: 3px 3px;
+            background-repeat: no-repeat;
+            background-size: 14px 14px;
+        }
+
+        /* 看图器工具栏的「全屏」按钮图标。库 1.10.4 的工具栏里**没有**"只全屏"的键
+           （只有「播放」会顺带全屏），所以它也是自定义键，图标同样要自己补 content 与 20×20 盒子。
+           全屏状态下 JS 会给这个 li 加 .is-fs，图标换成「退出全屏」。 */
+        html .viewer-toolbar > ul > li.viewer-fullscreen:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3H5a2 2 0 0 0-2 2v3'/%3E%3Cpath d='M16 3h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M21 16v3a2 2 0 0 1-2 2h-3'/%3E%3Cpath d='M3 16v3a2 2 0 0 0 2 2h3'/%3E%3C/svg%3E");
+            background-position: 3px 3px;
+            background-repeat: no-repeat;
+            background-size: 14px 14px;
+        }
+        html .viewer-toolbar > ul > li.viewer-fullscreen.is-fs:before {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v3a2 2 0 0 1-2 2H3'/%3E%3Cpath d='M21 8h-3a2 2 0 0 1-2-2V3'/%3E%3Cpath d='M3 16h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M16 21v-3a2 2 0 0 1 2-2h3'/%3E%3C/svg%3E");
+        }
     </style>
 @endpush
 
@@ -78,9 +253,10 @@
                 <a data-operate="movements" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移动到相册</a>
                 <a data-operate="remove" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移出当前相册</a>
                 <a data-operate="tag" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">标签管理</a>
-                <a data-operate="detail" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
+                <a data-operate="edit" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">编辑图片</a>
                 <a data-operate="rename" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
                 <a data-operate="delete" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
+                <a data-operate="detail" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
                 <a data-operate="deselect" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">取消选择</a>
             </div>
             {{-- 与上排互斥：<xl 才收起成一格「⋯」菜单 --}}
@@ -95,9 +271,10 @@
                         <x-dropdown-link data-operate="movements" class="hidden" href="javascript:void(0)" @click="open = false">移动到相册</x-dropdown-link>
                         <x-dropdown-link data-operate="remove" class="hidden" href="javascript:void(0)" @click="open = false">移出当前相册</x-dropdown-link>
                         <x-dropdown-link data-operate="tag" class="hidden" href="javascript:void(0)" @click="open = false">标签管理</x-dropdown-link>
-                        <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
+                        <x-dropdown-link data-operate="edit" class="hidden" href="javascript:void(0)" @click="open = false">编辑图片</x-dropdown-link>
                         <x-dropdown-link data-operate="rename" class="hidden" href="javascript:void(0)" @click="open = false">重命名</x-dropdown-link>
                         <x-dropdown-link data-operate="delete" class="hidden" href="javascript:void(0)" @click="open = false">删除</x-dropdown-link>
+                        <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
                         <x-dropdown-link data-operate="deselect" class="hidden" href="javascript:void(0)" @click="open = false">取消选择</x-dropdown-link>
                     </x-slot>
                 </x-dropdown>
@@ -206,6 +383,42 @@
     <x-modal id="image-tags-modal">
         <div id="image-tags-content"></div>
     </x-modal>
+
+    {{-- fork：图片裁剪层（Cropper.js v1.6.3）。三个入口共用它：
+         ① 看图器工具栏的「裁剪」按钮 ② 选中操作条（单选时才出现）③ 右键 / 长按菜单的「编辑图片」。
+         规则：只有 jpg/jpeg/png 给入口；导出格式跟随原图（png → PNG 无损、jpg/jpeg → JPEG q0.95）；
+         结果作为一张**新图**上传，不改动原图。 --}}
+    <div id="crop-layer" aria-hidden="true">
+        <div class="crop-head">
+            <span>裁剪图片</span>
+            <span class="crop-hint" id="crop-hint"></span>
+        </div>
+        <div class="crop-stage">
+            <img id="crop-image" alt="">
+        </div>
+        {{-- 工具组（旋转/翻转 + 比例）：桌面用 display:contents ⇒ 两组仍是底栏三列网格里的项；
+             手机（<768px）折成两行显示、动作按钮挪到顶栏右侧。 --}}
+        <div class="crop-bar">
+          <div class="crop-tools">
+            <div class="crop-group">
+                <a href="javascript:void(0)" data-crop-action="rotate-left">左转 90°</a>
+                <a href="javascript:void(0)" data-crop-action="rotate-right">右转 90°</a>
+                <a href="javascript:void(0)" data-crop-action="flip-x">左右翻转</a>
+                <a href="javascript:void(0)" data-crop-action="flip-y">上下翻转</a>
+            </div>
+            <div class="crop-group" id="crop-ratios">
+                <a href="javascript:void(0)" data-crop-ratio="free" class="active">自由</a>
+                <a href="javascript:void(0)" data-crop-ratio="1:1">1:1</a>
+                <a href="javascript:void(0)" data-crop-ratio="4:3">4:3</a>
+                <a href="javascript:void(0)" data-crop-ratio="16:9">16:9</a>
+            </div>
+          </div>
+            <div class="crop-group crop-actions">
+                <a href="javascript:void(0)" data-crop-action="cancel">取消</a>
+                <a href="javascript:void(0)" data-crop-action="crop" class="crop-primary">裁剪并上传</a>
+            </div>
+        </div>
+    </div>
 
     <script type="text/html" id="images-item-tpl">
         <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
@@ -502,6 +715,7 @@
     @push('scripts')
         <script src="{{ asset('js/justified-gallery/jquery.justifiedGallery.min.js') }}"></script>
         <script src="{{ asset('js/viewer-js/viewer.min.js') }}"></script>
+        <script src="{{ asset('js/cropper-js/cropper.min.js') }}?v={{ \App\Utils::assetVersion('js/cropper-js/cropper.min.js') }}"></script>
         <script src="{{ asset('js/dragselect/ds.min.js') }}"></script>
         {{-- fork 补丁：加版本串，避免 iOS/Safari 的启发式缓存把旧版 context-js.js 一直喂给老用户 --}}
         <script src="{{ asset('js/context-js/context-js.js') }}?v={{ \App\Utils::assetVersion('js/context-js/context-js.js') }}"></script>
@@ -576,6 +790,24 @@
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {
                 url: 'data-original',
+                // fork：自定义工具栏。注意 —— 传对象进入「自定义」模式后，内置按钮**只渲染你列出的键**，
+                // 所以这里把库里那 11 个内置按钮按原顺序照抄一遍（`true` 与原默认行为等价），
+                // 末尾追加「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
+                toolbar: {
+                    // 放最左（库按这里的键顺序渲染）。
+                    crop: { show: true, click: () => cropEditor.openFromViewer() },
+                    // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()
+                    fullscreen: { show: true, click: () => toggleViewerFullscreen() },
+                    'one-to-one': true,
+                    reset: true,
+                    prev: true,
+                    play: true,
+                    next: true,
+                    'rotate-left': true,
+                    'rotate-right': true,
+                    'flip-horizontal': true,
+                    'flip-vertical': true,
+                },
                     slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
 
                 // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
@@ -626,6 +858,388 @@
                 };
             })();
 
+            /* 图片裁剪（Cropper.js v1.6.3）—— 三个入口共用这一个模块：
+             *   · 看图器工具栏的「裁剪」按钮（cropEditor.openFromViewer）
+             *   · 选中操作条的 [data-operate="edit"]（只有单选 jpg/jpeg/png 时出现）
+             *   · 右键 / 长按菜单的「编辑图片」
+             * 规则（老师拍板）：
+             *   · 只有 jpg/jpeg/png 给入口，其它格式一律不出现；
+             *   · 导出格式跟随原图：png → PNG 无损；jpg/jpeg → JPEG q0.95；
+             *   · 不设长边上限（按原图尺寸导出，绝不放大），框选 >30MP 时在标题栏提示体积；
+             *   · 结果作为**一张新图**上传（复用 /upload，字段与页面表单一致），不改原图。
+             * 坐标注意：桌面 html{zoom:1.1} 下由本页 <style> 给 #crop-layer 套了反向缩放，
+             * 让 Cropper 内部的布局单位与屏幕像素一致（与 .viewer-container 同一招）。 */
+            /* 「全屏」按钮（工具栏自定义键）：库 1.10.4 的工具栏里没有"只全屏"的键
+             * （只有「播放」会顺带全屏），所以点击时自己调库的 requestFullscreen()/exitFullscreen()；
+             * 全屏状态一变就给 li 加/去 .is-fs（CSS 换成「退出全屏」图标）。
+             * ★ 必须定义在**这一层**（与 viewer 同级）：工具栏的 click 回调在外层作用域里跑，
+             *   塞进 cropEditor 的 IIFE 里会变成 is not defined（当年 viewer.on 那次同款事故）。
+             * 注意：库的 requestFullscreen() 作用在 documentElement 上，退出要走 document 的 API。 */
+            const toggleViewerFullscreen = () => {
+                const d = document;
+                if (d.fullscreenElement || d.webkitFullscreenElement) {
+                    const exit = d.exitFullscreen || d.webkitExitFullscreen || d.msExitFullscreen || d.mozCancelFullScreen;
+                    if (exit) { exit.call(d); }
+                } else if (viewer && typeof viewer.requestFullscreen === 'function') {
+                    viewer.requestFullscreen();
+                }
+            };
+            /* 全屏状态一变：① 换工具栏按钮的图标 ② 给 <html> 挂/去 .ls-viewer-fs
+             * （那一层负责"只留图 + 纯黑 + UI 全隐"，见本页 <style>）。 */
+            const syncFullscreenIcon = () => {
+                const d = document;
+                const on = !!(d.fullscreenElement || d.webkitFullscreenElement);
+                document.querySelectorAll('.viewer-toolbar li.viewer-fullscreen').forEach((li) => {
+                    li.classList.toggle('is-fs', on);
+                });
+                /* ★ 只在"全屏状态真的从关变开"那一下把 UI 清干净。
+                 * 这个函数会被库的每次切图/重绘带着跑一遍（viewer.view → syncViewerButton → 它），
+                 * 早先写成 `if (on) remove(...)` ⇒ 点 toolbar 的 next/prev、或在缩略图条上滚轮切图时，
+                 * 库一重绘就把刚淡出来的 ls-fs-ui 摘掉，看着就是"一操作 UI 立刻消失"。
+                 * 探针实测的调用栈钉死了这条路径。 */
+                const wasFs = document.documentElement.classList.contains('ls-viewer-fs');
+                document.documentElement.classList.toggle('ls-viewer-fs', on);
+                if (on && ! wasFs) {
+                    document.documentElement.classList.remove('ls-fs-ui');   // 刚进全屏先干干净净
+                }
+            };
+            document.addEventListener('fullscreenchange', syncFullscreenIcon);
+            document.addEventListener('webkitfullscreenchange', syncFullscreenIcon);
+
+            /* 全屏里鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态） */
+            const FS_UI_MS = 2500;
+            let fsUiTimer = 0;
+            /* 全屏里"人还在 UI 上"就不收起 —— 老师第七轮要的：
+             * "我正操作着呢 UI 自己没了，这多烦人"。原来的实现只做了"每次操作重新计时"，
+             * 但鼠标停在 toolbar/缩略图条上不动时没有任何事件，计时照样走完 ⇒ UI 在手指底下消失
+             * （而且此刻它们是 pointer-events:none，点下去还会穿透、甚至误关看图器）。
+             * 这里改成：只要指针落在这些 UI 的矩形内（隐藏时它们仍是 visibility:hidden、布局还在，
+             * 所以量得到矩形；不能用 :hover —— pointer-events:none 时命中测试拿不到它们），
+             * 就只"续期"不排收起；手指按住期间同理。移开/松手后从那一刻重新计时。 */
+            const FS_UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];
+            const pointerOverViewerUI = (x, y) => FS_UI_ZONES.some((sel) => {
+                const el = document.querySelector(sel);
+                if (! el) { return false; }
+                const r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+            });
+            const scheduleFsHide = () => {
+                clearTimeout(fsUiTimer);
+                fsUiTimer = setTimeout(() => document.documentElement.classList.remove('ls-fs-ui'), FS_UI_MS);
+            };
+            const flashFullscreenUI = (e) => {
+                if (! document.documentElement.classList.contains('ls-viewer-fs')) { return; }
+                document.documentElement.classList.add('ls-fs-ui');
+                const type = (e && e.type) || '';
+                if (type.indexOf('touch') === 0) {
+                    clearTimeout(fsUiTimer);            // 手指还按着 ⇒ 别收
+                    return;
+                }
+                if (type !== 'keydown' && pointerOverViewerUI((e && e.clientX) || 0, (e && e.clientY) || 0)) {
+                    clearTimeout(fsUiTimer);            // 鼠标停在 UI 上 ⇒ 只续期
+                    return;
+                }
+                scheduleFsHide();
+            };
+            document.addEventListener('touchend', () => {
+                if (document.documentElement.classList.contains('ls-fs-ui')) {
+                    scheduleFsHide();                   // 手指抬起才开始计时
+                }
+            }, {capture: true, passive: true});
+            /* 这些操作都算"人还在"，一律刷新那 2.5s：
+               移动鼠标 / 滚轮切图 / 点 toolbar 或缩略图条 / 触摸拖动 / 按键。
+               （全部 passive：我们只看不拦，不影响任何默认行为。） */
+            ['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'].forEach((ev) => {
+                document.addEventListener(ev, flashFullscreenUI, {capture: true, passive: true});
+            });
+
+            /* 老师第八轮：① 非全屏"拖动后松手"不该被当成点击；② 全屏点空白不许关、改成显示 UI。
+             * 库里这条链路（压缩产物实读）：
+             *   pointerup 里，若手势 < 500ms、松手目标是 canvas、backdrop 未被关掉，
+             *   就向 .viewer-canvas 派发一个 'click'（常量 S = "click"）；
+             *   库自己的 onClick 是 wt(viewer, 'click', ...) —— 注册在 **.viewer-container 的冒泡阶段**
+             *   （没有 capture）⇒ 我们在 document 捕获阶段一定比它先跑，可以把这一下拦下来。
+             * 注意：那个 click 是 CustomEvent，坐标在 e.detail.originalEvent 里，不在 e.clientX 上。 */
+            (function () {
+                const MOVE_SLOP = 6;        // 按下到松手超过它就当"拖动"（触屏手势同样按这个判）
+                const DRAG_WINDOW = 400;    // 拖动结束后这么久内到达的 canvas 点击，算"这一下的尾巴"
+                let downX = 0;
+                let downY = 0;
+                let dragged = false;
+                let dragEndAt = 0;
+                const isCanvas = (el) => el instanceof Element && el.classList.contains('viewer-canvas');
+                const moved = (x, y) => Math.abs(x - downX) > MOVE_SLOP || Math.abs(y - downY) > MOVE_SLOP;
+                document.addEventListener('pointerdown', (e) => {
+                    downX = e.clientX;
+                    downY = e.clientY;
+                    dragged = false;
+                }, true);
+                document.addEventListener('pointermove', (e) => {
+                    if (! dragged && e.buttons && moved(e.clientX, e.clientY)) { dragged = true; }
+                }, true);
+                /* 触屏：安卓上控件在指针处理里 preventDefault 之后 pointermove 可能收不到，
+                 * 所以 touchmove 也记一份（与页面上双击判定用的是同一套经验）。 */
+                document.addEventListener('touchmove', (e) => {
+                    const t = e.changedTouches && e.changedTouches[0];
+                    if (! dragged && t && moved(t.clientX, t.clientY)) { dragged = true; }
+                }, true);
+                document.addEventListener('pointerup', () => {
+                    if (dragged) { dragEndAt = Date.now(); }
+                }, true);
+                document.addEventListener('pointercancel', () => {
+                    if (dragged) { dragEndAt = Date.now(); }
+                }, true);
+                document.addEventListener('click', (e) => {
+                    if (! isCanvas(e.target)) { return; }
+                    if (Date.now() - dragEndAt < DRAG_WINDOW) {
+                        e.stopPropagation();        // ① 拖动之后的那一下不算点击 ⇒ 不关看图器
+                        return;
+                    }
+                    if (document.documentElement.classList.contains('ls-viewer-fs')) {
+                        e.stopPropagation();        // ② 全屏：干掉"点空白关闭"
+                        const src = (e.detail && e.detail.originalEvent) || e;
+                        flashFullscreenUI({type: 'click', clientX: src.clientX || 0, clientY: src.clientY || 0});
+                    }
+                }, true);
+            })();
+
+            /* 点背景 / 按 × 关掉看图器时，若还在全屏就顺手退出全屏 —— 即"点一下彻底退出" */
+            document.addEventListener('hidden', () => {
+                const d = document;
+                if (d.fullscreenElement || d.webkitFullscreenElement) {
+                    const exit = d.exitFullscreen || d.webkitExitFullscreen || d.msExitFullscreen || d.mozCancelFullScreen;
+                    if (exit) { exit.call(d); }
+                }
+            });
+
+            const cropEditor = (function () {
+                const SUPPORTED = ['jpg', 'jpeg', 'png'];
+                const UPLOAD_URL = '{{ route('upload') }}';
+                let cropper = null;
+                let current = null;
+                let flipX = 1;                      // 翻转态：每次打开/关闭都归零（本来就每次重建实例）
+                let flipY = 1;
+
+                const $layer = () => $('#crop-layer');
+                const $image = () => $('#crop-image');
+
+                const extOf = (url) => {
+                    const path = String(url || '').split('?')[0].split('#')[0];
+                    const m = path.match(/\.([A-Za-z0-9]+)$/);
+                    return m ? m[1].toLowerCase() : '';
+                };
+
+                // 允许传入：卡片元素 / 卡片里的 img / jQuery 对象 / 纯 {url, name} 对象
+                const infoOf = (item) => {
+                    if (item && typeof item === 'object' && ! item.jquery && ! (item instanceof Element) && item.url) {
+                        return { url: item.url, name: item.name || '', ext: extOf(item.url) };
+                    }
+                    const $item = $(item);
+                    let $card = $();
+                    if ($item.is(IMAGES_ITEM)) { $card = $item; }
+                    else if ($item.closest(IMAGES_ITEM).length) { $card = $item.closest(IMAGES_ITEM); }
+                    const json = ($card.length ? $card.data('json') : $item.data('json')) || {};
+                    let url = json.url || '';
+                    if (! url) {
+                        url = $card.find('img[data-original]').attr('data-original')
+                            || $item.find('img[data-original]').attr('data-original')
+                            || '';
+                    }
+                    const name = json.origin_name || json.name || (url ? decodeURIComponent(url.split('/').pop() || '') : '');
+                    return { url: url, name: name, ext: extOf(url) };
+                };
+
+                const supported = (item) => {
+                    const info = infoOf(item);
+                    return !! info.url && SUPPORTED.indexOf(info.ext) !== -1;
+                };
+
+                const refreshHint = () => {
+                    if (! cropper) { return; }
+                    let text = '';
+                    try {
+                        const d = cropper.getData(true);
+                        const mp = (d.width * d.height) / 1e6;
+                        text = d.width + ' × ' + d.height + '（约 ' + mp.toFixed(1) + 'MP';
+                        text += current && current.ext === 'png' ? '，无损 PNG' : '';
+                        text += '）';
+                        if (mp >= 30) { text += ' · 这张比较大，上传要几秒'; }
+                    } catch (e) { text = ''; }
+                    $('#crop-hint').text(text);
+                };
+
+                const close = () => {
+                    if (cropper) { try { cropper.destroy(); } catch (e) {} cropper = null; }
+                    current = null;
+                    flipX = 1;
+                    flipY = 1;
+                    $layer().removeClass('is-open is-busy').attr('aria-hidden', 'true');
+                    $image().removeAttr('src');
+                    $('#crop-ratios a').removeClass('active').filter('[data-crop-ratio="free"]').addClass('active');
+                };
+
+                const open = (item) => {
+                    const info = infoOf(item);
+                    if (! info.url) { toastr.warning('没有找到这张图片的地址'); return; }
+                    if (SUPPORTED.indexOf(info.ext) === -1) { toastr.warning('该格式不支持编辑'); return; }
+                    // 看图器开着就先关掉：两层叠在一起会互相抢手势
+                    try {
+                        if (document.body.classList.contains('viewer-open') && viewer && typeof viewer.hide === 'function') {
+                            viewer.hide();
+                        }
+                    } catch (e) {}
+                    if (cropper) { try { cropper.destroy(); } catch (e) {} cropper = null; }
+                    current = info;
+                    flipX = 1;
+                    flipY = 1;
+                    $layer().addClass('is-open').attr('aria-hidden', 'false');
+                    $('#crop-hint').text('加载中…');
+                    const img = $image().get(0);
+                    img.onload = () => {
+                        cropper = new Cropper(img, {
+                            viewMode: 1,                    // 裁剪框不超出图片
+                            dragMode: 'move',
+                            autoCropArea: 0.8,
+                            background: false,
+                            modal: false,                   // 框外变暗改由 #crop-layer 里的 box-shadow 负责，见本页 <style>
+                            checkOrientation: true,         // 带 EXIF 旋转的手机图按显示方向处理
+                            rotatable: true,
+                            scalable: true,                 // 翻转要 scaleX/scaleY（Cropper 里 scale() 受这一项开关）；
+                                                            // 放大缩小手势仍由 zoomable/zoomOnTouch/zoomOnWheel 管
+                            zoomOnTouch: true,
+                            zoomOnWheel: true,
+                            toggleDragModeOnDblclick: false,
+                            ready: refreshHint,
+                            crop: refreshHint,
+                        });
+                        refreshHint();
+                    };
+                    img.onerror = () => {
+                        close();
+                        toastr.warning('图片加载失败（跨域被拦或网络问题）');
+                    };
+                    img.src = info.url;
+                };
+
+                // 看图器里当前显示的那张：url: 'data-original' ⇒ canvas 里最后插入的 img 的 src 就是原图地址
+                const viewerUrl = () => {
+                    const imgs = document.querySelectorAll('.viewer-canvas img');
+                    for (let i = imgs.length - 1; i >= 0; i--) {
+                        const src = imgs[i].getAttribute('src');
+                        if (src) { return src; }
+                    }
+                    return '';
+                };
+
+                const openFromViewer = () => {
+                    const url = viewerUrl();
+                    if (! url) { toastr.warning('没有找到当前图片'); return; }
+                    const card = document.querySelector(IMAGES_ITEM + ' img[data-original="' + url.replace(/"/g, '\\"') + '"]');
+                    open(card || { url: url });
+                };
+
+                // 看图器里切图后，按当前图格式显示/隐藏「裁剪」按钮（其它格式不给入口）
+                const syncViewerButton = () => {
+                    const url = viewerUrl();
+                    const ok = !! url && SUPPORTED.indexOf(extOf(url)) !== -1;
+                    document.querySelectorAll('.viewer-toolbar li.viewer-crop').forEach((li) => {
+                        li.style.display = ok ? '' : 'none';
+                    });
+                    syncFullscreenIcon();      // 工具栏可能刚被重建，全屏图标状态跟着补一次
+                };
+                document.addEventListener('viewed', syncViewerButton);
+                document.addEventListener('shown', syncViewerButton);
+
+                const upload = (file) => {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    const $strategy = $('#strategy-selected');
+                    if ($strategy.length && $strategy.data('id')) { fd.append('strategy_id', $strategy.data('id')); }
+                    const token = $('meta[name="csrf-token"]').attr('content');
+                    $layer().addClass('is-busy');
+                    $('#crop-hint').text('上传中…');
+                    return $.ajax({
+                        url: UPLOAD_URL,
+                        type: 'POST',
+                        data: fd,
+                        processData: false,
+                        contentType: false,
+                        headers: token ? { 'X-CSRF-TOKEN': token } : {},
+                        dataType: 'json',
+                    }).done((response) => {
+                        if (response && response.status === false) {
+                            toastr.error(response.message || '上传失败');
+                            return;
+                        }
+                        close();
+                        toastr.success('已裁剪并上传');
+                        try { if (typeof resetImages === 'function') { resetImages(); } } catch (e) {}
+                    }).fail((xhr) => {
+                        const data = xhr && xhr.responseJSON;
+                        let msg = (data && (data.message || data.data)) || ('上传失败（HTTP ' + (xhr ? xhr.status : '?') + '）');
+                        if (data && data.errors) { msg = '上传失败：' + Object.values(data.errors).flat().join('；'); }
+                        toastr.error(msg);
+                        $('#crop-hint').text('上传失败，可重试');
+                    }).always(() => {
+                        $layer().removeClass('is-busy');
+                    });
+                };
+
+                const doCrop = () => {
+                    if (! cropper || ! current) { return; }
+                    const isPng = current.ext === 'png';
+                    const mime = isPng ? 'image/png' : 'image/jpeg';
+                    let canvas = null;
+                    try {
+                        // 不设 maxWidth/maxHeight：按原图尺寸导出（绝不放大）
+                        canvas = cropper.getCroppedCanvas({ imageSmoothingQuality: 'high' });
+                    } catch (e) { canvas = null; }
+                    if (! canvas || ! canvas.width || ! canvas.height) { toastr.warning('裁剪失败，请重试'); return; }
+                    const base = (current.name || 'image').replace(/\.[^.]*$/, '');
+                    const name = base + (isPng ? '.png' : '.jpg');
+                    const done = (blob) => {
+                        if (! blob) { toastr.warning('导出失败，请重试'); return; }
+                        upload(new File([blob], name, { type: mime }));
+                    };
+                    if (typeof canvas.toBlob === 'function') {
+                        canvas.toBlob(done, mime, isPng ? undefined : 0.95);
+                    } else {
+                        const dataUrl = canvas.toDataURL(mime, isPng ? undefined : 0.95);
+                        const bin = atob(dataUrl.split(',')[1]);
+                        const arr = new Uint8Array(bin.length);
+                        for (let i = 0; i < bin.length; i++) { arr[i] = bin.charCodeAt(i); }
+                        done(new Blob([arr], { type: mime }));
+                    }
+                };
+
+                if ($('#crop-layer').length) {
+                    $layer().on('click', '[data-crop-action]', function () {
+                        const action = $(this).data('crop-action');
+                        if (action === 'cancel') { return close(); }
+                        if (action === 'crop') { return doCrop(); }
+                        if (! cropper) { return; }
+                        if (action === 'rotate-left') { cropper.rotate(-90); }
+                        if (action === 'rotate-right') { cropper.rotate(90); }
+                        if (action === 'flip-x') { flipX = -flipX; cropper.scale(flipX, flipY); }
+                        if (action === 'flip-y') { flipY = -flipY; cropper.scale(flipX, flipY); }
+                        refreshHint();
+                    });
+                    $layer().on('click', '[data-crop-ratio]', function () {
+                        const ratio = $(this).data('crop-ratio');
+                        if (! cropper) { return; }
+                        $(this).siblings().removeClass('active');
+                        $(this).addClass('active');
+                        if (ratio === '1:1') { cropper.setAspectRatio(1); }
+                        else if (ratio === '4:3') { cropper.setAspectRatio(4 / 3); }
+                        else if (ratio === '16:9') { cropper.setAspectRatio(16 / 9); }
+                        else { cropper.setAspectRatio(NaN); }
+                        refreshHint();
+                    });
+                }
+
+                return { open: open, openFromViewer: openFromViewer, supported: supported, close: close };
+            })();
+
             /* 底部缩略图条上的快捷切图（老师要的功能）。
              *   · 电脑：光标在缩略图条上滚轮 ⇒ 滚一格切一张。
              *     控件自己在外层容器上绑了"滚轮缩放"（捕获阶段），所以这里也在 document 捕获
@@ -650,17 +1264,32 @@
                     const target = Math.max(0, Math.min(n - 1, i));
                     if (target !== viewer.index) viewer.view(target);
                 };
-                document.addEventListener('wheel', (e) => {
+                /* 滚轮切图：这里**必须**能 preventDefault，否则页面会跟着一起滚
+                 * （老师报的"缩略图条滚轮切图的同时整页也在滚"）。
+                 * 代价：document 上的非 passive wheel 会让浏览器失去"不等 JS 就滚动"的快路径 ⇒
+                 * 只在看图器打开期间挂它（shown 挂 / hidden 摘），平时整页滚动一点不受影响。
+                 * 仍然要 stopPropagation：控件"把滚轮当缩放"是在外层容器的捕获阶段做的，
+                 * 不拦住它，图上滚轮就会被同时当成缩放。 */
+                const onBarWheel = (e) => {
                     if (!inBar(e.target)) return;
-                    e.stopPropagation();        // 足够：控件"把滚轮当缩放"是在它自己的监听器里做的，
-                                                // 拦住传播它就收不到。这里**不能**用 preventDefault ——
-                                                // document 上的非 passive wheel 同样会让浏览器失去
-                                                // "不等 JS 就滚动/绘制"的快路径（与 touchmove 那个坑同源）。
+                    e.stopPropagation();
+                    e.preventDefault();
                     const now = Date.now();
                     if (now - lastWheel < WHEEL_GAP) return;
                     lastWheel = now;
                     goTo(viewer.index + (e.deltaY > 0 ? 1 : -1));
-                }, {capture: true, passive: true});
+                };
+                let barWheelOn = false;
+                document.addEventListener('shown', () => {
+                    if (barWheelOn) return;
+                    barWheelOn = true;
+                    document.addEventListener('wheel', onBarWheel, {capture: true, passive: false});
+                });
+                document.addEventListener('hidden', () => {
+                    if (!barWheelOn) return;
+                    barWheelOn = false;
+                    document.removeEventListener('wheel', onBarWheel, {capture: true});
+                });
                 document.addEventListener('touchstart', (e) => {
                     navDown = inBar(e.target);
                     const t = e.changedTouches && e.changedTouches[0];
@@ -1559,7 +2188,34 @@
              * 正解：clientX/clientY 与 getBoundingClientRect() 同属**视觉**坐标，这里按原始指针
              *  路径自己记框，然后 ① 覆盖 Selector.rect 给库判定用 ② 每帧把屏幕上的框也摆到同一处。
              * ------------------------------------------------------------------------ */
-            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0};
+            /* ★ 库的硬门（源码 Interaction._canInteract）：
+             *     !( e.button===2 || isInteracting
+             *        || (e.target && !SelectorArea.isInside(e.target))
+             *        || (!t && !SelectorArea.isClicked(e)) )
+             *   ⇒ **指针位置必须落在 SelectorArea.rect 里**，按在卡片上还是缝隙上都不例外。
+             *   而 SelectorArea.rect 的实现是
+             *     get rect(){ return this._rect ? this._rect : this._rect = this.HTMLNode.getBoundingClientRect() }
+             *   —— **算一次就永久缓存**。原来只在 jg.complete / jg.resize 清过，于是滚动、切侧栏、
+             *   懒加载新图、窗口变化之后它全过期 ⇒ 症状就是"某些位置能拖、某些位置怎么拖都不出框"
+             *   （老师实测：同一页里换个起点就成一个不成）。
+             * 这里每帧/每次按下都把它刷成**当前真实矩形**，库那一刻读到的就是活值 —— 不再依赖
+             * 猜"哪种操作会让它过期"。 */
+            const dsSyncAreaRect = () => {
+                try {
+                    const area = document.querySelector(IMAGES_SCROLL);
+                    if (! area) { return; }
+                    const r = area.getBoundingClientRect();
+                    ds.Area && (ds.Area._rect = undefined);
+                    if (ds.SelectorArea) {
+                        ds.SelectorArea._rect = {
+                            left: r.left, top: r.top, right: r.right, bottom: r.bottom,
+                            width: r.width, height: r.height,
+                        };
+                    }
+                } catch (err) { /* 库内部结构若变，最多回到旧行为，不影响拖动本身 */ }
+            };
+
+            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0, selfSelect: false};
             let dsRaf = 0;
             const dsBoxRect = () => {
                 const l = Math.min(dsBox.x0, dsBox.x1), t = Math.min(dsBox.y0, dsBox.y1);
@@ -1585,6 +2241,7 @@
                 }
                 if (box && ar && getComputedStyle(box).display !== 'none') {
                     const r = dsBoxRect();
+                    dsSyncAreaRect();          // 拖的过程中布局也可能变（自动滚动/缩放），一并刷新
                     // 框是外壳的子元素 → 坐标必须相对区域原点，否则会再叠一层外壳的偏移（实测差 310px）
                     box.style.left = ((r.left - ar.left) / z) + 'px';
                     box.style.top = ((r.top - ar.top) / z) + 'px';
@@ -1599,10 +2256,24 @@
                 if (e.button !== 0 || ! e.target || ! e.target.closest) {
                     return;
                 }
-                if (! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM)) {
+                /* 必须在这里就先刷：本监听器是捕获阶段，库的 mousedown 在冒泡阶段，
+                 * 顺序上我们一定先跑，库判定时读到的才是刷新后的矩形。 */
+                dsSyncAreaRect();
+                const inArea = !! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM);
+                /* 老师第六轮的期待：「从窗口最左边按下拖动也要能框选」。
+                 * 侧栏是 fixed 元素、盖在网格左边（展开时 256px 宽），它上面的 mousedown 根本到不了
+                 * DragSelect 的区域 ⇒ 库不会启动。所以这种"区域外起始"的拖动由我们接管：
+                 * 只要按点落在**网格所在的水平范围与垂直范围**内（x ≤ 网格右缘、y ≥ 网格上缘），
+                 * 就算框选开始；松手时由我们自己落选中（见下面的 mouseup）。
+                 * 网格内部起始的拖动一行都不改，仍走库原来的路径。 */
+                const area = document.querySelector(IMAGES_SCROLL);
+                const ar = area ? area.getBoundingClientRect() : null;
+                const outOfAreaOk = !! ar && e.clientX <= ar.right && e.clientY >= ar.top;
+                if (! inArea && ! outOfAreaOk) {
                     return;
                 }
                 dsBox.on = true;
+                dsBox.selfSelect = ! inArea;      // 区域外起始 ⇒ 选中由我们自己落
                 dsBox.x0 = dsBox.x1 = e.clientX;
                 dsBox.y0 = dsBox.y1 = e.clientY;
                 if (! dsRaf) {
@@ -1617,7 +2288,30 @@
                 dsBox.y1 = e.clientY;
             }, true);
             document.addEventListener('mouseup', () => {
+                /* 区域外起始（侧栏上按下）的拖动：库完全没参与，选中由我们自己落。
+                 * 只认"真的是拖动"（框任一边 > 4px）—— 侧栏上单击导航仍然是单击。
+                 * 用库的对外 API 落选，这样 elementselect / elementunselect 事件照常发，
+                 * 顶部的「已选择 N 张」操作栏也照常更新（bindOperates 再兜一次）。 */
+                if (dsBox.on && dsBox.selfSelect) {
+                    const r = dsBoxRect();
+                    if (r.width > 4 || r.height > 4) {
+                        try {
+                            const hit = [].slice.call(document.querySelectorAll(IMAGES_ITEM)).filter((el) => {
+                                const b = el.getBoundingClientRect();
+                                return b.right > r.left && b.left < r.right && b.bottom > r.top && b.top < r.bottom;
+                            });
+                            if (hit.length) {
+                                ds.clearSelection();
+                                hit.forEach((el) => ds.addSelection(el));
+                                bindOperates();
+                            }
+                        } catch (err) {
+                            console.warn('outside-area select skipped:', err);
+                        }
+                    }
+                }
                 dsBox.on = false;
+                dsBox.selfSelect = false;
             }, true);
             // 库判定用的矩形 = 原始指针坐标下的框（与卡片矩形同属视觉坐标，比较才成立）
             try {
@@ -1664,6 +2358,10 @@
                 }
                 if (selected.length === 1) {
                     operates = ['refresh', 'movements', 'tag', 'detail', 'rename', 'delete', 'deselect'];
+                    // 「编辑图片」只在 jpg/jpeg/png 时给入口（其它格式一律不出现）
+                    if (cropEditor.supported(selected[0])) {
+                        operates.splice(operates.indexOf('rename'), 0, 'edit');
+                    }
                 }
                 if (selected.length > 1) {
                     operates = ['refresh', 'movements', 'tag', 'delete', 'deselect'];
@@ -1912,6 +2610,10 @@
                 });
 
             const methods = {
+                edit(item) {
+                    // 编辑图片（裁剪）—— 三个入口最终都走 cropEditor
+                    cropEditor.open(item);
+                },
                 movements() {
                     // 「移动到相册」走居中卡片弹窗（相册列表也在 #album-switch-modal 里，
                     // 页面里已经没有右侧抽屉了）。
@@ -2161,6 +2863,11 @@
                     visible: () => ds.getSelection().length === 1,
                 },
                 refresh: {text: '刷新', action: _ => resetImages()},
+                edit: {
+                    text: '编辑图片',
+                    visible: () => ds.getSelection().length === 1 && cropEditor.supported(ds.getSelection()[0]),
+                    action: e => methods.edit(e),
+                },
                 rename: {
                     text: '重命名',
                     visible: () => ds.getSelection().length === 1,
@@ -2248,6 +2955,7 @@
                     actions.tag,
                     actions.detail,
                     {divider: true},
+                    actions.edit,
                     actions.rename,
                     actions.delete,
                 ],
@@ -2291,6 +2999,9 @@
                         break;
                     case 'detail':
                         methods.detail(selected[0]);
+                        break;
+                    case 'edit': // 编辑图片（裁剪）
+                        methods.edit(selected[0]);
                         break;
                     case 'delete': // 删除
                         methods.delete();
