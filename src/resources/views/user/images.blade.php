@@ -41,6 +41,13 @@
              *   （render.js initBody），那时文档还没溢出，量到的是 0，所以它补的 paddingRight
              *   恒为 0px（真机实测确认过），指望它补是不行的。 */
             html { scrollbar-gutter: stable; }
+            /* ★ 但真机（不同浏览器/滚动条实现）上仍偶发"抽一下"⇒ 再上一层保险，跟 sweetalert
+             *   那套一致：不让库动 body。看图器打开时 .viewer-open{overflow:hidden} 会拿走滚动条，
+             *   这里用更高的权重（body.viewer-open 权重 (0,1,1) > 库的 .viewer-open (0,1,0)）
+             *   把它按回 visible ⇒ 滚动条一直在、可用宽度不变 ⇒ 必然不重排。
+             *   看图器自身是 fixed 全屏覆盖 + touch-action:none，指针/触摸不会漏到后面；
+             *   滚轮被库自己的 zoomOnWheel 处理（非 passive + preventDefault），背景也不会被滚走。 */
+            body.viewer-open { overflow: visible; }
                         .viewer-canvas > img:not([style]) {
                 width: 1px;
                 height: 1px;
@@ -165,12 +172,28 @@
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E");
-            /* 图形比盒子小一圈（18px 配 1px 偏移），看着跟库自带的 +/− 一样秀气；
-               盒子仍是 20×20、按钮仍是 24×24 ⇒ 热区不变。 */
-            background-position: 1px 1px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E");
+            /* 图形比盒子小一圈（14px 配 3px 居中偏移）；盒子仍 20×20、按钮仍 24×24 ⇒ 热区不变。 */
+            background-position: 3px 3px;
             background-repeat: no-repeat;
-            background-size: 18px 18px;
+            background-size: 14px 14px;
+        }
+
+        /* 看图器工具栏的「全屏」按钮图标。库 1.10.4 的工具栏里**没有**"只全屏"的键
+           （只有「播放」会顺带全屏），所以它也是自定义键，图标同样要自己补 content 与 20×20 盒子。
+           全屏状态下 JS 会给这个 li 加 .is-fs，图标换成「退出全屏」。 */
+        html .viewer-toolbar > ul > li.viewer-fullscreen:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3H5a2 2 0 0 0-2 2v3'/%3E%3Cpath d='M16 3h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M21 16v3a2 2 0 0 1-2 2h-3'/%3E%3Cpath d='M3 16v3a2 2 0 0 0 2 2h3'/%3E%3C/svg%3E");
+            background-position: 3px 3px;
+            background-repeat: no-repeat;
+            background-size: 14px 14px;
+        }
+        html .viewer-toolbar > ul > li.viewer-fullscreen.is-fs:before {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v3a2 2 0 0 1-2 2H3'/%3E%3Cpath d='M21 8h-3a2 2 0 0 1-2-2V3'/%3E%3Cpath d='M3 16h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M16 21v-3a2 2 0 0 1 2-2h3'/%3E%3C/svg%3E");
         }
     </style>
 @endpush
@@ -729,8 +752,8 @@
                 toolbar: {
                     // 放最左（库按这里的键顺序渲染）。
                     crop: { show: true, click: () => cropEditor.openFromViewer() },
-                    'zoom-in': true,
-                    'zoom-out': true,
+                    // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()
+                    fullscreen: { show: true, click: () => toggleViewerFullscreen() },
                     'one-to-one': true,
                     reset: true,
                     prev: true,
@@ -802,6 +825,31 @@
              *   · 结果作为**一张新图**上传（复用 /upload，字段与页面表单一致），不改原图。
              * 坐标注意：桌面 html{zoom:1.1} 下由本页 <style> 给 #crop-layer 套了反向缩放，
              * 让 Cropper 内部的布局单位与屏幕像素一致（与 .viewer-container 同一招）。 */
+            /* 「全屏」按钮（工具栏自定义键）：库 1.10.4 的工具栏里没有"只全屏"的键
+             * （只有「播放」会顺带全屏），所以点击时自己调库的 requestFullscreen()/exitFullscreen()；
+             * 全屏状态一变就给 li 加/去 .is-fs（CSS 换成「退出全屏」图标）。
+             * ★ 必须定义在**这一层**（与 viewer 同级）：工具栏的 click 回调在外层作用域里跑，
+             *   塞进 cropEditor 的 IIFE 里会变成 is not defined（当年 viewer.on 那次同款事故）。
+             * 注意：库的 requestFullscreen() 作用在 documentElement 上，退出要走 document 的 API。 */
+            const toggleViewerFullscreen = () => {
+                const d = document;
+                if (d.fullscreenElement || d.webkitFullscreenElement) {
+                    const exit = d.exitFullscreen || d.webkitExitFullscreen || d.msExitFullscreen || d.mozCancelFullScreen;
+                    if (exit) { exit.call(d); }
+                } else if (viewer && typeof viewer.requestFullscreen === 'function') {
+                    viewer.requestFullscreen();
+                }
+            };
+            const syncFullscreenIcon = () => {
+                const d = document;
+                const on = !!(d.fullscreenElement || d.webkitFullscreenElement);
+                document.querySelectorAll('.viewer-toolbar li.viewer-fullscreen').forEach((li) => {
+                    li.classList.toggle('is-fs', on);
+                });
+            };
+            document.addEventListener('fullscreenchange', syncFullscreenIcon);
+            document.addEventListener('webkitfullscreenchange', syncFullscreenIcon);
+
             const cropEditor = (function () {
                 const SUPPORTED = ['jpg', 'jpeg', 'png'];
                 const UPLOAD_URL = '{{ route('upload') }}';
@@ -935,6 +983,7 @@
                     document.querySelectorAll('.viewer-toolbar li.viewer-crop').forEach((li) => {
                         li.style.display = ok ? '' : 'none';
                     });
+                    syncFullscreenIcon();      // 工具栏可能刚被重建，全屏图标状态跟着补一次
                 };
                 document.addEventListener('viewed', syncViewerButton);
                 document.addEventListener('shown', syncViewerButton);

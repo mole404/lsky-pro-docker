@@ -2326,9 +2326,9 @@
 +    return api;
 +})();
 ---- src/resources/views/user/images.blade.php
---- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-07 21:46:57.827320 +0800
-+++ src/resources/views/user/images.blade.php	2026-10-07 21:46:57.827320 +0800
-@@ -4,45 +4,222 @@
+--- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-07 22:18:24.136929 +0800
++++ src/resources/views/user/images.blade.php	2026-10-07 22:18:24.136929 +0800
+@@ -4,45 +4,245 @@
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
@@ -2369,6 +2369,13 @@
 +             *   （render.js initBody），那时文档还没溢出，量到的是 0，所以它补的 paddingRight
 +             *   恒为 0px（真机实测确认过），指望它补是不行的。 */
 +            html { scrollbar-gutter: stable; }
++            /* ★ 但真机（不同浏览器/滚动条实现）上仍偶发"抽一下"⇒ 再上一层保险，跟 sweetalert
++             *   那套一致：不让库动 body。看图器打开时 .viewer-open{overflow:hidden} 会拿走滚动条，
++             *   这里用更高的权重（body.viewer-open 权重 (0,1,1) > 库的 .viewer-open (0,1,0)）
++             *   把它按回 visible ⇒ 滚动条一直在、可用宽度不变 ⇒ 必然不重排。
++             *   看图器自身是 fixed 全屏覆盖 + touch-action:none，指针/触摸不会漏到后面；
++             *   滚轮被库自己的 zoomOnWheel 处理（非 passive + preventDefault），背景也不会被滚走。 */
++            body.viewer-open { overflow: visible; }
 +                        .viewer-canvas > img:not([style]) {
 +                width: 1px;
 +                height: 1px;
@@ -2493,12 +2500,28 @@
 +            display: block;
 +            width: 20px;
 +            height: 20px;
-+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E");
-+            /* 图形比盒子小一圈（18px 配 1px 偏移），看着跟库自带的 +/− 一样秀气；
-+               盒子仍是 20×20、按钮仍是 24×24 ⇒ 热区不变。 */
-+            background-position: 1px 1px;
++            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E");
++            /* 图形比盒子小一圈（14px 配 3px 居中偏移）；盒子仍 20×20、按钮仍 24×24 ⇒ 热区不变。 */
++            background-position: 3px 3px;
 +            background-repeat: no-repeat;
-+            background-size: 18px 18px;
++            background-size: 14px 14px;
++        }
++
++        /* 看图器工具栏的「全屏」按钮图标。库 1.10.4 的工具栏里**没有**"只全屏"的键
++           （只有「播放」会顺带全屏），所以它也是自定义键，图标同样要自己补 content 与 20×20 盒子。
++           全屏状态下 JS 会给这个 li 加 .is-fs，图标换成「退出全屏」。 */
++        html .viewer-toolbar > ul > li.viewer-fullscreen:before {
++            content: '';
++            display: block;
++            width: 20px;
++            height: 20px;
++            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3H5a2 2 0 0 0-2 2v3'/%3E%3Cpath d='M16 3h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M21 16v3a2 2 0 0 1-2 2h-3'/%3E%3Cpath d='M3 16v3a2 2 0 0 0 2 2h3'/%3E%3C/svg%3E");
++            background-position: 3px 3px;
++            background-repeat: no-repeat;
++            background-size: 14px 14px;
++        }
++        html .viewer-toolbar > ul > li.viewer-fullscreen.is-fs:before {
++            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v3a2 2 0 0 1-2 2H3'/%3E%3Cpath d='M21 8h-3a2 2 0 0 1-2-2V3'/%3E%3Cpath d='M3 16h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M16 21v-3a2 2 0 0 1 2-2h3'/%3E%3C/svg%3E");
 +        }
 +    </style>
  @endpush
@@ -2567,7 +2590,7 @@
                      </a>
                  </x-slot>
  
-@@ -57,38 +234,122 @@
+@@ -57,38 +257,122 @@
                      </x-dropdown-link>
                  </x-slot>
              </x-dropdown>
@@ -2708,7 +2731,7 @@
          </div>
      </div>
  
-@@ -96,112 +357,301 @@
+@@ -96,112 +380,301 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -3075,7 +3098,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +667,591 @@
+@@ -217,44 +690,617 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -3158,8 +3181,8 @@
 +                toolbar: {
 +                    // 放最左（库按这里的键顺序渲染）。
 +                    crop: { show: true, click: () => cropEditor.openFromViewer() },
-+                    'zoom-in': true,
-+                    'zoom-out': true,
++                    // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()
++                    fullscreen: { show: true, click: () => toggleViewerFullscreen() },
 +                    'one-to-one': true,
 +                    reset: true,
 +                    prev: true,
@@ -3234,6 +3257,31 @@
 +             *   · 结果作为**一张新图**上传（复用 /upload，字段与页面表单一致），不改原图。
 +             * 坐标注意：桌面 html{zoom:1.1} 下由本页 <style> 给 #crop-layer 套了反向缩放，
 +             * 让 Cropper 内部的布局单位与屏幕像素一致（与 .viewer-container 同一招）。 */
++            /* 「全屏」按钮（工具栏自定义键）：库 1.10.4 的工具栏里没有"只全屏"的键
++             * （只有「播放」会顺带全屏），所以点击时自己调库的 requestFullscreen()/exitFullscreen()；
++             * 全屏状态一变就给 li 加/去 .is-fs（CSS 换成「退出全屏」图标）。
++             * ★ 必须定义在**这一层**（与 viewer 同级）：工具栏的 click 回调在外层作用域里跑，
++             *   塞进 cropEditor 的 IIFE 里会变成 is not defined（当年 viewer.on 那次同款事故）。
++             * 注意：库的 requestFullscreen() 作用在 documentElement 上，退出要走 document 的 API。 */
++            const toggleViewerFullscreen = () => {
++                const d = document;
++                if (d.fullscreenElement || d.webkitFullscreenElement) {
++                    const exit = d.exitFullscreen || d.webkitExitFullscreen || d.msExitFullscreen || d.mozCancelFullScreen;
++                    if (exit) { exit.call(d); }
++                } else if (viewer && typeof viewer.requestFullscreen === 'function') {
++                    viewer.requestFullscreen();
++                }
++            };
++            const syncFullscreenIcon = () => {
++                const d = document;
++                const on = !!(d.fullscreenElement || d.webkitFullscreenElement);
++                document.querySelectorAll('.viewer-toolbar li.viewer-fullscreen').forEach((li) => {
++                    li.classList.toggle('is-fs', on);
++                });
++            };
++            document.addEventListener('fullscreenchange', syncFullscreenIcon);
++            document.addEventListener('webkitfullscreenchange', syncFullscreenIcon);
++
 +            const cropEditor = (function () {
 +                const SUPPORTED = ['jpg', 'jpeg', 'png'];
 +                const UPLOAD_URL = '{{ route('upload') }}';
@@ -3367,6 +3415,7 @@
 +                    document.querySelectorAll('.viewer-toolbar li.viewer-crop').forEach((li) => {
 +                        li.style.display = ok ? '' : 'none';
 +                    });
++                    syncFullscreenIcon();      // 工具栏可能刚被重建，全屏图标状态跟着补一次
 +                };
 +                document.addEventListener('viewed', syncViewerButton);
 +                document.addEventListener('shown', syncViewerButton);
@@ -3689,7 +3738,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,7 +1273,11 @@
+@@ -276,7 +1322,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
@@ -3702,7 +3751,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +1301,73 @@
+@@ -300,22 +1350,73 @@
                  }
              });
  
@@ -3780,7 +3829,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +1380,40 @@
+@@ -328,29 +1429,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -3831,7 +3880,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +1421,13 @@
+@@ -358,12 +1470,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -3847,7 +3896,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +1436,14 @@
+@@ -372,13 +1485,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -3865,7 +3914,7 @@
                              );
                          }
                      });
-@@ -386,6 +1451,12 @@
+@@ -386,6 +1500,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -3878,7 +3927,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +1466,14 @@
+@@ -395,12 +1515,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -3895,7 +3944,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +1505,18 @@
+@@ -432,15 +1554,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -3917,7 +3966,7 @@
                  });
              }
  
-@@ -449,9 +1525,366 @@
+@@ -449,9 +1574,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -4287,7 +4336,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +1901,158 @@
+@@ -468,11 +1950,158 @@
              });
          </script>
          <script>
@@ -4315,8 +4364,8 @@
                  area: $(IMAGES_SCROLL).get(0),
                  keyboardDrag: false,
 +                zoom: dsPageZoom(),
-+            });
-+
+             });
+ 
 +            /* ---------------- 框选失效的真因与修法（fork 修复） ----------------
 +             * 现象：图片墙上按住左键拖动，怎么拖都框不出选择框（按在图片上、按在缝隙上都不行）。
 +             * 真因：DragSelect 会给区域套一层 .ds-selector-area 包装盒，并把这个盒子的矩形**缓存**下来
@@ -4432,8 +4481,8 @@
 +                if ($(e.target).closest(IMAGES_ITEM).length) {
 +                    e.preventDefault();
 +                }
-             });
- 
++            });
++
 +            // 单击（没拖动）不改变勾选 —— 见上面 ②
 +            // 兜底：万一库没收到 mouseup（拖到窗口外等），松手也要解锁，别让界面卡在拖动状态
 +            document.addEventListener('mouseup', () => {
@@ -4446,7 +4495,7 @@
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +2066,14 @@
+@@ -486,10 +2115,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4463,7 +4512,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -502,17 +2086,68 @@
+@@ -502,17 +2135,68 @@
                      ds.stop();
                  }
  
@@ -4533,7 +4582,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2168,250 @@
+@@ -533,27 +2217,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -4801,7 +4850,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2422,9 @@
+@@ -564,7 +2471,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -4812,7 +4861,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2432,19 @@
+@@ -572,47 +2481,19 @@
                          }
                      });
                  },
@@ -4869,7 +4918,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2481,10 @@
+@@ -649,6 +2530,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -4880,7 +4929,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2498,23 @@
+@@ -662,13 +2547,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -4906,7 +4955,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2529,11 @@
+@@ -683,7 +2578,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -4918,7 +4967,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2544,13 @@
+@@ -694,10 +2593,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -4934,7 +4983,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +2572,11 @@
+@@ -719,6 +2621,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -4946,7 +4995,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +2641,9 @@
+@@ -783,9 +2690,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -4959,7 +5008,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +2661,10 @@
+@@ -803,9 +2710,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -4971,7 +5020,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -844,17 +2703,27 @@
+@@ -844,17 +2752,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;

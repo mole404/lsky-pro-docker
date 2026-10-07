@@ -51,8 +51,9 @@ console.log('\n[1] Cropper.js v1.6.3 已 vendored 且被 blade 正确引入');
 // ---------------------------------------------------------------- 2. 三处入口
 console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
 {
-    // ① 看图器工具栏（自定义 toolbar 必须把内置 11 个按钮照抄，否则它们会消失）
-    const builtins = ['zoom-in', 'zoom-out', 'one-to-one', 'reset', 'prev', 'play', 'next', 'rotate-left', 'rotate-right', 'flip-horizontal', 'flip-vertical'];
+    // ① 看图器工具栏（自定义 toolbar 必须把要用的内置按钮照抄，否则它们会消失）
+    // 注意：+ / − （zoom-in / zoom-out）已按老师要求去掉，原位换成自定义的「全屏」键。
+    const builtins = ['one-to-one', 'reset', 'prev', 'play', 'next', 'rotate-left', 'rotate-right', 'flip-horizontal', 'flip-vertical'];
     const toolbarStart = code.indexOf('toolbar: {');
     // 注意：不能拿第一个 '},' 当结尾 —— crop 那行自己的结尾就是 `},`（它现在排在最前）。
     const toolbarBlock = toolbarStart < 0 ? '' : code.slice(toolbarStart, code.indexOf("'flip-vertical': true", toolbarStart) + 400);
@@ -67,18 +68,43 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
     check('11 个内置按钮按原顺序全部列全（否则自定义模式下不渲染）', ordered, `keys=${builtins.length}`);
     check('toolbar 里追加了 crop 按钮', /crop:\s*\{\s*show:\s*true,\s*click:/.test(toolbarBlock));
     check('crop 按钮的 click 调 cropEditor.openFromViewer', toolbarBlock.includes('cropEditor.openFromViewer()'));
+    check('+ / − 已去掉（自定义 toolbar 里不再有 zoom-in / zoom-out）',
+        !/'zoom-in'/.test(toolbarBlock) && !/'zoom-out'/.test(toolbarBlock));
+    check('原 +/− 的位置换成了「全屏」自定义键（click 调 toggleViewerFullscreen）',
+        /fullscreen:\s*\{\s*show:\s*true,\s*click:\s*\(\)\s*=>\s*toggleViewerFullscreen\(\)/.test(toolbarBlock));
+    check('全屏按钮紧随「裁剪」之后（= 原来 +/− 的位置）',
+        toolbarBlock.indexOf('fullscreen:') > toolbarBlock.indexOf('crop: {')
+        && toolbarBlock.indexOf('fullscreen:') < toolbarBlock.indexOf("'one-to-one': true"));
+    check('全屏开关实现：全屏时走 document 的 exit，否则调库的 viewer.requestFullscreen()',
+        /toggleViewerFullscreen[\s\S]{0,700}viewer\.requestFullscreen\(\)/.test(code)
+        && /exitFullscreen \|\| d\.webkitExitFullscreen/.test(code));
+    check('全屏状态变化时同步图标（fullscreenchange / webkitfullscreenchange → .is-fs）',
+        code.includes("document.addEventListener('fullscreenchange', syncFullscreenIcon)")
+        && code.includes("document.addEventListener('webkitfullscreenchange', syncFullscreenIcon)")
+        && /li\.classList\.toggle\('is-fs', on\)/.test(code));
+    check('★ 全屏回调定义在 viewer 同级作用域（不在 cropEditor 的 IIFE 里）—— 否则工具栏点了会 is not defined',
+        code.indexOf('const toggleViewerFullscreen') > -1
+        && code.indexOf('const toggleViewerFullscreen') < code.indexOf('const cropEditor = (function ()')
+        && code.indexOf('const syncFullscreenIcon') > -1
+        && code.indexOf('const syncFullscreenIcon') < code.indexOf('const cropEditor = (function ()'));
     {
         const cropIdx = toolbarBlock.indexOf('crop: {');
-        const zoomIdx = toolbarBlock.indexOf("'zoom-in': true");
-        check('crop 按钮排在 toolbar 最左（库按对象键顺序渲染）', cropIdx > -1 && zoomIdx > -1 && cropIdx < zoomIdx,
-            `crop@${cropIdx} zoom-in@${zoomIdx}`);
+        const fsIdx = toolbarBlock.indexOf('fullscreen: {');
+        const oneIdx = toolbarBlock.indexOf("'one-to-one': true");
+        check('crop 按钮排最左、全屏紧随其后（= 原 +/− 的位置）',
+            cropIdx > -1 && fsIdx > -1 && oneIdx > -1 && cropIdx < fsIdx && fsIdx < oneIdx,
+            `crop@${cropIdx} fullscreen@${fsIdx} one-to-one@${oneIdx}`);
     }
     // 自定义键的画廊图标：库只给 14 个内置键写了规则（含 content 与 20×20 盒子），
     // 自定义键不补这几条就只剩 li 的黑底 ⇒「有按钮没图标」。
     check('自定义键的图标补齐了库缺的声明（content + 20×20 盒子）',
         /li\.viewer-crop:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px/.test(blade));
-    check('图标图形比盒子小一圈（18px + 1px 偏移，盒子/热区不变）',
-        /li\.viewer-crop:before \{[\s\S]{0,900}background-position: 1px 1px;[\s\S]{0,200}background-size: 18px 18px;/.test(blade));
+    check('图标图形比盒子小一圈 —— 裁剪键 14px + 3px 居中偏移（盒子/热区不变）',
+        /li\.viewer-crop:before \{[\s\S]{0,900}background-position: 3px 3px;[\s\S]{0,200}background-size: 14px 14px;/.test(blade));
+    check('「全屏」键同样是自定义键：补了 content + 20×20 盒子 + 14px 图标',
+        /li\.viewer-fullscreen:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px[\s\S]{0,1200}background-size: 14px 14px;/.test(blade));
+    check('全屏时换成「退出全屏」图标（.viewer-fullscreen.is-fs:before 另一张 SVG）',
+        /li\.viewer-fullscreen\.is-fs:before \{\s*\n\s*background-image: url\("data:image\/svg\+xml,/.test(blade));
 
     // ② 选中操作条（顶部那排 + < xl 的「⋯」下拉各一份）
     const editAnchors = (code.match(/data-operate="edit"/g) || []).length;
@@ -181,6 +207,9 @@ console.log('\n[5] 看图器原有选项与钉住的产物没被改动');
         check(`原有选项仍在：${opt}`, code.includes(opt));
     }
     check('缩略图条的滚轮/拖动切图还在', code.includes("const BAR = '.viewer-navbar'"));
+    check('看图器不再动 body 的滚动锁（滚动条不消失 ⇒ 打开时页面不漏重排）；槽位规则仍在',
+        /html \{ scrollbar-gutter: stable; \}/.test(blade)
+        && /body\.viewer-open \{ overflow: visible; \}/.test(blade));
     check('「飞入」CSS 兜底还在', blade.includes('.viewer-canvas > img:not([style])'));
     const dockerfile = fs.readFileSync(path.join(here, '..', 'Dockerfile'), 'utf8');
     check('Dockerfile 里 context-js 的两个 md5 未被改动（本轮不该碰它）',
