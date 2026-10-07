@@ -2326,8 +2326,8 @@
 +    return api;
 +})();
 ---- src/resources/views/user/images.blade.php
---- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-07 23:55:01.167808 +0800
-+++ src/resources/views/user/images.blade.php	2026-10-07 23:55:01.167808 +0800
+--- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-08 00:35:47.950908 +0800
++++ src/resources/views/user/images.blade.php	2026-10-08 00:35:47.950908 +0800
 @@ -4,45 +4,289 @@
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
@@ -3142,7 +3142,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +734,694 @@
+@@ -217,44 +734,700 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -3324,8 +3324,14 @@
 +                document.querySelectorAll('.viewer-toolbar li.viewer-fullscreen').forEach((li) => {
 +                    li.classList.toggle('is-fs', on);
 +                });
++                /* ★ 只在"全屏状态真的从关变开"那一下把 UI 清干净。
++                 * 这个函数会被库的每次切图/重绘带着跑一遍（viewer.view → syncViewerButton → 它），
++                 * 早先写成 `if (on) remove(...)` ⇒ 点 toolbar 的 next/prev、或在缩略图条上滚轮切图时，
++                 * 库一重绘就把刚淡出来的 ls-fs-ui 摘掉，看着就是"一操作 UI 立刻消失"。
++                 * 探针实测的调用栈钉死了这条路径。 */
++                const wasFs = document.documentElement.classList.contains('ls-viewer-fs');
 +                document.documentElement.classList.toggle('ls-viewer-fs', on);
-+                if (on) {
++                if (on && ! wasFs) {
 +                    document.documentElement.classList.remove('ls-fs-ui');   // 刚进全屏先干干净净
 +                }
 +            };
@@ -3859,7 +3865,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,7 +1443,11 @@
+@@ -276,7 +1449,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
@@ -3872,7 +3878,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +1471,73 @@
+@@ -300,22 +1477,73 @@
                  }
              });
  
@@ -3950,7 +3956,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +1550,40 @@
+@@ -328,29 +1556,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -4001,7 +4007,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +1591,13 @@
+@@ -358,12 +1597,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -4017,7 +4023,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +1606,14 @@
+@@ -372,13 +1612,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -4035,7 +4041,7 @@
                              );
                          }
                      });
-@@ -386,6 +1621,12 @@
+@@ -386,6 +1627,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -4048,7 +4054,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +1636,14 @@
+@@ -395,12 +1642,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -4065,7 +4071,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +1675,18 @@
+@@ -432,15 +1681,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -4087,7 +4093,7 @@
                  });
              }
  
-@@ -449,9 +1695,366 @@
+@@ -449,9 +1701,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -4457,7 +4463,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +2071,192 @@
+@@ -468,11 +2077,192 @@
              });
          </script>
          <script>
@@ -4650,7 +4656,7 @@
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +2270,14 @@
+@@ -486,10 +2276,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4667,7 +4673,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -502,17 +2290,68 @@
+@@ -502,17 +2296,68 @@
                      ds.stop();
                  }
  
@@ -4737,7 +4743,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2372,250 @@
+@@ -533,27 +2378,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -5005,7 +5011,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2626,9 @@
+@@ -564,7 +2632,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -5016,7 +5022,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2636,19 @@
+@@ -572,47 +2642,19 @@
                          }
                      });
                  },
@@ -5073,7 +5079,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2685,10 @@
+@@ -649,6 +2691,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -5084,7 +5090,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2702,23 @@
+@@ -662,13 +2708,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -5110,7 +5116,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2733,11 @@
+@@ -683,7 +2739,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -5122,7 +5128,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2748,13 @@
+@@ -694,10 +2754,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -5138,7 +5144,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +2776,11 @@
+@@ -719,6 +2782,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -5150,7 +5156,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +2845,9 @@
+@@ -783,9 +2851,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -5163,7 +5169,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +2865,10 @@
+@@ -803,9 +2871,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -5175,7 +5181,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -844,17 +2907,27 @@
+@@ -844,17 +2913,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;

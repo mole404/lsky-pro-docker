@@ -279,6 +279,9 @@ console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失
         /if \(r\.width > 4 \|\| r\.height > 4\)/.test(code));
     check('④ 网格内部起始的拖动仍走库原路径（selfSelect 只在区域外为 true）',
         /const inArea = !! e\.target\.closest\(IMAGES_SCROLL \+ ', ' \+ IMAGES_ITEM\)/.test(code));
+    check('① syncFullscreenIcon 必须幂等：只在"真的刚进全屏"那一下清 ls-fs-ui',
+        /const wasFs = document\.documentElement\.classList\.contains\('ls-viewer-fs'\)/.test(code)
+        && /if \(on && ! wasFs\) \{[\s\S]{0,200}classList\.remove\('ls-fs-ui'\)/.test(code));
 }
 
 // ---------------------------------------------------------------- 汇总

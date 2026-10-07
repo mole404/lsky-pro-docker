@@ -892,8 +892,14 @@
                 document.querySelectorAll('.viewer-toolbar li.viewer-fullscreen').forEach((li) => {
                     li.classList.toggle('is-fs', on);
                 });
+                /* ★ 只在"全屏状态真的从关变开"那一下把 UI 清干净。
+                 * 这个函数会被库的每次切图/重绘带着跑一遍（viewer.view → syncViewerButton → 它），
+                 * 早先写成 `if (on) remove(...)` ⇒ 点 toolbar 的 next/prev、或在缩略图条上滚轮切图时，
+                 * 库一重绘就把刚淡出来的 ls-fs-ui 摘掉，看着就是"一操作 UI 立刻消失"。
+                 * 探针实测的调用栈钉死了这条路径。 */
+                const wasFs = document.documentElement.classList.contains('ls-viewer-fs');
                 document.documentElement.classList.toggle('ls-viewer-fs', on);
-                if (on) {
+                if (on && ! wasFs) {
                     document.documentElement.classList.remove('ls-fs-ui');   // 刚进全屏先干干净净
                 }
             };
