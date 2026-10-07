@@ -103,6 +103,16 @@
             overflow: hidden; padding: 0 8px;
         }
         #crop-layer .crop-stage img { max-width: 100%; max-height: 100%; display: block; }
+
+        /* 框外变暗：**不用**库的 .cropper-modal。
+           库那套是「半透明黑盖住整图 + 往 .cropper-view-box 里再塞一张克隆图把框内提亮」——
+           真机实测那一步在 iOS(WebKit) 上不生效，表现就是整张（含框内）都是灰的
+           （老师截图按像素量：框外 127、框内 140，140 正是 127 又叠了库那层 10% 白 highlight）。
+           改成：关闭 modal（Cropper 选项 modal:false），用裁剪框自己的大范围 box-shadow 压暗框外 ——
+           框内直接就是原图本体，没有任何遮罩压在它上面 ⇒ 各平台一致；容器裁掉阴影溢出，
+           工具栏与页面其它部分不受影响。 */
+        #crop-layer .cropper-container { overflow: hidden; }
+        #crop-layer .cropper-view-box { box-shadow: 0 0 0 9999px rgba(0, 0, 0, .5); }
         #crop-layer .crop-bar {
             display: flex; align-items: center; justify-content: space-between; gap: 10px;
             flex-wrap: wrap; padding: 10px 14px 14px;
@@ -117,19 +127,31 @@
         #crop-layer .crop-primary { background: var(--lsky-accent, #3b82f6) !important; color: #fff !important; }
         #crop-layer.is-busy .crop-bar { opacity: .45; pointer-events: none; }
 
-        /* 桌面：工具组包一层等于没包（子元素直接参与 .crop-bar 的 flex 布局） */
+        /* 桌面：工具组这一层等于没包（子元素直接参与底栏的三列网格） */
         #crop-layer .crop-tools { display: contents; }
 
+        @media (min-width: 768px) {
+            /* 电脑端底栏改三列网格：左右各占 1fr、中间 auto ⇒「比例」永远正居中。
+               原来用 flex 的 space-between 时，左边那组多出「左右/上下翻转」两个按钮，
+               中间那组就被挤得偏左了。 */
+            #crop-layer .crop-bar {
+                display: grid;
+                grid-template-columns: 1fr auto 1fr;
+                align-items: center;
+            }
+            #crop-layer .crop-actions { justify-content: flex-end; }
+        }
+
         /* 手机（<768px）：
-           · 工具留一行可横向滑动（旋转/翻转 4 个 + 比例 4 个，一屏放不下）；
-           · 「取消 / 裁剪并上传」右对齐到右下角；
+           · 「取消 / 裁剪并上传」挪到顶栏右侧（顶栏本来只放标题与尺寸提示，右边空着）；
+           · 底栏只剩两组工具，自然折成两行（比例一行、旋转/翻转一行），不再横向滑动；
            · 右下角手柄从库的 20×20 收到 14×14 —— 它同时是唯一热区，但库给它配了一层
              200% 的透明 :before，所以视觉缩小后热区仍有 28×28，手感不变。 */
         @media (max-width: 767.98px) {
-            #crop-layer .crop-bar { flex-direction: column; align-items: stretch; gap: 8px; }
-            #crop-layer .crop-tools { display: flex; gap: 6px; overflow-x: auto; }
+            #crop-layer .crop-head { padding-right: 168px; }
+            #crop-layer .crop-tools { display: flex; flex-wrap: wrap; gap: 6px; }
             #crop-layer .crop-tools > .crop-group { flex: none; }
-            #crop-layer .crop-actions { justify-content: flex-end; }
+            #crop-layer .crop-actions { position: absolute; top: 9px; right: 12px; }
             #crop-layer .cropper-point.point-se { width: 14px; height: 14px; }
         }
 
@@ -144,9 +166,11 @@
             width: 20px;
             height: 20px;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E");
-            background-position: 0 0;
+            /* 图形比盒子小一圈（18px 配 1px 偏移），看着跟库自带的 +/− 一样秀气；
+               盒子仍是 20×20、按钮仍是 24×24 ⇒ 热区不变。 */
+            background-position: 1px 1px;
             background-repeat: no-repeat;
-            background-size: 20px 20px;
+            background-size: 18px 18px;
         }
     </style>
 @endpush
@@ -305,9 +329,9 @@
         <div class="crop-stage">
             <img id="crop-image" alt="">
         </div>
+        {{-- 工具组（旋转/翻转 + 比例）：桌面用 display:contents ⇒ 两组仍是底栏三列网格里的项；
+             手机（<768px）折成两行显示、动作按钮挪到顶栏右侧。 --}}
         <div class="crop-bar">
-          {{-- 工具组（旋转/翻转 + 比例）：桌面用 display:contents 与原来三组布局完全一致，
-               手机上单独成一层、可横向滑动。 --}}
           <div class="crop-tools">
             <div class="crop-group">
                 <a href="javascript:void(0)" data-crop-action="rotate-left">左转 90°</a>
@@ -867,6 +891,7 @@
                             dragMode: 'move',
                             autoCropArea: 0.8,
                             background: false,
+                            modal: false,                   // 框外变暗改由 #crop-layer 里的 box-shadow 负责，见本页 <style>
                             checkOrientation: true,         // 带 EXIF 旋转的手机图按显示方向处理
                             rotatable: true,
                             scalable: true,                 // 翻转要 scaleX/scaleY（Cropper 里 scale() 受这一项开关）；

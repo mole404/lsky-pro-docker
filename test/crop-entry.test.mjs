@@ -77,6 +77,8 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
     // 自定义键不补这几条就只剩 li 的黑底 ⇒「有按钮没图标」。
     check('自定义键的图标补齐了库缺的声明（content + 20×20 盒子）',
         /li\.viewer-crop:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px/.test(blade));
+    check('图标图形比盒子小一圈（18px + 1px 偏移，盒子/热区不变）',
+        /li\.viewer-crop:before \{[\s\S]{0,900}background-position: 1px 1px;[\s\S]{0,200}background-size: 18px 18px;/.test(blade));
 
     // ② 选中操作条（顶部那排 + < xl 的「⋯」下拉各一份）
     const editAnchors = (code.match(/data-operate="edit"/g) || []).length;
@@ -141,12 +143,25 @@ console.log('\n[4] 裁剪层的标记与交互钩子齐全');
         && (code.match(/flipX = 1;/g) || []).length >= 2);
     check('scalable 已打开（库的 scale() 受这一项开关）', /scalable: true/.test(code));
     check('缩放/手势开关没被顺手改掉', /zoomOnTouch: true/.test(code) && /zoomOnWheel: true/.test(code));
-    check('手机布局钩子：工具组可横滑 + 两个动作按钮右对齐右下角',
+    check('手机布局钩子：工具组 + 两个动作按钮（.crop-tools / .crop-actions）',
         blade.includes('class="crop-tools"') && blade.includes('crop-group crop-actions'));
     check('桌面布局与原来一致（.crop-tools 在桌面 display: contents）',
         /#crop-layer \.crop-tools \{ display: contents; \}/.test(blade));
-    check('手机媒体查询里：工具行横滑 + 动作按钮右对齐 + 手柄 20px→14px',
-        /@media \(max-width: 767\.98px\) \{[\s\S]{0,900}overflow-x: auto[\s\S]{0,400}justify-content: flex-end[\s\S]{0,400}\.cropper-point\.point-se \{ width: 14px; height: 14px; \}/.test(blade));
+    check('电脑端底栏改三列网格 ⇒ 比例组正居中（不再是会被挤偏的 space-between）',
+        /@media \(min-width: 768px\) \{[\s\S]{0,700}grid-template-columns: 1fr auto 1fr;/.test(blade));
+    check('手机端：动作按钮挪到顶栏右侧（绝对定位，不再占用底栏、也不再横滑）',
+        /@media \(max-width: 767\.98px\) \{[\s\S]{0,800}\.crop-head \{ padding-right: 168px; \}[\s\S]{0,400}\.crop-actions \{ position: absolute; top: 9px; right: 12px; \}/.test(blade));
+    check('手机端工具组折行显示（flex-wrap: wrap，且移动端媒体查询里没有 overflow-x 横滑）',
+        /@media \(max-width: 767\.98px\) \{[\s\S]{0,800}\.crop-tools \{ display: flex; flex-wrap: wrap; gap: 6px; \}/.test(blade)
+        && !/@media \(max-width: 767\.98px\) \{[\s\S]{0,900}overflow-x: auto/.test(blade));
+    check('手机端手柄 20px→14px 仍在（热区靠库的 200% :before 保持 28px）',
+        /@media \(max-width: 767\.98px\) \{[\s\S]{0,900}\.cropper-point\.point-se \{ width: 14px; height: 14px; \}/.test(blade));
+    check('iOS 整张灰的根治：停用库的 modal，框外变暗改用 view-box 的 box-shadow',
+        /modal: false,/.test(code)
+        && /#crop-layer \.cropper-container \{ overflow: hidden; \}/.test(blade)
+        && /#crop-layer \.cropper-view-box \{ box-shadow: 0 0 0 9999px rgba\(0, 0, 0, \.5\); \}/.test(blade));
+    check('没有再依赖库的 .cropper-modal（我们自己不给它写样式）',
+        !/#crop-layer \.cropper-modal/.test(blade));
     check('EXIF 方向交给库处理（checkOrientation: true）', code.includes('checkOrientation: true'));
     check('关闭时销毁实例（v1 同一元素不能重复 init）', /close = \(\) => \{[\s\S]{0,160}cropper\.destroy\(\)/.test(code));
     check('打开裁剪层前先关掉看图器（两层不叠）',
