@@ -65,6 +65,11 @@ on:
         required: false
         default: ''
         type: string
+      platforms:
+        description: '（可留空）构建平台。留空=按分支自动：master 出 linux/amd64,linux/arm64，其它分支只出 linux/amd64'
+        required: false
+        default: ''
+        type: string
 
 # 串行化：连着推两次时排队执行（不打断正在跑的构建），
 # 保证最后 promote 到 latest 的一定是最新那次提交的产物。
@@ -173,6 +178,7 @@ jobs:
           REQ_PHP_INPUT: ${{ inputs.php_version }}
           REQ_CLI_DIGEST: ${{ inputs.php_cli_digest }}
           REQ_APACHE_DIGEST: ${{ inputs.php_apache_digest }}
+          REQ_PLATFORMS: ${{ inputs.platforms }}
         run: |
           set -euo pipefail
           PIN=$(grep -oE '^ARG LSKY_COMMIT=[0-9a-f]+' Dockerfile | cut -d= -f2)
@@ -229,6 +235,24 @@ jobs:
           else
             echo "is_test_build=false" >> "$GITHUB_OUTPUT"
           fi
+
+          # ---- 构建平台（老师 2026-10-07 定）--------------------------------------
+          #   master（正式版）  = linux/amd64,linux/arm64 —— 正式版必须两种架构都能用；
+          #   其它分支/试构建   = linux/amd64（测试版不烧 arm64 的时间）。
+          #   QEMU 已在 build job 里 setup（docker/setup-qemu-action），所以 arm64 走模拟构建。
+          #   手动 dispatch 可用 inputs.platforms 覆盖 —— 用来在**分支上**先试跑多架构，
+          #   因为 promote 只认 master，分支上跑多架构不会动 :latest。
+          # 注意：下面用的都是 GITHUB_REF（Actions 默认环境变量），与 if: 里的 github.ref 同源。
+          PLAT="${REQ_PLATFORMS:-}"
+          if [ -z "$PLAT" ]; then
+            if [ "$GITHUB_REF" = "refs/heads/master" ]; then
+              PLAT="linux/amd64,linux/arm64"
+            else
+              PLAT="linux/amd64"
+            fi
+          fi
+          echo "platforms=$PLAT" >> "$GITHUB_OUTPUT"
+          echo "本次构建平台 = $PLAT（ref=$GITHUB_REF）"
 
           # 多行 output（GITHUB_OUTPUT heredoc 语法）→ build 步骤直接 build-args: ${{ steps.pin.outputs.build_args }}
           {
@@ -300,15 +324,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 只推不可变 tag；latest 由最后的 Promote 步骤在自证通过后才指过来
-      # 只构建 amd64：老师这台 VPS 是 x86_64，arm64 白烧一半构建时间（2026-09-28 定）。
-      # 以后真要 arm64，把 platforms 改回 linux/amd64,linux/arm64 即可，其余步骤不用动。
-      - name: Build and push (linux/amd64)
+      # 只推不可变 tag；latest 由最后的 Promote 步骤在自证通过后才指过来。
+      # 平台策略（2026-10-07 老师定）：正式版（master）必须同时支持 amd64 + arm64；
+      #   测试版分支只出 amd64（arm64 走 QEMU 模拟，白烧一半时间）。
+      # 具体值由 Resolve 步骤算成 steps.pin.outputs.platforms（见那里注释），这里不写死。
+      - name: Build and push (multi-platform per ref)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64
+          platforms: ${{ steps.pin.outputs.platforms }}
           push: true
           tags: |
             ${{ env.IMAGE }}:sha-${{ github.sha }}
