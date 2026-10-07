@@ -33,6 +33,15 @@
              *   浏览器会把哨兵当锚点、上方内容变高就自动往下补 scrollTop，于是哨兵又进视口、
              *   又触发下一页 —— 连锁滚到底。安卓 Edge 上尤其明显（安卓 Chrome / iOS 不这样）。 */
             html, body, #images-scroll, #images-scroll .infinite-scroll { overflow-anchor: none; }
+            /* ★ 图片墙左侧留一条"能起框的空档"（老师第四轮报的"左侧拖不出框"）。
+             *   真机实测：侧栏宽 256、#images-scroll 也从 256 开始、第一张卡片在 266 ——
+             *   也就是**属于网格、可以起框的空档只有 10px**，其余"看着空"的地方全是侧栏
+             *   （elementFromPoint 在 x≤250 命中的都是 a.ls-nav-item）。
+             *   把这条空档加宽到 28px，贴着左边按下拖动就很自然了。仅 ≥640 生效，
+             *   手机上侧栏是抽屉、本来就没有这段边界。 */
+            @media (min-width: 640px) {
+                #images-scroll { padding-left: 18px; }
+            }
             /* ★ 让滚动条的位置**永远被预留**（桌面端）。
              *   看图器打开时库会给 body 加 .viewer-open{overflow:hidden}，滚动条消失 ⇒
              *   布局宽度凭空多出 9px（Win11 细滚动条）⇒ 内容右移/重排，关闭时再跳一次。
@@ -176,6 +185,9 @@
            鼠标动一下或轻触一下临时淡入（.ls-fs-ui，2.5s 后自动隐）；点背景关掉看图器即彻底退出全屏。 */
         html.ls-viewer-fs .viewer-backdrop,
         html.ls-viewer-fs .viewer-container { background-color: #000; }
+        /* 顺手把**页面自己**那条右侧滚动条也收掉（全屏里页面本来也不该滚）。
+           槽位（scrollbar-gutter）仍在 ⇒ 进出全屏不会因为这条产生任何位移。 */
+        html.ls-viewer-fs { overflow: hidden; }
         html.ls-viewer-fs .viewer-toolbar,
         html.ls-viewer-fs .viewer-navbar,
         html.ls-viewer-fs .viewer-title,
@@ -902,8 +914,12 @@
                 clearTimeout(fsUiTimer);
                 fsUiTimer = setTimeout(() => document.documentElement.classList.remove('ls-fs-ui'), FS_UI_MS);
             };
-            document.addEventListener('mousemove', flashFullscreenUI, true);
-            document.addEventListener('touchstart', flashFullscreenUI, true);
+            /* 这些操作都算"人还在"，一律刷新那 2.5s：
+               移动鼠标 / 滚轮切图 / 点 toolbar 或缩略图条 / 触摸拖动 / 按键。
+               （全部 passive：我们只看不拦，不影响任何默认行为。） */
+            ['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'].forEach((ev) => {
+                document.addEventListener(ev, flashFullscreenUI, {capture: true, passive: true});
+            });
 
             /* 点背景 / 按 × 关掉看图器时，若还在全屏就顺手退出全屏 —— 即"点一下彻底退出" */
             document.addEventListener('hidden', () => {

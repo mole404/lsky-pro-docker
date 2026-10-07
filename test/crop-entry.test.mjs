@@ -233,11 +233,19 @@ console.log('\n[6] 看图器：全屏观感 / 打开不漏重排 / 缩略图条�
         /html\.ls-viewer-fs \.viewer-backdrop,\s*\n\s*html\.ls-viewer-fs \.viewer-container \{ background-color: #000; \}/.test(blade)
         && /html\.ls-viewer-fs \.viewer-toolbar,[\s\S]{0,260}html\.ls-viewer-fs \.viewer-button \{/.test(blade)
         && /html\.ls-viewer-fs:not\(\.ls-fs-ui\) \.viewer-toolbar,[\s\S]{0,300}pointer-events: none;/.test(blade));
+    check('② 全屏里页面自己那条滚动条也收掉（槽位仍在 ⇒ 不产生位移）',
+        /html\.ls-viewer-fs \{ overflow: hidden; \}/.test(blade));
+    check('② 延迟重置的触发：鼠标移动 / 滚轮 / 点击 / 触摸 / 按键 全都算',
+        /\[('mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'|'mousemove'.*)\]\.forEach\(\(ev\) => \{/.test(code)
+        && ['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown']
+            .every((ev) => code.includes(`'${ev}'`)));
     check('② 全屏里鼠标动/轻触临时淡入 UI（.ls-fs-ui + 到点自动收）',
         /const flashFullscreenUI = \(\) => \{[\s\S]{0,400}ls-fs-ui/.test(code)
-        && code.includes("document.addEventListener('mousemove', flashFullscreenUI, true)")
-        && code.includes("document.addEventListener('touchstart', flashFullscreenUI, true)")
-        && /setTimeout\(\(\) => document\.documentElement\.classList\.remove\('ls-fs-ui'\), FS_UI_MS\)/.test(code));
+        && /document\.addEventListener\(ev, flashFullscreenUI, \{capture: true, passive: true\}\)/.test(code)
+        && /setTimeout\(\(\) => document\.documentElement\.classList\.remove\('ls-fs-ui'\), FS_UI_MS\)/.test(code)
+        && /const FS_UI_MS = \d+;/.test(code));
+    check('④ 图片墙左侧留出"能起框的空档"（≥640 生效，手机不受影响）',
+        /@media \(min-width: 640px\) \{\s*\n\s*#images-scroll \{ padding-left: 18px; \}/.test(blade));
     check('② 全屏状态挂/去 html.ls-viewer-fs（与按钮图标在同一处同步）',
         /syncFullscreenIcon[\s\S]{0,600}classList\.toggle\('ls-viewer-fs', on\)/.test(code));
     check('② 关掉看图器时顺手退出全屏（点背景 = 彻底退出）',
