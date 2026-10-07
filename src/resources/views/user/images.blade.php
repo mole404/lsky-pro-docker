@@ -2138,6 +2138,33 @@
              * 正解：clientX/clientY 与 getBoundingClientRect() 同属**视觉**坐标，这里按原始指针
              *  路径自己记框，然后 ① 覆盖 Selector.rect 给库判定用 ② 每帧把屏幕上的框也摆到同一处。
              * ------------------------------------------------------------------------ */
+            /* ★ 库的硬门（源码 Interaction._canInteract）：
+             *     !( e.button===2 || isInteracting
+             *        || (e.target && !SelectorArea.isInside(e.target))
+             *        || (!t && !SelectorArea.isClicked(e)) )
+             *   ⇒ **指针位置必须落在 SelectorArea.rect 里**，按在卡片上还是缝隙上都不例外。
+             *   而 SelectorArea.rect 的实现是
+             *     get rect(){ return this._rect ? this._rect : this._rect = this.HTMLNode.getBoundingClientRect() }
+             *   —— **算一次就永久缓存**。原来只在 jg.complete / jg.resize 清过，于是滚动、切侧栏、
+             *   懒加载新图、窗口变化之后它全过期 ⇒ 症状就是"某些位置能拖、某些位置怎么拖都不出框"
+             *   （老师实测：同一页里换个起点就成一个不成）。
+             * 这里每帧/每次按下都把它刷成**当前真实矩形**，库那一刻读到的就是活值 —— 不再依赖
+             * 猜"哪种操作会让它过期"。 */
+            const dsSyncAreaRect = () => {
+                try {
+                    const area = document.querySelector(IMAGES_SCROLL);
+                    if (! area) { return; }
+                    const r = area.getBoundingClientRect();
+                    ds.Area && (ds.Area._rect = undefined);
+                    if (ds.SelectorArea) {
+                        ds.SelectorArea._rect = {
+                            left: r.left, top: r.top, right: r.right, bottom: r.bottom,
+                            width: r.width, height: r.height,
+                        };
+                    }
+                } catch (err) { /* 库内部结构若变，最多回到旧行为，不影响拖动本身 */ }
+            };
+
             const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0, selfSelect: false};
             let dsRaf = 0;
             const dsBoxRect = () => {
@@ -2164,6 +2191,7 @@
                 }
                 if (box && ar && getComputedStyle(box).display !== 'none') {
                     const r = dsBoxRect();
+                    dsSyncAreaRect();          // 拖的过程中布局也可能变（自动滚动/缩放），一并刷新
                     // 框是外壳的子元素 → 坐标必须相对区域原点，否则会再叠一层外壳的偏移（实测差 310px）
                     box.style.left = ((r.left - ar.left) / z) + 'px';
                     box.style.top = ((r.top - ar.top) / z) + 'px';
@@ -2178,6 +2206,9 @@
                 if (e.button !== 0 || ! e.target || ! e.target.closest) {
                     return;
                 }
+                /* 必须在这里就先刷：本监听器是捕获阶段，库的 mousedown 在冒泡阶段，
+                 * 顺序上我们一定先跑，库判定时读到的才是刷新后的矩形。 */
+                dsSyncAreaRect();
                 const inArea = !! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM);
                 /* 老师第六轮的期待：「从窗口最左边按下拖动也要能框选」。
                  * 侧栏是 fixed 元素、盖在网格左边（展开时 256px 宽），它上面的 mousedown 根本到不了
