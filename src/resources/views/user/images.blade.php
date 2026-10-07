@@ -33,15 +33,8 @@
              *   浏览器会把哨兵当锚点、上方内容变高就自动往下补 scrollTop，于是哨兵又进视口、
              *   又触发下一页 —— 连锁滚到底。安卓 Edge 上尤其明显（安卓 Chrome / iOS 不这样）。 */
             html, body, #images-scroll, #images-scroll .infinite-scroll { overflow-anchor: none; }
-            /* ★ 图片墙左侧留一条"能起框的空档"（老师第四轮报的"左侧拖不出框"）。
-             *   真机实测：侧栏宽 256、#images-scroll 也从 256 开始、第一张卡片在 266 ——
-             *   也就是**属于网格、可以起框的空档只有 10px**，其余"看着空"的地方全是侧栏
-             *   （elementFromPoint 在 x≤250 命中的都是 a.ls-nav-item）。
-             *   把这条空档加宽到 28px，贴着左边按下拖动就很自然了。仅 ≥640 生效，
-             *   手机上侧栏是抽屉、本来就没有这段边界。 */
-            @media (min-width: 640px) {
-                #images-scroll { padding-left: 18px; }
-            }
+            /* 注：#images-scroll 的左侧内边距曾加过 18px，老师否掉了（图库左侧不该空出一条）——
+             * "左侧拖不出框"要从侧栏/判定那边解决，不能靠给网格加空白。 */
             /* ★ 让滚动条的位置**永远被预留**（桌面端）。
              *   看图器打开时库会给 body 加 .viewer-open{overflow:hidden}，滚动条消失 ⇒
              *   布局宽度凭空多出 9px（Win11 细滚动条）⇒ 内容右移/重排，关闭时再跳一次。
@@ -185,9 +178,11 @@
            鼠标动一下或轻触一下临时淡入（.ls-fs-ui，2.5s 后自动隐）；点背景关掉看图器即彻底退出全屏。 */
         html.ls-viewer-fs .viewer-backdrop,
         html.ls-viewer-fs .viewer-container { background-color: #000; }
-        /* 顺手把**页面自己**那条右侧滚动条也收掉（全屏里页面本来也不该滚）。
-           槽位（scrollbar-gutter）仍在 ⇒ 进出全屏不会因为这条产生任何位移。 */
-        html.ls-viewer-fs { overflow: hidden; }
+        /* 顺手把**页面自己**那条右侧滚动条也收掉（全屏里页面本来也不该滚），
+           连"给滚动条留出来的那块空白"一起收 —— 只是 overflow:hidden 的话，
+           scrollbar-gutter: stable 仍会在右边留一条 8px 的空白（老师截图里能看到）。
+           全屏期间没有滚动条，也就不需要槽位 ⇒ 两条一起写。 */
+        html.ls-viewer-fs { overflow: hidden; scrollbar-gutter: auto; }
         html.ls-viewer-fs .viewer-toolbar,
         html.ls-viewer-fs .viewer-navbar,
         html.ls-viewer-fs .viewer-title,
