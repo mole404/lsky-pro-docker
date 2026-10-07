@@ -2326,9 +2326,9 @@
 +    return api;
 +})();
 ---- src/resources/views/user/images.blade.php
---- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-07 20:09:05.907961 +0800
-+++ src/resources/views/user/images.blade.php	2026-10-07 20:09:05.907961 +0800
-@@ -4,45 +4,163 @@
+--- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-07 20:13:01.384302 +0800
++++ src/resources/views/user/images.blade.php	2026-10-07 20:13:01.384302 +0800
+@@ -4,45 +4,174 @@
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
@@ -2408,7 +2408,18 @@
 +        }
 +        #crop-layer.is-open { display: flex; }
 +        @media (min-width: 768px) {
-+            html #crop-layer { zoom: .9090909091; }
++            /* 桌面 html{zoom:1.1}（common.less）下的反制，与 .viewer-container 同一招：
++               · 容器自身反向缩放 ⇒ 内部「布局单位 == 屏幕像素」，Cropper 的指针坐标才不偏 10%
++                 （实测：不套它时拖动选框恒定偏 +10%、不跟手）；
++               · 同时把 inset:0 换成显式 width/height —— inset 版在 zoom 下只铺 90.9% 屏
++                 （当年 .viewer-container 踩的就是这个坑）；注意不能用 100vw（会溢出 10%）。 */
++            html #crop-layer {
++                zoom: calc(1 / 1.1);
++                right: auto;
++                bottom: auto;
++                width: 100%;
++                height: 100%;
++            }
 +        }
 +        #crop-layer .crop-head {
 +            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -2507,7 +2518,7 @@
                      </a>
                  </x-slot>
  
-@@ -57,38 +175,115 @@
+@@ -57,38 +186,115 @@
                      </x-dropdown-link>
                  </x-slot>
              </x-dropdown>
@@ -2641,7 +2652,7 @@
          </div>
      </div>
  
-@@ -96,112 +291,301 @@
+@@ -96,112 +302,301 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -3008,7 +3019,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +601,579 @@
+@@ -217,44 +612,579 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -3610,7 +3621,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,7 +1195,11 @@
+@@ -276,7 +1206,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
@@ -3623,7 +3634,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +1223,73 @@
+@@ -300,22 +1234,73 @@
                  }
              });
  
@@ -3701,7 +3712,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +1302,40 @@
+@@ -328,29 +1313,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -3752,7 +3763,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +1343,13 @@
+@@ -358,12 +1354,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -3768,7 +3779,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +1358,14 @@
+@@ -372,13 +1369,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -3786,7 +3797,7 @@
                              );
                          }
                      });
-@@ -386,6 +1373,12 @@
+@@ -386,6 +1384,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -3799,7 +3810,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +1388,14 @@
+@@ -395,12 +1399,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -3816,7 +3827,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +1427,18 @@
+@@ -432,15 +1438,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -3838,7 +3849,7 @@
                  });
              }
  
-@@ -449,9 +1447,366 @@
+@@ -449,9 +1458,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -4208,7 +4219,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +1823,158 @@
+@@ -468,11 +1834,158 @@
              });
          </script>
          <script>
@@ -4236,8 +4247,8 @@
                  area: $(IMAGES_SCROLL).get(0),
                  keyboardDrag: false,
 +                zoom: dsPageZoom(),
-+            });
-+
+             });
+ 
 +            /* ---------------- 框选失效的真因与修法（fork 修复） ----------------
 +             * 现象：图片墙上按住左键拖动，怎么拖都框不出选择框（按在图片上、按在缝隙上都不行）。
 +             * 真因：DragSelect 会给区域套一层 .ds-selector-area 包装盒，并把这个盒子的矩形**缓存**下来
@@ -4361,13 +4372,13 @@
 +                if (ds.Interaction && ds.Interaction.isInteracting) {
 +                    ds.Interaction.reset({});
 +                }
-             });
- 
++            });
++
 +
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +1988,14 @@
+@@ -486,10 +1999,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4384,7 +4395,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -502,17 +2008,68 @@
+@@ -502,17 +2019,68 @@
                      ds.stop();
                  }
  
@@ -4454,7 +4465,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2090,250 @@
+@@ -533,27 +2101,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -4722,7 +4733,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2344,9 @@
+@@ -564,7 +2355,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -4733,7 +4744,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2354,19 @@
+@@ -572,47 +2365,19 @@
                          }
                      });
                  },
@@ -4790,7 +4801,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2403,10 @@
+@@ -649,6 +2414,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -4801,7 +4812,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2420,23 @@
+@@ -662,13 +2431,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -4827,7 +4838,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2451,11 @@
+@@ -683,7 +2462,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -4839,7 +4850,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2466,13 @@
+@@ -694,10 +2477,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -4855,7 +4866,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +2494,11 @@
+@@ -719,6 +2505,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -4867,7 +4878,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +2563,9 @@
+@@ -783,9 +2574,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -4880,7 +4891,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -799,11 +2579,12 @@
+@@ -799,11 +2590,12 @@
                      {header: '图片操作'},
                      actions.refresh,
                      actions.copy,
@@ -4894,7 +4905,7 @@
                      actions.detail,
                      {divider: true},
                      actions.rename,
-@@ -844,17 +2625,27 @@
+@@ -844,17 +2636,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;

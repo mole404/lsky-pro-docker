@@ -80,7 +80,18 @@
         }
         #crop-layer.is-open { display: flex; }
         @media (min-width: 768px) {
-            html #crop-layer { zoom: .9090909091; }
+            /* 桌面 html{zoom:1.1}（common.less）下的反制，与 .viewer-container 同一招：
+               · 容器自身反向缩放 ⇒ 内部「布局单位 == 屏幕像素」，Cropper 的指针坐标才不偏 10%
+                 （实测：不套它时拖动选框恒定偏 +10%、不跟手）；
+               · 同时把 inset:0 换成显式 width/height —— inset 版在 zoom 下只铺 90.9% 屏
+                 （当年 .viewer-container 踩的就是这个坑）；注意不能用 100vw（会溢出 10%）。 */
+            html #crop-layer {
+                zoom: calc(1 / 1.1);
+                right: auto;
+                bottom: auto;
+                width: 100%;
+                height: 100%;
+            }
         }
         #crop-layer .crop-head {
             display: flex; align-items: center; gap: 10px; flex-wrap: wrap;

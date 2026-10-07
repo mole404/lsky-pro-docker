@@ -117,8 +117,8 @@ console.log('\n[4] 裁剪层的标记与交互钩子齐全');
     check('关闭时销毁实例（v1 同一元素不能重复 init）', /close = \(\) => \{[\s\S]{0,160}cropper\.destroy\(\)/.test(code));
     check('打开裁剪层前先关掉看图器（两层不叠）',
         /document\.body\.classList\.contains\('viewer-open'\)[\s\S]{0,120}viewer\.hide\(\)/.test(code));
-    check('桌面 110% 缩放下给裁剪层套了反向缩放（与 .viewer-container 同源）',
-        /@media \(min-width: 768px\) \{\s*html #crop-layer \{ zoom: \.9090909091; \}/.test(blade));
+    check('桌面 110% 缩放下给裁剪层套了反向缩放 + 显式宽高（与 .viewer-container 同源）',
+        /@media \(min-width: 768px\) \{[\s\S]{0,600}html #crop-layer \{[\s\S]{0,200}zoom: calc\(1 \/ 1\.1\)[\s\S]{0,200}width: 100%[\s\S]{0,80}height: 100%/.test(blade));
     check('看图器里的「裁剪」按钮按当前图格式显示/隐藏',
         /syncViewerButton[\s\S]{0,400}viewer-toolbar li\.viewer-crop/.test(code));
     check('没有用 viewer.on(…)（1.10.4 没有这个 API），改用 document 上的原生事件',
