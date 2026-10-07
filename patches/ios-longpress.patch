@@ -2326,8 +2326,8 @@
 +    return api;
 +})();
 ---- src/resources/views/user/images.blade.php
---- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-07 23:34:27.670255 +0800
-+++ src/resources/views/user/images.blade.php	2026-10-07 23:34:27.670255 +0800
+--- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-07 23:55:01.167808 +0800
++++ src/resources/views/user/images.blade.php	2026-10-07 23:55:01.167808 +0800
 @@ -4,45 +4,289 @@
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
@@ -3049,10 +3049,10 @@
 +            <div class="mt-4 flex justify-end gap-2">
 +                <button type="button" id="movements-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
 +                <button type="button" id="movements-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>移动</button>
-             </div>
-         </div>
-     </script>
- 
++            </div>
++        </div>
++    </script>
++
 +    {{-- 相册列表行：整行是一个点击区（min-h-[44px]），**行内一个 span 都不用** —— 名称是 <div>、
 +         「当前」徽标（JS 拼的 .ls-badge）也是 <div>，免得被无限加载「点 span 加载更多」的委托命中
 +         （点一下相册名就多拉一页相册）。列表末尾那条哨兵是 utils.infiniteScroll 插的
@@ -3079,7 +3079,7 @@
 +            <div class="mt-3 flex items-center gap-2">
 +                <input type="text" id="image-tags-new" maxlength="64" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入新标签名称">
 +                <button type="button" id="image-tags-create" class="ls-btn h-11 shrink-0 px-4 sm:h-9">新建标签</button>
-+            </div>
+             </div>
 +            <div id="image-tags-list" class="mt-3 flex max-h-[50vh] w-full flex-col gap-1.5 overflow-y-auto pr-1"></div>
 +            <div class="mt-4 flex justify-end gap-2">
 +                <button type="button" id="image-tags-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
@@ -3097,9 +3097,9 @@
 +                <input type="text" name="name" maxlength="64" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称">
 +                <button type="submit" class="ls-btn h-11 shrink-0 px-4 sm:h-9">确认修改</button>
 +            </form>
-+        </div>
-+    </script>
-+
+         </div>
+     </script>
+ 
 +    {{-- 「标签管理」窗口里的一行：左边是勾选区（整块 ≥44px 点击区），右边两个常显的 44×44
 +         「重命名 / 删除」按钮（改标签本身，不影响图片）。
 +         勾选语义（按老师定的两态）：勾上 = 给选中的这些图片加上该标签；取消勾选 = 从这些图片移除。
@@ -3142,7 +3142,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +734,663 @@
+@@ -217,44 +734,694 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -3335,12 +3335,43 @@
 +            /* 全屏里鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态） */
 +            const FS_UI_MS = 2500;
 +            let fsUiTimer = 0;
-+            const flashFullscreenUI = () => {
-+                if (! document.documentElement.classList.contains('ls-viewer-fs')) { return; }
-+                document.documentElement.classList.add('ls-fs-ui');
++            /* 全屏里"人还在 UI 上"就不收起 —— 老师第七轮要的：
++             * "我正操作着呢 UI 自己没了，这多烦人"。原来的实现只做了"每次操作重新计时"，
++             * 但鼠标停在 toolbar/缩略图条上不动时没有任何事件，计时照样走完 ⇒ UI 在手指底下消失
++             * （而且此刻它们是 pointer-events:none，点下去还会穿透、甚至误关看图器）。
++             * 这里改成：只要指针落在这些 UI 的矩形内（隐藏时它们仍是 visibility:hidden、布局还在，
++             * 所以量得到矩形；不能用 :hover —— pointer-events:none 时命中测试拿不到它们），
++             * 就只"续期"不排收起；手指按住期间同理。移开/松手后从那一刻重新计时。 */
++            const FS_UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];
++            const pointerOverViewerUI = (x, y) => FS_UI_ZONES.some((sel) => {
++                const el = document.querySelector(sel);
++                if (! el) { return false; }
++                const r = el.getBoundingClientRect();
++                return r.width > 0 && r.height > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
++            });
++            const scheduleFsHide = () => {
 +                clearTimeout(fsUiTimer);
 +                fsUiTimer = setTimeout(() => document.documentElement.classList.remove('ls-fs-ui'), FS_UI_MS);
 +            };
++            const flashFullscreenUI = (e) => {
++                if (! document.documentElement.classList.contains('ls-viewer-fs')) { return; }
++                document.documentElement.classList.add('ls-fs-ui');
++                const type = (e && e.type) || '';
++                if (type.indexOf('touch') === 0) {
++                    clearTimeout(fsUiTimer);            // 手指还按着 ⇒ 别收
++                    return;
++                }
++                if (type !== 'keydown' && pointerOverViewerUI((e && e.clientX) || 0, (e && e.clientY) || 0)) {
++                    clearTimeout(fsUiTimer);            // 鼠标停在 UI 上 ⇒ 只续期
++                    return;
++                }
++                scheduleFsHide();
++            };
++            document.addEventListener('touchend', () => {
++                if (document.documentElement.classList.contains('ls-fs-ui')) {
++                    scheduleFsHide();                   // 手指抬起才开始计时
++                }
++            }, {capture: true, passive: true});
 +            /* 这些操作都算"人还在"，一律刷新那 2.5s：
 +               移动鼠标 / 滚轮切图 / 点 toolbar 或缩略图条 / 触摸拖动 / 按键。
 +               （全部 passive：我们只看不拦，不影响任何默认行为。） */
@@ -3828,7 +3859,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,7 +1412,11 @@
+@@ -276,7 +1443,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
@@ -3841,7 +3872,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +1440,73 @@
+@@ -300,22 +1471,73 @@
                  }
              });
  
@@ -3919,7 +3950,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +1519,40 @@
+@@ -328,29 +1550,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -3970,7 +4001,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +1560,13 @@
+@@ -358,12 +1591,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -3986,7 +4017,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +1575,14 @@
+@@ -372,13 +1606,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -4004,7 +4035,7 @@
                              );
                          }
                      });
-@@ -386,6 +1590,12 @@
+@@ -386,6 +1621,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -4017,7 +4048,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +1605,14 @@
+@@ -395,12 +1636,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -4034,7 +4065,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +1644,18 @@
+@@ -432,15 +1675,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -4056,7 +4087,7 @@
                  });
              }
  
-@@ -449,9 +1664,366 @@
+@@ -449,9 +1695,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -4426,7 +4457,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +2040,158 @@
+@@ -468,11 +2071,192 @@
              });
          </script>
          <script>
@@ -4491,7 +4522,7 @@
 +             * 正解：clientX/clientY 与 getBoundingClientRect() 同属**视觉**坐标，这里按原始指针
 +             *  路径自己记框，然后 ① 覆盖 Selector.rect 给库判定用 ② 每帧把屏幕上的框也摆到同一处。
 +             * ------------------------------------------------------------------------ */
-+            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0};
++            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0, selfSelect: false};
 +            let dsRaf = 0;
 +            const dsBoxRect = () => {
 +                const l = Math.min(dsBox.x0, dsBox.x1), t = Math.min(dsBox.y0, dsBox.y1);
@@ -4531,10 +4562,21 @@
 +                if (e.button !== 0 || ! e.target || ! e.target.closest) {
 +                    return;
 +                }
-+                if (! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM)) {
++                const inArea = !! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM);
++                /* 老师第六轮的期待：「从窗口最左边按下拖动也要能框选」。
++                 * 侧栏是 fixed 元素、盖在网格左边（展开时 256px 宽），它上面的 mousedown 根本到不了
++                 * DragSelect 的区域 ⇒ 库不会启动。所以这种"区域外起始"的拖动由我们接管：
++                 * 只要按点落在**网格所在的水平范围与垂直范围**内（x ≤ 网格右缘、y ≥ 网格上缘），
++                 * 就算框选开始；松手时由我们自己落选中（见下面的 mouseup）。
++                 * 网格内部起始的拖动一行都不改，仍走库原来的路径。 */
++                const area = document.querySelector(IMAGES_SCROLL);
++                const ar = area ? area.getBoundingClientRect() : null;
++                const outOfAreaOk = !! ar && e.clientX <= ar.right && e.clientY >= ar.top;
++                if (! inArea && ! outOfAreaOk) {
 +                    return;
 +                }
 +                dsBox.on = true;
++                dsBox.selfSelect = ! inArea;      // 区域外起始 ⇒ 选中由我们自己落
 +                dsBox.x0 = dsBox.x1 = e.clientX;
 +                dsBox.y0 = dsBox.y1 = e.clientY;
 +                if (! dsRaf) {
@@ -4549,7 +4591,30 @@
 +                dsBox.y1 = e.clientY;
 +            }, true);
 +            document.addEventListener('mouseup', () => {
++                /* 区域外起始（侧栏上按下）的拖动：库完全没参与，选中由我们自己落。
++                 * 只认"真的是拖动"（框任一边 > 4px）—— 侧栏上单击导航仍然是单击。
++                 * 用库的对外 API 落选，这样 elementselect / elementunselect 事件照常发，
++                 * 顶部的「已选择 N 张」操作栏也照常更新（bindOperates 再兜一次）。 */
++                if (dsBox.on && dsBox.selfSelect) {
++                    const r = dsBoxRect();
++                    if (r.width > 4 || r.height > 4) {
++                        try {
++                            const hit = [].slice.call(document.querySelectorAll(IMAGES_ITEM)).filter((el) => {
++                                const b = el.getBoundingClientRect();
++                                return b.right > r.left && b.left < r.right && b.bottom > r.top && b.top < r.bottom;
++                            });
++                            if (hit.length) {
++                                ds.clearSelection();
++                                hit.forEach((el) => ds.addSelection(el));
++                                bindOperates();
++                            }
++                        } catch (err) {
++                            console.warn('outside-area select skipped:', err);
++                        }
++                    }
++                }
 +                dsBox.on = false;
++                dsBox.selfSelect = false;
 +            }, true);
 +            // 库判定用的矩形 = 原始指针坐标下的框（与卡片矩形同属视觉坐标，比较才成立）
 +            try {
@@ -4571,21 +4636,21 @@
 +                if ($(e.target).closest(IMAGES_ITEM).length) {
 +                    e.preventDefault();
 +                }
-             });
- 
++            });
++
 +            // 单击（没拖动）不改变勾选 —— 见上面 ②
 +            // 兜底：万一库没收到 mouseup（拖到窗口外等），松手也要解锁，别让界面卡在拖动状态
 +            document.addEventListener('mouseup', () => {
 +                if (ds.Interaction && ds.Interaction.isInteracting) {
 +                    ds.Interaction.reset({});
 +                }
-+            });
-+
+             });
+ 
 +
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +2205,14 @@
+@@ -486,10 +2270,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4602,7 +4667,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -502,17 +2225,68 @@
+@@ -502,17 +2290,68 @@
                      ds.stop();
                  }
  
@@ -4672,7 +4737,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2307,250 @@
+@@ -533,27 +2372,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -4906,7 +4971,7 @@
 +
 +                            $movementsAlbums.append(html);
 +                        }
-+                    });
+                     });
 +
 +                    $movementsAlbums.off('click', '.movements-album').on('click', '.movements-album', function () {
 +                        selectRow($(this));
@@ -4934,13 +4999,13 @@
 +                                toastr.warning(response.data.message);
 +                            }
 +                        })
-                     });
++                    });
 +
 +                    modal.open(MOVEMENTS_MODAL);
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2561,9 @@
+@@ -564,7 +2626,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -4951,7 +5016,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2571,19 @@
+@@ -572,47 +2636,19 @@
                          }
                      });
                  },
@@ -5008,7 +5073,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2620,10 @@
+@@ -649,6 +2685,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -5019,7 +5084,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2637,23 @@
+@@ -662,13 +2702,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -5045,7 +5110,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2668,11 @@
+@@ -683,7 +2733,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -5057,7 +5122,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2683,13 @@
+@@ -694,10 +2748,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -5073,7 +5138,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +2711,11 @@
+@@ -719,6 +2776,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -5085,7 +5150,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +2780,9 @@
+@@ -783,9 +2845,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -5098,7 +5163,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +2800,10 @@
+@@ -803,9 +2865,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -5110,7 +5175,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -844,17 +2842,27 @@
+@@ -844,17 +2907,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;

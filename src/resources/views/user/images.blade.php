@@ -903,12 +903,43 @@
             /* 全屏里鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态） */
             const FS_UI_MS = 2500;
             let fsUiTimer = 0;
-            const flashFullscreenUI = () => {
-                if (! document.documentElement.classList.contains('ls-viewer-fs')) { return; }
-                document.documentElement.classList.add('ls-fs-ui');
+            /* 全屏里"人还在 UI 上"就不收起 —— 老师第七轮要的：
+             * "我正操作着呢 UI 自己没了，这多烦人"。原来的实现只做了"每次操作重新计时"，
+             * 但鼠标停在 toolbar/缩略图条上不动时没有任何事件，计时照样走完 ⇒ UI 在手指底下消失
+             * （而且此刻它们是 pointer-events:none，点下去还会穿透、甚至误关看图器）。
+             * 这里改成：只要指针落在这些 UI 的矩形内（隐藏时它们仍是 visibility:hidden、布局还在，
+             * 所以量得到矩形；不能用 :hover —— pointer-events:none 时命中测试拿不到它们），
+             * 就只"续期"不排收起；手指按住期间同理。移开/松手后从那一刻重新计时。 */
+            const FS_UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];
+            const pointerOverViewerUI = (x, y) => FS_UI_ZONES.some((sel) => {
+                const el = document.querySelector(sel);
+                if (! el) { return false; }
+                const r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+            });
+            const scheduleFsHide = () => {
                 clearTimeout(fsUiTimer);
                 fsUiTimer = setTimeout(() => document.documentElement.classList.remove('ls-fs-ui'), FS_UI_MS);
             };
+            const flashFullscreenUI = (e) => {
+                if (! document.documentElement.classList.contains('ls-viewer-fs')) { return; }
+                document.documentElement.classList.add('ls-fs-ui');
+                const type = (e && e.type) || '';
+                if (type.indexOf('touch') === 0) {
+                    clearTimeout(fsUiTimer);            // 手指还按着 ⇒ 别收
+                    return;
+                }
+                if (type !== 'keydown' && pointerOverViewerUI((e && e.clientX) || 0, (e && e.clientY) || 0)) {
+                    clearTimeout(fsUiTimer);            // 鼠标停在 UI 上 ⇒ 只续期
+                    return;
+                }
+                scheduleFsHide();
+            };
+            document.addEventListener('touchend', () => {
+                if (document.documentElement.classList.contains('ls-fs-ui')) {
+                    scheduleFsHide();                   // 手指抬起才开始计时
+                }
+            }, {capture: true, passive: true});
             /* 这些操作都算"人还在"，一律刷新那 2.5s：
                移动鼠标 / 滚轮切图 / 点 toolbar 或缩略图条 / 触摸拖动 / 按键。
                （全部 passive：我们只看不拦，不影响任何默认行为。） */
@@ -2101,7 +2132,7 @@
              * 正解：clientX/clientY 与 getBoundingClientRect() 同属**视觉**坐标，这里按原始指针
              *  路径自己记框，然后 ① 覆盖 Selector.rect 给库判定用 ② 每帧把屏幕上的框也摆到同一处。
              * ------------------------------------------------------------------------ */
-            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0};
+            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0, selfSelect: false};
             let dsRaf = 0;
             const dsBoxRect = () => {
                 const l = Math.min(dsBox.x0, dsBox.x1), t = Math.min(dsBox.y0, dsBox.y1);
@@ -2141,10 +2172,21 @@
                 if (e.button !== 0 || ! e.target || ! e.target.closest) {
                     return;
                 }
-                if (! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM)) {
+                const inArea = !! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM);
+                /* 老师第六轮的期待：「从窗口最左边按下拖动也要能框选」。
+                 * 侧栏是 fixed 元素、盖在网格左边（展开时 256px 宽），它上面的 mousedown 根本到不了
+                 * DragSelect 的区域 ⇒ 库不会启动。所以这种"区域外起始"的拖动由我们接管：
+                 * 只要按点落在**网格所在的水平范围与垂直范围**内（x ≤ 网格右缘、y ≥ 网格上缘），
+                 * 就算框选开始；松手时由我们自己落选中（见下面的 mouseup）。
+                 * 网格内部起始的拖动一行都不改，仍走库原来的路径。 */
+                const area = document.querySelector(IMAGES_SCROLL);
+                const ar = area ? area.getBoundingClientRect() : null;
+                const outOfAreaOk = !! ar && e.clientX <= ar.right && e.clientY >= ar.top;
+                if (! inArea && ! outOfAreaOk) {
                     return;
                 }
                 dsBox.on = true;
+                dsBox.selfSelect = ! inArea;      // 区域外起始 ⇒ 选中由我们自己落
                 dsBox.x0 = dsBox.x1 = e.clientX;
                 dsBox.y0 = dsBox.y1 = e.clientY;
                 if (! dsRaf) {
@@ -2159,7 +2201,30 @@
                 dsBox.y1 = e.clientY;
             }, true);
             document.addEventListener('mouseup', () => {
+                /* 区域外起始（侧栏上按下）的拖动：库完全没参与，选中由我们自己落。
+                 * 只认"真的是拖动"（框任一边 > 4px）—— 侧栏上单击导航仍然是单击。
+                 * 用库的对外 API 落选，这样 elementselect / elementunselect 事件照常发，
+                 * 顶部的「已选择 N 张」操作栏也照常更新（bindOperates 再兜一次）。 */
+                if (dsBox.on && dsBox.selfSelect) {
+                    const r = dsBoxRect();
+                    if (r.width > 4 || r.height > 4) {
+                        try {
+                            const hit = [].slice.call(document.querySelectorAll(IMAGES_ITEM)).filter((el) => {
+                                const b = el.getBoundingClientRect();
+                                return b.right > r.left && b.left < r.right && b.bottom > r.top && b.top < r.bottom;
+                            });
+                            if (hit.length) {
+                                ds.clearSelection();
+                                hit.forEach((el) => ds.addSelection(el));
+                                bindOperates();
+                            }
+                        } catch (err) {
+                            console.warn('outside-area select skipped:', err);
+                        }
+                    }
+                }
                 dsBox.on = false;
+                dsBox.selfSelect = false;
             }, true);
             // 库判定用的矩形 = 原始指针坐标下的框（与卡片矩形同属视觉坐标，比较才成立）
             try {

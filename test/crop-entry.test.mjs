@@ -240,9 +240,9 @@ console.log('\n[6] 看图器：全屏观感 / 打开不漏重排 / 缩略图条�
         && ['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown']
             .every((ev) => code.includes(`'${ev}'`)));
     check('② 全屏里鼠标动/轻触临时淡入 UI（.ls-fs-ui + 到点自动收）',
-        /const flashFullscreenUI = \(\) => \{[\s\S]{0,400}ls-fs-ui/.test(code)
+        /const flashFullscreenUI = \(e\) => \{[\s\S]{0,400}ls-fs-ui/.test(code)
         && /document\.addEventListener\(ev, flashFullscreenUI, \{capture: true, passive: true\}\)/.test(code)
-        && /setTimeout\(\(\) => document\.documentElement\.classList\.remove\('ls-fs-ui'\), FS_UI_MS\)/.test(code)
+        && /const scheduleFsHide = \(\) => \{[\s\S]{0,300}setTimeout\(\(\) => document\.documentElement\.classList\.remove\('ls-fs-ui'\), FS_UI_MS\)/.test(code)
         && /const FS_UI_MS = \d+;/.test(code));
     check('④ 不再给图片墙加左侧内边距（上一版加过 18px，老师否掉了，已回退）',
         !/#images-scroll \{ padding-left: 18px; \}/.test(blade));
@@ -258,6 +258,27 @@ console.log('\n[6] 看图器：全屏观感 / 打开不漏重排 / 缩略图条�
         && /addEventListener\('hidden',[\s\S]{0,240}removeEventListener\('wheel', onBarWheel/.test(code));
     check('③ 老的常驻 passive wheel 监听已移除（passive 拦不住默认滚动）',
         !/addEventListener\('wheel'[\s\S]{0,80}\{capture: true, passive: true\}/.test(code));
+}
+
+// ---------------------------------------------------------------- 7. 侧栏上起框 / 全屏操作不消失
+console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失');
+{
+    check('② 全屏里鼠标停在 UI 上就不收起（只续期）—— 用矩形判定，不依赖 pointer-events',
+        /const FS_UI_ZONES = \['\.viewer-toolbar', '\.viewer-navbar', '\.viewer-title', '\.viewer-button'\]/.test(code)
+        && /const pointerOverViewerUI = \(x, y\) => FS_UI_ZONES\.some/.test(code)
+        && /pointerOverViewerUI\(\(e && e\.clientX\) \|\| 0, \(e && e\.clientY\) \|\| 0\)\)[\s\S]{0,80}clearTimeout\(fsUiTimer\)/.test(code));
+    check('② 手指按住期间不收起，抬起才开始计时（触屏端同样"操作中不消失"）',
+        /type\.indexOf\('touch'\) === 0[\s\S]{0,120}clearTimeout\(fsUiTimer\)/.test(code)
+        && /addEventListener\('touchend',[\s\S]{0,200}scheduleFsHide\(\)/.test(code));
+    check('④ 允许"区域外（侧栏上）"起框，并在松手时自己落选中',
+        /const outOfAreaOk = !! ar && e\.clientX <= ar\.right && e\.clientY >= ar\.top/.test(code)
+        && /dsBox\.selfSelect = ! inArea/.test(code)
+        && /dsBox\.selfSelect\)[\s\S]{0,600}ds\.clearSelection\(\)[\s\S]{0,200}ds\.addSelection\(el\)/.test(code)
+        && /bindOperates\(\)/.test(code.slice(code.indexOf('dsBox.selfSelect)'), code.indexOf('dsBox.selfSelect)') + 900)));
+    check('④ 区域外的单击不算框选（框任一边 > 4px 才算拖动）',
+        /if \(r\.width > 4 \|\| r\.height > 4\)/.test(code));
+    check('④ 网格内部起始的拖动仍走库原路径（selfSelect 只在区域外为 true）',
+        /const inArea = !! e\.target\.closest\(IMAGES_SCROLL \+ ', ' \+ IMAGES_ITEM\)/.test(code));
 }
 
 // ---------------------------------------------------------------- 汇总
