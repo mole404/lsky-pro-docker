@@ -2326,9 +2326,9 @@
 +    return api;
 +})();
 ---- src/resources/views/user/images.blade.php
---- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-07 20:13:01.384302 +0800
-+++ src/resources/views/user/images.blade.php	2026-10-07 20:13:01.384302 +0800
-@@ -4,45 +4,174 @@
+--- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-07 21:07:25.768792 +0800
++++ src/resources/views/user/images.blade.php	2026-10-07 21:07:25.768792 +0800
+@@ -4,45 +4,198 @@
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
@@ -2445,9 +2445,33 @@
 +        #crop-layer .crop-primary { background: var(--lsky-accent, #3b82f6) !important; color: #fff !important; }
 +        #crop-layer.is-busy .crop-bar { opacity: .45; pointer-events: none; }
 +
-+        /* 看图器工具栏的「裁剪」按钮图标（库自带的图标是一张雪碧图，没有 crop 这一格） */
++        /* 桌面：工具组包一层等于没包（子元素直接参与 .crop-bar 的 flex 布局） */
++        #crop-layer .crop-tools { display: contents; }
++
++        /* 手机（<768px）：
++           · 工具留一行可横向滑动（旋转/翻转 4 个 + 比例 4 个，一屏放不下）；
++           · 「取消 / 裁剪并上传」右对齐到右下角；
++           · 右下角手柄从库的 20×20 收到 14×14 —— 它同时是唯一热区，但库给它配了一层
++             200% 的透明 :before，所以视觉缩小后热区仍有 28×28，手感不变。 */
++        @media (max-width: 767.98px) {
++            #crop-layer .crop-bar { flex-direction: column; align-items: stretch; gap: 8px; }
++            #crop-layer .crop-tools { display: flex; gap: 6px; overflow-x: auto; }
++            #crop-layer .crop-tools > .crop-group { flex: none; }
++            #crop-layer .crop-actions { justify-content: flex-end; }
++            #crop-layer .cropper-point.point-se { width: 14px; height: 14px; }
++        }
++
++        /* 看图器工具栏的「裁剪」按钮图标。
++           库的图标是一张 280px 宽的雪碧图，而且只给 14 个内置键分别写了规则
++           （.viewer-zoom-in:before{content:"Zoom In";background-position:0 0} 这种）——
++           自定义键不在那张枚举表里，既没有 content（伪元素根本不生成）也没有 20×20 的盒子，
++           于是只剩 li 那圈黑底、看着「有按钮没图标」。这里把库那套声明补齐，图标换成风格一致的内联 SVG。 */
 +        html .viewer-toolbar > ul > li.viewer-crop:before {
-+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 2v16h16'/%3E%3Cpath d='M2 6h16v16'/%3E%3C/svg%3E");
++            content: '';
++            display: block;
++            width: 20px;
++            height: 20px;
++            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E");
 +            background-position: 0 0;
 +            background-repeat: no-repeat;
 +            background-size: 20px 20px;
@@ -2475,10 +2499,10 @@
 +                <a data-operate="movements" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移动到相册</a>
 +                <a data-operate="remove" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移出当前相册</a>
 +                <a data-operate="tag" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">标签管理</a>
-+                <a data-operate="detail" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
 +                <a data-operate="edit" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">编辑图片</a>
 +                <a data-operate="rename" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
 +                <a data-operate="delete" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
++                <a data-operate="detail" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
 +                <a data-operate="deselect" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">取消选择</a>
              </div>
 -            <div class="block lg:hidden">
@@ -2495,11 +2519,12 @@
                          <x-dropdown-link data-operate="movements" class="hidden" href="javascript:void(0)" @click="open = false">移动到相册</x-dropdown-link>
                          <x-dropdown-link data-operate="remove" class="hidden" href="javascript:void(0)" @click="open = false">移出当前相册</x-dropdown-link>
 -                        <x-dropdown-link data-operate="permission" class="hidden" href="javascript:void(0)" @click="open = false">设置权限</x-dropdown-link>
+-                        <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
 +                        <x-dropdown-link data-operate="tag" class="hidden" href="javascript:void(0)" @click="open = false">标签管理</x-dropdown-link>
-                         <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
 +                        <x-dropdown-link data-operate="edit" class="hidden" href="javascript:void(0)" @click="open = false">编辑图片</x-dropdown-link>
                          <x-dropdown-link data-operate="rename" class="hidden" href="javascript:void(0)" @click="open = false">重命名</x-dropdown-link>
                          <x-dropdown-link data-operate="delete" class="hidden" href="javascript:void(0)" @click="open = false">删除</x-dropdown-link>
++                        <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
 +                        <x-dropdown-link data-operate="deselect" class="hidden" href="javascript:void(0)" @click="open = false">取消选择</x-dropdown-link>
                      </x-slot>
                  </x-dropdown>
@@ -2518,7 +2543,7 @@
                      </a>
                  </x-slot>
  
-@@ -57,38 +186,115 @@
+@@ -57,38 +210,122 @@
                      </x-dropdown-link>
                  </x-slot>
              </x-dropdown>
@@ -2635,16 +2660,23 @@
 +            <img id="crop-image" alt="">
 +        </div>
 +        <div class="crop-bar">
++          {{-- 工具组（旋转/翻转 + 比例）：桌面用 display:contents 与原来三组布局完全一致，
++               手机上单独成一层、可横向滑动。 --}}
++          <div class="crop-tools">
 +            <div class="crop-group">
 +                <a href="javascript:void(0)" data-crop-action="rotate-left">左转 90°</a>
 +                <a href="javascript:void(0)" data-crop-action="rotate-right">右转 90°</a>
++                <a href="javascript:void(0)" data-crop-action="flip-x">左右翻转</a>
++                <a href="javascript:void(0)" data-crop-action="flip-y">上下翻转</a>
 +            </div>
 +            <div class="crop-group" id="crop-ratios">
 +                <a href="javascript:void(0)" data-crop-ratio="free" class="active">自由</a>
 +                <a href="javascript:void(0)" data-crop-ratio="1:1">1:1</a>
++                <a href="javascript:void(0)" data-crop-ratio="4:3">4:3</a>
 +                <a href="javascript:void(0)" data-crop-ratio="16:9">16:9</a>
 +            </div>
-+            <div class="crop-group">
++          </div>
++            <div class="crop-group crop-actions">
 +                <a href="javascript:void(0)" data-crop-action="cancel">取消</a>
 +                <a href="javascript:void(0)" data-crop-action="crop" class="crop-primary">裁剪并上传</a>
              </div>
@@ -2652,7 +2684,7 @@
          </div>
      </div>
  
-@@ -96,112 +302,301 @@
+@@ -96,112 +333,301 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -2844,7 +2876,7 @@
 +            <div class="mb-4 flex items-center gap-3">
 +                <img src="__thumb_url__" alt="__filename__" class="h-16 w-16 shrink-0 rounded-lg border border-line bg-surface-2 object-cover">
 +                <p class="min-w-0 truncate text-[16px] font-semibold leading-6 text-ink">图片详细信息</p>
-+            </div>
+             </div>
 +            <dl class="divide-y divide-line rounded-lg border border-line bg-surface-2 px-4">
 +                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
 +                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">上传时间</dt>
@@ -2904,9 +2936,9 @@
 +                    <dd class="min-w-0 break-words text-[14px] leading-6 text-ink">__uploaded_ip__</dd>
 +                </div>
 +            </dl>
-+        </div>
-+    </script>
-+
+         </div>
+     </script>
+ 
 +    {{-- 「移动到相册」弹窗：相册列表（单选）+ 底部「移动」「取消」。
 +         列表数据与顶部工具栏的「相册列表」同一个接口；点一行只选中，底部「移动」才提交。
 +         每行 min-h-[44px]（手机点击区 ≥44px），当前所在相册带「当前」标记（__current_badge__）。
@@ -2926,10 +2958,10 @@
 +            <div class="mt-4 flex justify-end gap-2">
 +                <button type="button" id="movements-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
 +                <button type="button" id="movements-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>移动</button>
-             </div>
-         </div>
-     </script>
- 
++            </div>
++        </div>
++    </script>
++
 +    {{-- 相册列表行：整行是一个点击区（min-h-[44px]），**行内一个 span 都不用** —— 名称是 <div>、
 +         「当前」徽标（JS 拼的 .ls-badge）也是 <div>，免得被无限加载「点 span 加载更多」的委托命中
 +         （点一下相册名就多拉一页相册）。列表末尾那条哨兵是 utils.infiniteScroll 插的
@@ -3019,7 +3051,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +612,579 @@
+@@ -217,44 +643,590 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -3100,6 +3132,8 @@
 +                // 所以这里把库里那 11 个内置按钮按原顺序照抄一遍（`true` 与原默认行为等价），
 +                // 末尾追加「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
 +                toolbar: {
++                    // 放最左（库按这里的键顺序渲染）。
++                    crop: { show: true, click: () => cropEditor.openFromViewer() },
 +                    'zoom-in': true,
 +                    'zoom-out': true,
 +                    'one-to-one': true,
@@ -3111,7 +3145,6 @@
 +                    'rotate-right': true,
 +                    'flip-horizontal': true,
 +                    'flip-vertical': true,
-+                    crop: { show: true, click: () => cropEditor.openFromViewer() },
                  },
 -                toggle(title, content, callback) {
 -                    if ($drawerMask.is(':hidden')) {
@@ -3182,6 +3215,8 @@
 +                const UPLOAD_URL = '{{ route('upload') }}';
 +                let cropper = null;
 +                let current = null;
++                let flipX = 1;                      // 翻转态：每次打开/关闭都归零（本来就每次重建实例）
++                let flipY = 1;
 +
 +                const $layer = () => $('#crop-layer');
 +                const $image = () => $('#crop-image');
@@ -3234,6 +3269,8 @@
 +                const close = () => {
 +                    if (cropper) { try { cropper.destroy(); } catch (e) {} cropper = null; }
 +                    current = null;
++                    flipX = 1;
++                    flipY = 1;
 +                    $layer().removeClass('is-open is-busy').attr('aria-hidden', 'true');
 +                    $image().removeAttr('src');
 +                    $('#crop-ratios a').removeClass('active').filter('[data-crop-ratio="free"]').addClass('active');
@@ -3251,6 +3288,8 @@
 +                    } catch (e) {}
 +                    if (cropper) { try { cropper.destroy(); } catch (e) {} cropper = null; }
 +                    current = info;
++                    flipX = 1;
++                    flipY = 1;
 +                    $layer().addClass('is-open').attr('aria-hidden', 'false');
 +                    $('#crop-hint').text('加载中…');
 +                    const img = $image().get(0);
@@ -3262,7 +3301,8 @@
 +                            background: false,
 +                            checkOrientation: true,         // 带 EXIF 旋转的手机图按显示方向处理
 +                            rotatable: true,
-+                            scalable: false,
++                            scalable: true,                 // 翻转要 scaleX/scaleY（Cropper 里 scale() 受这一项开关）；
++                                                            // 放大缩小手势仍由 zoomable/zoomOnTouch/zoomOnWheel 管
 +                            zoomOnTouch: true,
 +                            zoomOnWheel: true,
 +                            toggleDragModeOnDblclick: false,
@@ -3377,6 +3417,8 @@
 +                        if (! cropper) { return; }
 +                        if (action === 'rotate-left') { cropper.rotate(-90); }
 +                        if (action === 'rotate-right') { cropper.rotate(90); }
++                        if (action === 'flip-x') { flipX = -flipX; cropper.scale(flipX, flipY); }
++                        if (action === 'flip-y') { flipY = -flipY; cropper.scale(flipX, flipY); }
 +                        refreshHint();
 +                    });
 +                    $layer().on('click', '[data-crop-ratio]', function () {
@@ -3385,6 +3427,7 @@
 +                        $(this).siblings().removeClass('active');
 +                        $(this).addClass('active');
 +                        if (ratio === '1:1') { cropper.setAspectRatio(1); }
++                        else if (ratio === '4:3') { cropper.setAspectRatio(4 / 3); }
 +                        else if (ratio === '16:9') { cropper.setAspectRatio(16 / 9); }
 +                        else { cropper.setAspectRatio(NaN); }
 +                        refreshHint();
@@ -3621,7 +3664,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,7 +1206,11 @@
+@@ -276,7 +1248,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
@@ -3634,7 +3677,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +1234,73 @@
+@@ -300,22 +1276,73 @@
                  }
              });
  
@@ -3712,7 +3755,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +1313,40 @@
+@@ -328,29 +1355,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -3763,7 +3806,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +1354,13 @@
+@@ -358,12 +1396,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -3779,7 +3822,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +1369,14 @@
+@@ -372,13 +1411,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -3797,7 +3840,7 @@
                              );
                          }
                      });
-@@ -386,6 +1384,12 @@
+@@ -386,6 +1426,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -3810,7 +3853,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +1399,14 @@
+@@ -395,12 +1441,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -3827,7 +3870,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +1438,18 @@
+@@ -432,15 +1480,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -3849,7 +3892,7 @@
                  });
              }
  
-@@ -449,9 +1458,366 @@
+@@ -449,9 +1500,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -4219,7 +4262,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +1834,158 @@
+@@ -468,11 +1876,158 @@
              });
          </script>
          <script>
@@ -4378,7 +4421,7 @@
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +1999,14 @@
+@@ -486,10 +2041,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4395,7 +4438,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -502,17 +2019,68 @@
+@@ -502,17 +2061,68 @@
                      ds.stop();
                  }
  
@@ -4465,7 +4508,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2101,250 @@
+@@ -533,27 +2143,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -4733,7 +4776,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2355,9 @@
+@@ -564,7 +2397,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -4744,7 +4787,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2365,19 @@
+@@ -572,47 +2407,19 @@
                          }
                      });
                  },
@@ -4801,7 +4844,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2414,10 @@
+@@ -649,6 +2456,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -4812,7 +4855,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2431,23 @@
+@@ -662,13 +2473,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -4838,7 +4881,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2462,11 @@
+@@ -683,7 +2504,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -4850,7 +4893,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2477,13 @@
+@@ -694,10 +2519,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -4866,7 +4909,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +2505,11 @@
+@@ -719,6 +2547,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -4878,7 +4921,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +2574,9 @@
+@@ -783,9 +2616,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -4891,12 +4934,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -799,11 +2590,12 @@
-                     {header: '图片操作'},
-                     actions.refresh,
-                     actions.copy,
-+                    actions.edit,
-                     actions.copies,
+@@ -803,9 +2636,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -4904,8 +4942,11 @@
 +                    actions.tag,
                      actions.detail,
                      {divider: true},
++                    actions.edit,
                      actions.rename,
-@@ -844,17 +2636,27 @@
+                     actions.delete,
+                 ],
+@@ -844,17 +2678,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;

@@ -54,7 +54,8 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
     // ① 看图器工具栏（自定义 toolbar 必须把内置 11 个按钮照抄，否则它们会消失）
     const builtins = ['zoom-in', 'zoom-out', 'one-to-one', 'reset', 'prev', 'play', 'next', 'rotate-left', 'rotate-right', 'flip-horizontal', 'flip-vertical'];
     const toolbarStart = code.indexOf('toolbar: {');
-    const toolbarBlock = toolbarStart < 0 ? '' : code.slice(toolbarStart, code.indexOf('},', toolbarStart) + 2);
+    // 注意：不能拿第一个 '},' 当结尾 —— crop 那行自己的结尾就是 `},`（它现在排在最前）。
+    const toolbarBlock = toolbarStart < 0 ? '' : code.slice(toolbarStart, code.indexOf("'flip-vertical': true", toolbarStart) + 400);
     check('看图器用了自定义 toolbar（对象形式）', toolbarStart > -1);
     let idx = -1, ordered = true;
     for (const b of builtins) {
@@ -66,10 +67,27 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
     check('11 个内置按钮按原顺序全部列全（否则自定义模式下不渲染）', ordered, `keys=${builtins.length}`);
     check('toolbar 里追加了 crop 按钮', /crop:\s*\{\s*show:\s*true,\s*click:/.test(toolbarBlock));
     check('crop 按钮的 click 调 cropEditor.openFromViewer', toolbarBlock.includes('cropEditor.openFromViewer()'));
+    {
+        const cropIdx = toolbarBlock.indexOf('crop: {');
+        const zoomIdx = toolbarBlock.indexOf("'zoom-in': true");
+        check('crop 按钮排在 toolbar 最左（库按对象键顺序渲染）', cropIdx > -1 && zoomIdx > -1 && cropIdx < zoomIdx,
+            `crop@${cropIdx} zoom-in@${zoomIdx}`);
+    }
+    // 自定义键的画廊图标：库只给 14 个内置键写了规则（含 content 与 20×20 盒子），
+    // 自定义键不补这几条就只剩 li 的黑底 ⇒「有按钮没图标」。
+    check('自定义键的图标补齐了库缺的声明（content + 20×20 盒子）',
+        /li\.viewer-crop:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px/.test(blade));
 
     // ② 选中操作条（顶部那排 + < xl 的「⋯」下拉各一份）
     const editAnchors = (code.match(/data-operate="edit"/g) || []).length;
     check('data-operate="edit" 恰好两处（顶部工具条 + 「⋯」下拉）', editAnchors === 2, `count=${editAnchors}`);
+    {
+        const order = (code.match(/data-operate="(movements|remove|tag|edit|rename|delete|detail|deselect)"/g) || []).join(' ');
+        const want = ['movements', 'remove', 'tag', 'edit', 'rename', 'delete', 'detail', 'deselect']
+            .map((o) => `data-operate="${o}"`).join(' ');
+        check('操作条顺序：详细信息 夹在 删除 与 取消选择 之间（横排与「⋯」下拉两处一致）',
+            order === want + ' ' + want, order.replace(/data-operate="|"/g, ' ').replace(/\s+/g, ' ').trim());
+    }
     check('「编辑图片」文案存在', blade.includes('>编辑图片<'));
     check('bindOperates 里按格式决定是否给入口',
         /if \(selected\.length === 1\)[\s\S]{0,400}cropEditor\.supported\(selected\[0\]\)[\s\S]{0,200}operates\.splice\(/.test(code));
@@ -83,8 +101,9 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
     // ③ 右键 / 长按菜单
     check('actions 里定义了 edit（文案 + 单选 + 格式判断）',
         /edit:\s*\{[\s\S]{0,240}text: '编辑图片'[\s\S]{0,240}ds\.getSelection\(\)\.length === 1[\s\S]{0,240}cropEditor\.supported/.test(code));
-    check('edit 已插进图片菜单（复制图片 之后、复制链接 之前）',
-        /actions\.copy,\s*\n\s*actions\.edit,\s*\n\s*actions\.copies,/.test(code));
+    check('edit 在分隔线后的「重命名 / 删除」那组最上面',
+        /\{divider: true\},\s*\n\s*actions\.edit,\s*\n\s*actions\.rename,\s*\n\s*actions\.delete,/.test(code));
+    check('edit 不再出现在前半段菜单里', !/actions\.copy,\s*\n\s*actions\.edit,/.test(code));
 }
 
 // ---------------------------------------------------------------- 3. 规则
@@ -108,11 +127,26 @@ console.log('\n[4] 裁剪层的标记与交互钩子齐全');
 {
     check('#crop-layer / #crop-image 存在', blade.includes('id="crop-layer"') && blade.includes('id="crop-image"'));
     check('旋转两个按钮（左/右 90°）', blade.includes('data-crop-action="rotate-left"') && blade.includes('data-crop-action="rotate-right"'));
-    check('比例三档（自由 / 1:1 / 16:9）',
-        blade.includes('data-crop-ratio="free"') && blade.includes('data-crop-ratio="1:1"') && blade.includes('data-crop-ratio="16:9"'));
+    check('翻转两个按钮（左右 / 上下）', blade.includes('data-crop-action="flip-x"') && blade.includes('data-crop-action="flip-y"'));
+    check('比例四档（自由 / 1:1 / 4:3 / 16:9）',
+        ['free', '1:1', '4:3', '16:9'].every((r) => blade.includes(`data-crop-ratio="${r}"`)));
+    check('4:3 排在 1:1 之后', /data-crop-ratio="1:1"[\s\S]{0,240}data-crop-ratio="4:3"/.test(blade));
+    check('比例处理里 4:3 走 setAspectRatio(4 / 3)', code.includes('cropper.setAspectRatio(4 / 3)'));
     check('确认/取消按钮', blade.includes('data-crop-action="crop"') && blade.includes('data-crop-action="cancel"'));
     check('旋转走 cropper.rotate(±90)、比例走 setAspectRatio（自由档用 NaN）',
         code.includes('cropper.rotate(-90)') && code.includes('cropper.rotate(90)') && code.includes('cropper.setAspectRatio(NaN)'));
+    check('翻转走 cropper.scale(flipX, flipY)，且翻转态在打开/关闭时都归零',
+        /flip-x'\) \{ flipX = -flipX; cropper\.scale\(flipX, flipY\); \}/.test(code)
+        && /flip-y'\) \{ flipY = -flipY; cropper\.scale\(flipX, flipY\); \}/.test(code)
+        && (code.match(/flipX = 1;/g) || []).length >= 2);
+    check('scalable 已打开（库的 scale() 受这一项开关）', /scalable: true/.test(code));
+    check('缩放/手势开关没被顺手改掉', /zoomOnTouch: true/.test(code) && /zoomOnWheel: true/.test(code));
+    check('手机布局钩子：工具组可横滑 + 两个动作按钮右对齐右下角',
+        blade.includes('class="crop-tools"') && blade.includes('crop-group crop-actions'));
+    check('桌面布局与原来一致（.crop-tools 在桌面 display: contents）',
+        /#crop-layer \.crop-tools \{ display: contents; \}/.test(blade));
+    check('手机媒体查询里：工具行横滑 + 动作按钮右对齐 + 手柄 20px→14px',
+        /@media \(max-width: 767\.98px\) \{[\s\S]{0,900}overflow-x: auto[\s\S]{0,400}justify-content: flex-end[\s\S]{0,400}\.cropper-point\.point-se \{ width: 14px; height: 14px; \}/.test(blade));
     check('EXIF 方向交给库处理（checkOrientation: true）', code.includes('checkOrientation: true'));
     check('关闭时销毁实例（v1 同一元素不能重复 init）', /close = \(\) => \{[\s\S]{0,160}cropper\.destroy\(\)/.test(code));
     check('打开裁剪层前先关掉看图器（两层不叠）',

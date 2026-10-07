@@ -117,9 +117,33 @@
         #crop-layer .crop-primary { background: var(--lsky-accent, #3b82f6) !important; color: #fff !important; }
         #crop-layer.is-busy .crop-bar { opacity: .45; pointer-events: none; }
 
-        /* 看图器工具栏的「裁剪」按钮图标（库自带的图标是一张雪碧图，没有 crop 这一格） */
+        /* 桌面：工具组包一层等于没包（子元素直接参与 .crop-bar 的 flex 布局） */
+        #crop-layer .crop-tools { display: contents; }
+
+        /* 手机（<768px）：
+           · 工具留一行可横向滑动（旋转/翻转 4 个 + 比例 4 个，一屏放不下）；
+           · 「取消 / 裁剪并上传」右对齐到右下角；
+           · 右下角手柄从库的 20×20 收到 14×14 —— 它同时是唯一热区，但库给它配了一层
+             200% 的透明 :before，所以视觉缩小后热区仍有 28×28，手感不变。 */
+        @media (max-width: 767.98px) {
+            #crop-layer .crop-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+            #crop-layer .crop-tools { display: flex; gap: 6px; overflow-x: auto; }
+            #crop-layer .crop-tools > .crop-group { flex: none; }
+            #crop-layer .crop-actions { justify-content: flex-end; }
+            #crop-layer .cropper-point.point-se { width: 14px; height: 14px; }
+        }
+
+        /* 看图器工具栏的「裁剪」按钮图标。
+           库的图标是一张 280px 宽的雪碧图，而且只给 14 个内置键分别写了规则
+           （.viewer-zoom-in:before{content:"Zoom In";background-position:0 0} 这种）——
+           自定义键不在那张枚举表里，既没有 content（伪元素根本不生成）也没有 20×20 的盒子，
+           于是只剩 li 那圈黑底、看着「有按钮没图标」。这里把库那套声明补齐，图标换成风格一致的内联 SVG。 */
         html .viewer-toolbar > ul > li.viewer-crop:before {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 2v16h16'/%3E%3Cpath d='M2 6h16v16'/%3E%3C/svg%3E");
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E");
             background-position: 0 0;
             background-repeat: no-repeat;
             background-size: 20px 20px;
@@ -138,10 +162,10 @@
                 <a data-operate="movements" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移动到相册</a>
                 <a data-operate="remove" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移出当前相册</a>
                 <a data-operate="tag" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">标签管理</a>
-                <a data-operate="detail" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
                 <a data-operate="edit" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">编辑图片</a>
                 <a data-operate="rename" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
                 <a data-operate="delete" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
+                <a data-operate="detail" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
                 <a data-operate="deselect" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">取消选择</a>
             </div>
             {{-- 与上排互斥：<xl 才收起成一格「⋯」菜单 --}}
@@ -156,10 +180,10 @@
                         <x-dropdown-link data-operate="movements" class="hidden" href="javascript:void(0)" @click="open = false">移动到相册</x-dropdown-link>
                         <x-dropdown-link data-operate="remove" class="hidden" href="javascript:void(0)" @click="open = false">移出当前相册</x-dropdown-link>
                         <x-dropdown-link data-operate="tag" class="hidden" href="javascript:void(0)" @click="open = false">标签管理</x-dropdown-link>
-                        <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
                         <x-dropdown-link data-operate="edit" class="hidden" href="javascript:void(0)" @click="open = false">编辑图片</x-dropdown-link>
                         <x-dropdown-link data-operate="rename" class="hidden" href="javascript:void(0)" @click="open = false">重命名</x-dropdown-link>
                         <x-dropdown-link data-operate="delete" class="hidden" href="javascript:void(0)" @click="open = false">删除</x-dropdown-link>
+                        <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
                         <x-dropdown-link data-operate="deselect" class="hidden" href="javascript:void(0)" @click="open = false">取消选择</x-dropdown-link>
                     </x-slot>
                 </x-dropdown>
@@ -282,16 +306,23 @@
             <img id="crop-image" alt="">
         </div>
         <div class="crop-bar">
+          {{-- 工具组（旋转/翻转 + 比例）：桌面用 display:contents 与原来三组布局完全一致，
+               手机上单独成一层、可横向滑动。 --}}
+          <div class="crop-tools">
             <div class="crop-group">
                 <a href="javascript:void(0)" data-crop-action="rotate-left">左转 90°</a>
                 <a href="javascript:void(0)" data-crop-action="rotate-right">右转 90°</a>
+                <a href="javascript:void(0)" data-crop-action="flip-x">左右翻转</a>
+                <a href="javascript:void(0)" data-crop-action="flip-y">上下翻转</a>
             </div>
             <div class="crop-group" id="crop-ratios">
                 <a href="javascript:void(0)" data-crop-ratio="free" class="active">自由</a>
                 <a href="javascript:void(0)" data-crop-ratio="1:1">1:1</a>
+                <a href="javascript:void(0)" data-crop-ratio="4:3">4:3</a>
                 <a href="javascript:void(0)" data-crop-ratio="16:9">16:9</a>
             </div>
-            <div class="crop-group">
+          </div>
+            <div class="crop-group crop-actions">
                 <a href="javascript:void(0)" data-crop-action="cancel">取消</a>
                 <a href="javascript:void(0)" data-crop-action="crop" class="crop-primary">裁剪并上传</a>
             </div>
@@ -672,6 +703,8 @@
                 // 所以这里把库里那 11 个内置按钮按原顺序照抄一遍（`true` 与原默认行为等价），
                 // 末尾追加「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
                 toolbar: {
+                    // 放最左（库按这里的键顺序渲染）。
+                    crop: { show: true, click: () => cropEditor.openFromViewer() },
                     'zoom-in': true,
                     'zoom-out': true,
                     'one-to-one': true,
@@ -683,7 +716,6 @@
                     'rotate-right': true,
                     'flip-horizontal': true,
                     'flip-vertical': true,
-                    crop: { show: true, click: () => cropEditor.openFromViewer() },
                 },
                     slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
 
@@ -751,6 +783,8 @@
                 const UPLOAD_URL = '{{ route('upload') }}';
                 let cropper = null;
                 let current = null;
+                let flipX = 1;                      // 翻转态：每次打开/关闭都归零（本来就每次重建实例）
+                let flipY = 1;
 
                 const $layer = () => $('#crop-layer');
                 const $image = () => $('#crop-image');
@@ -803,6 +837,8 @@
                 const close = () => {
                     if (cropper) { try { cropper.destroy(); } catch (e) {} cropper = null; }
                     current = null;
+                    flipX = 1;
+                    flipY = 1;
                     $layer().removeClass('is-open is-busy').attr('aria-hidden', 'true');
                     $image().removeAttr('src');
                     $('#crop-ratios a').removeClass('active').filter('[data-crop-ratio="free"]').addClass('active');
@@ -820,6 +856,8 @@
                     } catch (e) {}
                     if (cropper) { try { cropper.destroy(); } catch (e) {} cropper = null; }
                     current = info;
+                    flipX = 1;
+                    flipY = 1;
                     $layer().addClass('is-open').attr('aria-hidden', 'false');
                     $('#crop-hint').text('加载中…');
                     const img = $image().get(0);
@@ -831,7 +869,8 @@
                             background: false,
                             checkOrientation: true,         // 带 EXIF 旋转的手机图按显示方向处理
                             rotatable: true,
-                            scalable: false,
+                            scalable: true,                 // 翻转要 scaleX/scaleY（Cropper 里 scale() 受这一项开关）；
+                                                            // 放大缩小手势仍由 zoomable/zoomOnTouch/zoomOnWheel 管
                             zoomOnTouch: true,
                             zoomOnWheel: true,
                             toggleDragModeOnDblclick: false,
@@ -945,6 +984,8 @@
                         if (! cropper) { return; }
                         if (action === 'rotate-left') { cropper.rotate(-90); }
                         if (action === 'rotate-right') { cropper.rotate(90); }
+                        if (action === 'flip-x') { flipX = -flipX; cropper.scale(flipX, flipY); }
+                        if (action === 'flip-y') { flipY = -flipY; cropper.scale(flipX, flipY); }
                         refreshHint();
                     });
                     $layer().on('click', '[data-crop-ratio]', function () {
@@ -953,6 +994,7 @@
                         $(this).siblings().removeClass('active');
                         $(this).addClass('active');
                         if (ratio === '1:1') { cropper.setAspectRatio(1); }
+                        else if (ratio === '4:3') { cropper.setAspectRatio(4 / 3); }
                         else if (ratio === '16:9') { cropper.setAspectRatio(16 / 9); }
                         else { cropper.setAspectRatio(NaN); }
                         refreshHint();
@@ -2590,7 +2632,6 @@
                     {header: '图片操作'},
                     actions.refresh,
                     actions.copy,
-                    actions.edit,
                     actions.copies,
                     actions.open,
                     actions.movements,
@@ -2598,6 +2639,7 @@
                     actions.tag,
                     actions.detail,
                     {divider: true},
+                    actions.edit,
                     actions.rename,
                     actions.delete,
                 ],
