@@ -4,6 +4,7 @@
     <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/cropper-js/cropper.min.css') }}?v={{ \App\Utils::assetVersion('css/cropper-js/cropper.min.css') }}">
     {{-- fork：相册弹窗（#album-switch-modal）自己的样式。本仓库这个补丁只改这一个文件
          （common.less 不动，所以写在页面里）：
          1) 哨兵文案：与 common.less 里「只在这个弹窗里藏掉 .infinite-scroll」那条同一思路
@@ -64,6 +65,54 @@
         .image-tags-off .image-tags {
             display: none;
         }
+
+        /* ── fork：图片裁剪层（Cropper.js v1.6.3）──────────────────────────────
+           桌面 html{zoom:1.1}（common.less）下给这一层套「反向缩放」，让它内部的
+           布局单位 == 屏幕像素 —— 与 .viewer-container 用的是同一招，避免 Cropper
+           把视觉坐标当布局坐标用（Viewer.js 当年就是这么整体偏的）。 */
+        #crop-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 60;
+            display: none;
+            flex-direction: column;
+            background: rgba(10, 12, 15, .94);
+        }
+        #crop-layer.is-open { display: flex; }
+        @media (min-width: 768px) {
+            html #crop-layer { zoom: .9090909091; }
+        }
+        #crop-layer .crop-head {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            padding: 10px 14px; color: #e6e9ee; font-size: 14px;
+        }
+        #crop-layer .crop-hint { color: #9aa4b2; font-size: 12.5px; }
+        #crop-layer .crop-stage {
+            flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+            overflow: hidden; padding: 0 8px;
+        }
+        #crop-layer .crop-stage img { max-width: 100%; max-height: 100%; display: block; }
+        #crop-layer .crop-bar {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            flex-wrap: wrap; padding: 10px 14px 14px;
+        }
+        #crop-layer .crop-group { display: flex; align-items: center; gap: 6px; }
+        #crop-layer .crop-group a {
+            color: #e6e9ee; font-size: 13.5px; line-height: 1; padding: 8px 12px;
+            border-radius: 8px; background: rgba(255, 255, 255, .08);
+        }
+        #crop-layer .crop-group a:hover { background: rgba(255, 255, 255, .16); }
+        #crop-layer .crop-group a.active { background: var(--lsky-accent, #3b82f6); color: #fff; }
+        #crop-layer .crop-primary { background: var(--lsky-accent, #3b82f6) !important; color: #fff !important; }
+        #crop-layer.is-busy .crop-bar { opacity: .45; pointer-events: none; }
+
+        /* 看图器工具栏的「裁剪」按钮图标（库自带的图标是一张雪碧图，没有 crop 这一格） */
+        html .viewer-toolbar > ul > li.viewer-crop:before {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 2v16h16'/%3E%3Cpath d='M2 6h16v16'/%3E%3C/svg%3E");
+            background-position: 0 0;
+            background-repeat: no-repeat;
+            background-size: 20px 20px;
+        }
     </style>
 @endpush
 
@@ -79,6 +128,7 @@
                 <a data-operate="remove" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">移出当前相册</a>
                 <a data-operate="tag" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">标签管理</a>
                 <a data-operate="detail" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">详细信息</a>
+                <a data-operate="edit" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">编辑图片</a>
                 <a data-operate="rename" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">重命名</a>
                 <a data-operate="delete" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">删除</a>
                 <a data-operate="deselect" class="whitespace-nowrap hidden text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">取消选择</a>
@@ -96,6 +146,7 @@
                         <x-dropdown-link data-operate="remove" class="hidden" href="javascript:void(0)" @click="open = false">移出当前相册</x-dropdown-link>
                         <x-dropdown-link data-operate="tag" class="hidden" href="javascript:void(0)" @click="open = false">标签管理</x-dropdown-link>
                         <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
+                        <x-dropdown-link data-operate="edit" class="hidden" href="javascript:void(0)" @click="open = false">编辑图片</x-dropdown-link>
                         <x-dropdown-link data-operate="rename" class="hidden" href="javascript:void(0)" @click="open = false">重命名</x-dropdown-link>
                         <x-dropdown-link data-operate="delete" class="hidden" href="javascript:void(0)" @click="open = false">删除</x-dropdown-link>
                         <x-dropdown-link data-operate="deselect" class="hidden" href="javascript:void(0)" @click="open = false">取消选择</x-dropdown-link>
@@ -206,6 +257,35 @@
     <x-modal id="image-tags-modal">
         <div id="image-tags-content"></div>
     </x-modal>
+
+    {{-- fork：图片裁剪层（Cropper.js v1.6.3）。三个入口共用它：
+         ① 看图器工具栏的「裁剪」按钮 ② 选中操作条（单选时才出现）③ 右键 / 长按菜单的「编辑图片」。
+         规则：只有 jpg/jpeg/png 给入口；导出格式跟随原图（png → PNG 无损、jpg/jpeg → JPEG q0.95）；
+         结果作为一张**新图**上传，不改动原图。 --}}
+    <div id="crop-layer" aria-hidden="true">
+        <div class="crop-head">
+            <span>裁剪图片</span>
+            <span class="crop-hint" id="crop-hint"></span>
+        </div>
+        <div class="crop-stage">
+            <img id="crop-image" alt="">
+        </div>
+        <div class="crop-bar">
+            <div class="crop-group">
+                <a href="javascript:void(0)" data-crop-action="rotate-left">左转 90°</a>
+                <a href="javascript:void(0)" data-crop-action="rotate-right">右转 90°</a>
+            </div>
+            <div class="crop-group" id="crop-ratios">
+                <a href="javascript:void(0)" data-crop-ratio="free" class="active">自由</a>
+                <a href="javascript:void(0)" data-crop-ratio="1:1">1:1</a>
+                <a href="javascript:void(0)" data-crop-ratio="16:9">16:9</a>
+            </div>
+            <div class="crop-group">
+                <a href="javascript:void(0)" data-crop-action="cancel">取消</a>
+                <a href="javascript:void(0)" data-crop-action="crop" class="crop-primary">裁剪并上传</a>
+            </div>
+        </div>
+    </div>
 
     <script type="text/html" id="images-item-tpl">
         <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
@@ -502,6 +582,7 @@
     @push('scripts')
         <script src="{{ asset('js/justified-gallery/jquery.justifiedGallery.min.js') }}"></script>
         <script src="{{ asset('js/viewer-js/viewer.min.js') }}"></script>
+        <script src="{{ asset('js/cropper-js/cropper.min.js') }}?v={{ \App\Utils::assetVersion('js/cropper-js/cropper.min.js') }}"></script>
         <script src="{{ asset('js/dragselect/ds.min.js') }}"></script>
         {{-- fork 补丁：加版本串，避免 iOS/Safari 的启发式缓存把旧版 context-js.js 一直喂给老用户 --}}
         <script src="{{ asset('js/context-js/context-js.js') }}?v={{ \App\Utils::assetVersion('js/context-js/context-js.js') }}"></script>
@@ -576,6 +657,23 @@
             };
             const viewer = new Viewer(document.getElementById('images-grid'), {
                 url: 'data-original',
+                // fork：自定义工具栏。注意 —— 传对象进入「自定义」模式后，内置按钮**只渲染你列出的键**，
+                // 所以这里把库里那 11 个内置按钮按原顺序照抄一遍（`true` 与原默认行为等价），
+                // 末尾追加「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
+                toolbar: {
+                    'zoom-in': true,
+                    'zoom-out': true,
+                    'one-to-one': true,
+                    reset: true,
+                    prev: true,
+                    play: true,
+                    next: true,
+                    'rotate-left': true,
+                    'rotate-right': true,
+                    'flip-horizontal': true,
+                    'flip-vertical': true,
+                    crop: { show: true, click: () => cropEditor.openFromViewer() },
+                },
                     slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
 
                 // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
@@ -624,6 +722,233 @@
                     } catch (e) { /* 兜底：绝不因为补一刀而让看图界面挂掉 */ }
                     return ret;
                 };
+            })();
+
+            /* 图片裁剪（Cropper.js v1.6.3）—— 三个入口共用这一个模块：
+             *   · 看图器工具栏的「裁剪」按钮（cropEditor.openFromViewer）
+             *   · 选中操作条的 [data-operate="edit"]（只有单选 jpg/jpeg/png 时出现）
+             *   · 右键 / 长按菜单的「编辑图片」
+             * 规则（老师拍板）：
+             *   · 只有 jpg/jpeg/png 给入口，其它格式一律不出现；
+             *   · 导出格式跟随原图：png → PNG 无损；jpg/jpeg → JPEG q0.95；
+             *   · 不设长边上限（按原图尺寸导出，绝不放大），框选 >30MP 时在标题栏提示体积；
+             *   · 结果作为**一张新图**上传（复用 /upload，字段与页面表单一致），不改原图。
+             * 坐标注意：桌面 html{zoom:1.1} 下由本页 <style> 给 #crop-layer 套了反向缩放，
+             * 让 Cropper 内部的布局单位与屏幕像素一致（与 .viewer-container 同一招）。 */
+            const cropEditor = (function () {
+                const SUPPORTED = ['jpg', 'jpeg', 'png'];
+                const UPLOAD_URL = '{{ route('upload') }}';
+                let cropper = null;
+                let current = null;
+
+                const $layer = () => $('#crop-layer');
+                const $image = () => $('#crop-image');
+
+                const extOf = (url) => {
+                    const path = String(url || '').split('?')[0].split('#')[0];
+                    const m = path.match(/\.([A-Za-z0-9]+)$/);
+                    return m ? m[1].toLowerCase() : '';
+                };
+
+                // 允许传入：卡片元素 / 卡片里的 img / jQuery 对象 / 纯 {url, name} 对象
+                const infoOf = (item) => {
+                    if (item && typeof item === 'object' && ! item.jquery && ! (item instanceof Element) && item.url) {
+                        return { url: item.url, name: item.name || '', ext: extOf(item.url) };
+                    }
+                    const $item = $(item);
+                    let $card = $();
+                    if ($item.is(IMAGES_ITEM)) { $card = $item; }
+                    else if ($item.closest(IMAGES_ITEM).length) { $card = $item.closest(IMAGES_ITEM); }
+                    const json = ($card.length ? $card.data('json') : $item.data('json')) || {};
+                    let url = json.url || '';
+                    if (! url) {
+                        url = $card.find('img[data-original]').attr('data-original')
+                            || $item.find('img[data-original]').attr('data-original')
+                            || '';
+                    }
+                    const name = json.origin_name || json.name || (url ? decodeURIComponent(url.split('/').pop() || '') : '');
+                    return { url: url, name: name, ext: extOf(url) };
+                };
+
+                const supported = (item) => {
+                    const info = infoOf(item);
+                    return !! info.url && SUPPORTED.indexOf(info.ext) !== -1;
+                };
+
+                const refreshHint = () => {
+                    if (! cropper) { return; }
+                    let text = '';
+                    try {
+                        const d = cropper.getData(true);
+                        const mp = (d.width * d.height) / 1e6;
+                        text = d.width + ' × ' + d.height + '（约 ' + mp.toFixed(1) + 'MP';
+                        text += current && current.ext === 'png' ? '，无损 PNG' : '';
+                        text += '）';
+                        if (mp >= 30) { text += ' · 这张比较大，上传要几秒'; }
+                    } catch (e) { text = ''; }
+                    $('#crop-hint').text(text);
+                };
+
+                const close = () => {
+                    if (cropper) { try { cropper.destroy(); } catch (e) {} cropper = null; }
+                    current = null;
+                    $layer().removeClass('is-open is-busy').attr('aria-hidden', 'true');
+                    $image().removeAttr('src');
+                    $('#crop-ratios a').removeClass('active').filter('[data-crop-ratio="free"]').addClass('active');
+                };
+
+                const open = (item) => {
+                    const info = infoOf(item);
+                    if (! info.url) { toastr.warning('没有找到这张图片的地址'); return; }
+                    if (SUPPORTED.indexOf(info.ext) === -1) { toastr.warning('该格式不支持编辑'); return; }
+                    // 看图器开着就先关掉：两层叠在一起会互相抢手势
+                    try {
+                        if (document.body.classList.contains('viewer-open') && viewer && typeof viewer.hide === 'function') {
+                            viewer.hide();
+                        }
+                    } catch (e) {}
+                    if (cropper) { try { cropper.destroy(); } catch (e) {} cropper = null; }
+                    current = info;
+                    $layer().addClass('is-open').attr('aria-hidden', 'false');
+                    $('#crop-hint').text('加载中…');
+                    const img = $image().get(0);
+                    img.onload = () => {
+                        cropper = new Cropper(img, {
+                            viewMode: 1,                    // 裁剪框不超出图片
+                            dragMode: 'move',
+                            autoCropArea: 0.8,
+                            background: false,
+                            checkOrientation: true,         // 带 EXIF 旋转的手机图按显示方向处理
+                            rotatable: true,
+                            scalable: false,
+                            zoomOnTouch: true,
+                            zoomOnWheel: true,
+                            toggleDragModeOnDblclick: false,
+                            ready: refreshHint,
+                            crop: refreshHint,
+                        });
+                        refreshHint();
+                    };
+                    img.onerror = () => {
+                        close();
+                        toastr.warning('图片加载失败（跨域被拦或网络问题）');
+                    };
+                    img.src = info.url;
+                };
+
+                // 看图器里当前显示的那张：url: 'data-original' ⇒ canvas 里最后插入的 img 的 src 就是原图地址
+                const viewerUrl = () => {
+                    const imgs = document.querySelectorAll('.viewer-canvas img');
+                    for (let i = imgs.length - 1; i >= 0; i--) {
+                        const src = imgs[i].getAttribute('src');
+                        if (src) { return src; }
+                    }
+                    return '';
+                };
+
+                const openFromViewer = () => {
+                    const url = viewerUrl();
+                    if (! url) { toastr.warning('没有找到当前图片'); return; }
+                    const card = document.querySelector(IMAGES_ITEM + ' img[data-original="' + url.replace(/"/g, '\\"') + '"]');
+                    open(card || { url: url });
+                };
+
+                // 看图器里切图后，按当前图格式显示/隐藏「裁剪」按钮（其它格式不给入口）
+                const syncViewerButton = () => {
+                    const url = viewerUrl();
+                    const ok = !! url && SUPPORTED.indexOf(extOf(url)) !== -1;
+                    document.querySelectorAll('.viewer-toolbar li.viewer-crop').forEach((li) => {
+                        li.style.display = ok ? '' : 'none';
+                    });
+                };
+                document.addEventListener('viewed', syncViewerButton);
+                document.addEventListener('shown', syncViewerButton);
+
+                const upload = (file) => {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    const $strategy = $('#strategy-selected');
+                    if ($strategy.length && $strategy.data('id')) { fd.append('strategy_id', $strategy.data('id')); }
+                    const token = $('meta[name="csrf-token"]').attr('content');
+                    $layer().addClass('is-busy');
+                    $('#crop-hint').text('上传中…');
+                    return $.ajax({
+                        url: UPLOAD_URL,
+                        type: 'POST',
+                        data: fd,
+                        processData: false,
+                        contentType: false,
+                        headers: token ? { 'X-CSRF-TOKEN': token } : {},
+                        dataType: 'json',
+                    }).done((response) => {
+                        if (response && response.status === false) {
+                            toastr.error(response.message || '上传失败');
+                            return;
+                        }
+                        close();
+                        toastr.success('已裁剪并上传');
+                        try { if (typeof resetImages === 'function') { resetImages(); } } catch (e) {}
+                    }).fail((xhr) => {
+                        const data = xhr && xhr.responseJSON;
+                        let msg = (data && (data.message || data.data)) || ('上传失败（HTTP ' + (xhr ? xhr.status : '?') + '）');
+                        if (data && data.errors) { msg = '上传失败：' + Object.values(data.errors).flat().join('；'); }
+                        toastr.error(msg);
+                        $('#crop-hint').text('上传失败，可重试');
+                    }).always(() => {
+                        $layer().removeClass('is-busy');
+                    });
+                };
+
+                const doCrop = () => {
+                    if (! cropper || ! current) { return; }
+                    const isPng = current.ext === 'png';
+                    const mime = isPng ? 'image/png' : 'image/jpeg';
+                    let canvas = null;
+                    try {
+                        // 不设 maxWidth/maxHeight：按原图尺寸导出（绝不放大）
+                        canvas = cropper.getCroppedCanvas({ imageSmoothingQuality: 'high' });
+                    } catch (e) { canvas = null; }
+                    if (! canvas || ! canvas.width || ! canvas.height) { toastr.warning('裁剪失败，请重试'); return; }
+                    const base = (current.name || 'image').replace(/\.[^.]*$/, '');
+                    const name = base + (isPng ? '.png' : '.jpg');
+                    const done = (blob) => {
+                        if (! blob) { toastr.warning('导出失败，请重试'); return; }
+                        upload(new File([blob], name, { type: mime }));
+                    };
+                    if (typeof canvas.toBlob === 'function') {
+                        canvas.toBlob(done, mime, isPng ? undefined : 0.95);
+                    } else {
+                        const dataUrl = canvas.toDataURL(mime, isPng ? undefined : 0.95);
+                        const bin = atob(dataUrl.split(',')[1]);
+                        const arr = new Uint8Array(bin.length);
+                        for (let i = 0; i < bin.length; i++) { arr[i] = bin.charCodeAt(i); }
+                        done(new Blob([arr], { type: mime }));
+                    }
+                };
+
+                if ($('#crop-layer').length) {
+                    $layer().on('click', '[data-crop-action]', function () {
+                        const action = $(this).data('crop-action');
+                        if (action === 'cancel') { return close(); }
+                        if (action === 'crop') { return doCrop(); }
+                        if (! cropper) { return; }
+                        if (action === 'rotate-left') { cropper.rotate(-90); }
+                        if (action === 'rotate-right') { cropper.rotate(90); }
+                        refreshHint();
+                    });
+                    $layer().on('click', '[data-crop-ratio]', function () {
+                        const ratio = $(this).data('crop-ratio');
+                        if (! cropper) { return; }
+                        $(this).siblings().removeClass('active');
+                        $(this).addClass('active');
+                        if (ratio === '1:1') { cropper.setAspectRatio(1); }
+                        else if (ratio === '16:9') { cropper.setAspectRatio(16 / 9); }
+                        else { cropper.setAspectRatio(NaN); }
+                        refreshHint();
+                    });
+                }
+
+                return { open: open, openFromViewer: openFromViewer, supported: supported, close: close };
             })();
 
             /* 底部缩略图条上的快捷切图（老师要的功能）。
@@ -1664,6 +1989,10 @@
                 }
                 if (selected.length === 1) {
                     operates = ['refresh', 'movements', 'tag', 'detail', 'rename', 'delete', 'deselect'];
+                    // 「编辑图片」只在 jpg/jpeg/png 时给入口（其它格式一律不出现）
+                    if (cropEditor.supported(selected[0])) {
+                        operates.splice(operates.indexOf('rename'), 0, 'edit');
+                    }
                 }
                 if (selected.length > 1) {
                     operates = ['refresh', 'movements', 'tag', 'delete', 'deselect'];
@@ -1912,6 +2241,10 @@
                 });
 
             const methods = {
+                edit(item) {
+                    // 编辑图片（裁剪）—— 三个入口最终都走 cropEditor
+                    cropEditor.open(item);
+                },
                 movements() {
                     // 「移动到相册」走居中卡片弹窗（相册列表也在 #album-switch-modal 里，
                     // 页面里已经没有右侧抽屉了）。
@@ -2161,6 +2494,11 @@
                     visible: () => ds.getSelection().length === 1,
                 },
                 refresh: {text: '刷新', action: _ => resetImages()},
+                edit: {
+                    text: '编辑图片',
+                    visible: () => ds.getSelection().length === 1 && cropEditor.supported(ds.getSelection()[0]),
+                    action: e => methods.edit(e),
+                },
                 rename: {
                     text: '重命名',
                     visible: () => ds.getSelection().length === 1,
@@ -2241,6 +2579,7 @@
                     {header: '图片操作'},
                     actions.refresh,
                     actions.copy,
+                    actions.edit,
                     actions.copies,
                     actions.open,
                     actions.movements,
@@ -2291,6 +2630,9 @@
                         break;
                     case 'detail':
                         methods.detail(selected[0]);
+                        break;
+                    case 'edit': // 编辑图片（裁剪）
+                        methods.edit(selected[0]);
                         break;
                     case 'delete': // 删除
                         methods.delete();
