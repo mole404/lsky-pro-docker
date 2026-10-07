@@ -224,6 +224,34 @@ function require_md5(text) {
     return crypto.createHash('md5').update(Buffer.from(text, 'utf8')).digest('hex');
 }
 
+// ---------------------------------------------------------------- 6. 全屏观感 / 打开不重排 / 缩略图条滚轮
+console.log('\n[6] 看图器：全屏观感 / 打开不漏重排 / 缩略图条滚轮');
+{
+    check('① 库写的那份 body padding-right 被按回 0（@supports 保住旧浏览器）',
+        /@supports \(scrollbar-gutter: stable\) \{\s*\n\s*body\.viewer-open \{ padding-right: 0 !important; \}/.test(blade));
+    check('② 全屏时背景纯黑 + UI 全隐（toolbar / navbar / title / button）',
+        /html\.ls-viewer-fs \.viewer-backdrop,\s*\n\s*html\.ls-viewer-fs \.viewer-container \{ background-color: #000; \}/.test(blade)
+        && /html\.ls-viewer-fs \.viewer-toolbar,[\s\S]{0,260}html\.ls-viewer-fs \.viewer-button \{/.test(blade)
+        && /html\.ls-viewer-fs:not\(\.ls-fs-ui\) \.viewer-toolbar,[\s\S]{0,300}pointer-events: none;/.test(blade));
+    check('② 全屏里鼠标动/轻触临时淡入 UI（.ls-fs-ui + 到点自动收）',
+        /const flashFullscreenUI = \(\) => \{[\s\S]{0,400}ls-fs-ui/.test(code)
+        && code.includes("document.addEventListener('mousemove', flashFullscreenUI, true)")
+        && code.includes("document.addEventListener('touchstart', flashFullscreenUI, true)")
+        && /setTimeout\(\(\) => document\.documentElement\.classList\.remove\('ls-fs-ui'\), FS_UI_MS\)/.test(code));
+    check('② 全屏状态挂/去 html.ls-viewer-fs（与按钮图标在同一处同步）',
+        /syncFullscreenIcon[\s\S]{0,600}classList\.toggle\('ls-viewer-fs', on\)/.test(code));
+    check('② 关掉看图器时顺手退出全屏（点背景 = 彻底退出）',
+        /addEventListener\('hidden',[\s\S]{0,300}fullscreenElement[\s\S]{0,300}exitFullscreen/.test(code));
+    check('③ 缩略图条滚轮：非 passive + preventDefault（否则页面跟着一起滚）',
+        /const onBarWheel = \(e\) => \{[\s\S]{0,400}e\.preventDefault\(\)/.test(code)
+        && /addEventListener\('wheel', onBarWheel, \{capture: true, passive: false\}\)/.test(code));
+    check('③ 这个非 passive 监听只在看图器打开期间挂（shown 挂 / hidden 摘）',
+        /addEventListener\('shown',[\s\S]{0,240}addEventListener\('wheel', onBarWheel/.test(code)
+        && /addEventListener\('hidden',[\s\S]{0,240}removeEventListener\('wheel', onBarWheel/.test(code));
+    check('③ 老的常驻 passive wheel 监听已移除（passive 拦不住默认滚动）',
+        !/addEventListener\('wheel'[\s\S]{0,80}\{capture: true, passive: true\}/.test(code));
+}
+
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);

@@ -48,6 +48,15 @@
              *   看图器自身是 fixed 全屏覆盖 + touch-action:none，指针/触摸不会漏到后面；
              *   滚轮被库自己的 zoomOnWheel 处理（非 passive + preventDefault），背景也不会被滚走。 */
             body.viewer-open { overflow: visible; }
+            /* ★ 再把库写的那份 body padding-right 按回 0。真机实测（老师浏览器打印）：
+             *   打开看图器时 body 的 padding-right 会变成 8px —— 那正是**槽位**的宽度
+             *   （库 initBody 量的就是 innerWidth − documentElement.clientWidth），
+             *   而槽位已经把空间预留住了，再补一次就把内容挤窄 8px ⇒ 卡片重排
+             *   （实测首卡宽度 123 → 121）。行内样式只能用 CSS !important 盖；
+             *   用 @supports 兜住不支持 gutter 的旧浏览器 —— 那里这份 padding 是必需的。 */
+            @supports (scrollbar-gutter: stable) {
+                body.viewer-open { padding-right: 0 !important; }
+            }
                         .viewer-canvas > img:not([style]) {
                 width: 1px;
                 height: 1px;
@@ -160,6 +169,34 @@
             #crop-layer .crop-tools > .crop-group { flex: none; }
             #crop-layer .crop-actions { position: absolute; top: 9px; right: 12px; }
             #crop-layer .cropper-point.point-se { width: 14px; height: 14px; }
+        }
+
+        /* ── fork：看图器「全屏」的观感（老师要的"进去只剩图"）─────────────────
+           进全屏时 JS 给 <html> 加 .ls-viewer-fs：UI 全藏、背景压成纯黑，缩放手势/拖动/切图一概不动。
+           鼠标动一下或轻触一下临时淡入（.ls-fs-ui，2.5s 后自动隐）；点背景关掉看图器即彻底退出全屏。 */
+        html.ls-viewer-fs .viewer-backdrop,
+        html.ls-viewer-fs .viewer-container { background-color: #000; }
+        html.ls-viewer-fs .viewer-toolbar,
+        html.ls-viewer-fs .viewer-navbar,
+        html.ls-viewer-fs .viewer-title,
+        html.ls-viewer-fs .viewer-button {
+            opacity: 0 !important;
+            visibility: hidden;
+            transition: opacity .25s ease, visibility .25s ease;
+        }
+        html.ls-viewer-fs.ls-fs-ui .viewer-toolbar,
+        html.ls-viewer-fs.ls-fs-ui .viewer-navbar,
+        html.ls-viewer-fs.ls-fs-ui .viewer-title,
+        html.ls-viewer-fs.ls-fs-ui .viewer-button {
+            opacity: 1 !important;
+            visibility: visible;
+        }
+        /* 藏起来的时候别接住指针：否则会挡住"点背景退出"和拖动 */
+        html.ls-viewer-fs:not(.ls-fs-ui) .viewer-toolbar,
+        html.ls-viewer-fs:not(.ls-fs-ui) .viewer-navbar,
+        html.ls-viewer-fs:not(.ls-fs-ui) .viewer-title,
+        html.ls-viewer-fs:not(.ls-fs-ui) .viewer-button {
+            pointer-events: none;
         }
 
         /* 看图器工具栏的「裁剪」按钮图标。
@@ -840,15 +877,42 @@
                     viewer.requestFullscreen();
                 }
             };
+            /* 全屏状态一变：① 换工具栏按钮的图标 ② 给 <html> 挂/去 .ls-viewer-fs
+             * （那一层负责"只留图 + 纯黑 + UI 全隐"，见本页 <style>）。 */
             const syncFullscreenIcon = () => {
                 const d = document;
                 const on = !!(d.fullscreenElement || d.webkitFullscreenElement);
                 document.querySelectorAll('.viewer-toolbar li.viewer-fullscreen').forEach((li) => {
                     li.classList.toggle('is-fs', on);
                 });
+                document.documentElement.classList.toggle('ls-viewer-fs', on);
+                if (on) {
+                    document.documentElement.classList.remove('ls-fs-ui');   // 刚进全屏先干干净净
+                }
             };
             document.addEventListener('fullscreenchange', syncFullscreenIcon);
             document.addEventListener('webkitfullscreenchange', syncFullscreenIcon);
+
+            /* 全屏里鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态） */
+            const FS_UI_MS = 2500;
+            let fsUiTimer = 0;
+            const flashFullscreenUI = () => {
+                if (! document.documentElement.classList.contains('ls-viewer-fs')) { return; }
+                document.documentElement.classList.add('ls-fs-ui');
+                clearTimeout(fsUiTimer);
+                fsUiTimer = setTimeout(() => document.documentElement.classList.remove('ls-fs-ui'), FS_UI_MS);
+            };
+            document.addEventListener('mousemove', flashFullscreenUI, true);
+            document.addEventListener('touchstart', flashFullscreenUI, true);
+
+            /* 点背景 / 按 × 关掉看图器时，若还在全屏就顺手退出全屏 —— 即"点一下彻底退出" */
+            document.addEventListener('hidden', () => {
+                const d = document;
+                if (d.fullscreenElement || d.webkitFullscreenElement) {
+                    const exit = d.exitFullscreen || d.webkitExitFullscreen || d.msExitFullscreen || d.mozCancelFullScreen;
+                    if (exit) { exit.call(d); }
+                }
+            });
 
             const cropEditor = (function () {
                 const SUPPORTED = ['jpg', 'jpeg', 'png'];
@@ -1102,17 +1166,32 @@
                     const target = Math.max(0, Math.min(n - 1, i));
                     if (target !== viewer.index) viewer.view(target);
                 };
-                document.addEventListener('wheel', (e) => {
+                /* 滚轮切图：这里**必须**能 preventDefault，否则页面会跟着一起滚
+                 * （老师报的"缩略图条滚轮切图的同时整页也在滚"）。
+                 * 代价：document 上的非 passive wheel 会让浏览器失去"不等 JS 就滚动"的快路径 ⇒
+                 * 只在看图器打开期间挂它（shown 挂 / hidden 摘），平时整页滚动一点不受影响。
+                 * 仍然要 stopPropagation：控件"把滚轮当缩放"是在外层容器的捕获阶段做的，
+                 * 不拦住它，图上滚轮就会被同时当成缩放。 */
+                const onBarWheel = (e) => {
                     if (!inBar(e.target)) return;
-                    e.stopPropagation();        // 足够：控件"把滚轮当缩放"是在它自己的监听器里做的，
-                                                // 拦住传播它就收不到。这里**不能**用 preventDefault ——
-                                                // document 上的非 passive wheel 同样会让浏览器失去
-                                                // "不等 JS 就滚动/绘制"的快路径（与 touchmove 那个坑同源）。
+                    e.stopPropagation();
+                    e.preventDefault();
                     const now = Date.now();
                     if (now - lastWheel < WHEEL_GAP) return;
                     lastWheel = now;
                     goTo(viewer.index + (e.deltaY > 0 ? 1 : -1));
-                }, {capture: true, passive: true});
+                };
+                let barWheelOn = false;
+                document.addEventListener('shown', () => {
+                    if (barWheelOn) return;
+                    barWheelOn = true;
+                    document.addEventListener('wheel', onBarWheel, {capture: true, passive: false});
+                });
+                document.addEventListener('hidden', () => {
+                    if (!barWheelOn) return;
+                    barWheelOn = false;
+                    document.removeEventListener('wheel', onBarWheel, {capture: true});
+                });
                 document.addEventListener('touchstart', (e) => {
                     navDown = inBar(e.target);
                     const t = e.changedTouches && e.changedTouches[0];
