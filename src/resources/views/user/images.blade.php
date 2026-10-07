@@ -953,6 +953,56 @@
                 document.addEventListener(ev, flashFullscreenUI, {capture: true, passive: true});
             });
 
+            /* 老师第八轮：① 非全屏"拖动后松手"不该被当成点击；② 全屏点空白不许关、改成显示 UI。
+             * 库里这条链路（压缩产物实读）：
+             *   pointerup 里，若手势 < 500ms、松手目标是 canvas、backdrop 未被关掉，
+             *   就向 .viewer-canvas 派发一个 'click'（常量 S = "click"）；
+             *   库自己的 onClick 是 wt(viewer, 'click', ...) —— 注册在 **.viewer-container 的冒泡阶段**
+             *   （没有 capture）⇒ 我们在 document 捕获阶段一定比它先跑，可以把这一下拦下来。
+             * 注意：那个 click 是 CustomEvent，坐标在 e.detail.originalEvent 里，不在 e.clientX 上。 */
+            (function () {
+                const MOVE_SLOP = 6;        // 按下到松手超过它就当"拖动"（触屏手势同样按这个判）
+                const DRAG_WINDOW = 400;    // 拖动结束后这么久内到达的 canvas 点击，算"这一下的尾巴"
+                let downX = 0;
+                let downY = 0;
+                let dragged = false;
+                let dragEndAt = 0;
+                const isCanvas = (el) => el instanceof Element && el.classList.contains('viewer-canvas');
+                const moved = (x, y) => Math.abs(x - downX) > MOVE_SLOP || Math.abs(y - downY) > MOVE_SLOP;
+                document.addEventListener('pointerdown', (e) => {
+                    downX = e.clientX;
+                    downY = e.clientY;
+                    dragged = false;
+                }, true);
+                document.addEventListener('pointermove', (e) => {
+                    if (! dragged && e.buttons && moved(e.clientX, e.clientY)) { dragged = true; }
+                }, true);
+                /* 触屏：安卓上控件在指针处理里 preventDefault 之后 pointermove 可能收不到，
+                 * 所以 touchmove 也记一份（与页面上双击判定用的是同一套经验）。 */
+                document.addEventListener('touchmove', (e) => {
+                    const t = e.changedTouches && e.changedTouches[0];
+                    if (! dragged && t && moved(t.clientX, t.clientY)) { dragged = true; }
+                }, true);
+                document.addEventListener('pointerup', () => {
+                    if (dragged) { dragEndAt = Date.now(); }
+                }, true);
+                document.addEventListener('pointercancel', () => {
+                    if (dragged) { dragEndAt = Date.now(); }
+                }, true);
+                document.addEventListener('click', (e) => {
+                    if (! isCanvas(e.target)) { return; }
+                    if (Date.now() - dragEndAt < DRAG_WINDOW) {
+                        e.stopPropagation();        // ① 拖动之后的那一下不算点击 ⇒ 不关看图器
+                        return;
+                    }
+                    if (document.documentElement.classList.contains('ls-viewer-fs')) {
+                        e.stopPropagation();        // ② 全屏：干掉"点空白关闭"
+                        const src = (e.detail && e.detail.originalEvent) || e;
+                        flashFullscreenUI({type: 'click', clientX: src.clientX || 0, clientY: src.clientY || 0});
+                    }
+                }, true);
+            })();
+
             /* 点背景 / 按 × 关掉看图器时，若还在全屏就顺手退出全屏 —— 即"点一下彻底退出" */
             document.addEventListener('hidden', () => {
                 const d = document;

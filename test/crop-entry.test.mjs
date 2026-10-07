@@ -288,6 +288,24 @@ console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失
         && /dsBoxRect\(\);[\s\S]{0,160}dsSyncAreaRect\(\)/.test(code));
 }
 
+// ---------------------------------------------------------------- 8. 点空白（拖后不关 / 全屏显示 UI）
+console.log('\n[8] 看图器「点空白」：拖动后不算点击 + 全屏改成显示 UI');
+{
+    check('⑧ 非全屏：拖动后松手的那一下不算点击（不关看图器）',
+        /const MOVE_SLOP = \d+;/.test(code)
+        && /const DRAG_WINDOW = \d+;/.test(code)
+        && /addEventListener\('pointerup'[\s\S]{0,140}dragEndAt = Date\.now\(\)/.test(code)
+        && /Date\.now\(\) - dragEndAt < DRAG_WINDOW[\s\S]{0,120}e\.stopPropagation\(\)/.test(code));
+    check('⑧ 全屏：点空白不再关闭，改成显示 UI（坐标取自 detail.originalEvent）',
+        /document\.documentElement\.classList\.contains\('ls-viewer-fs'\)[\s\S]{0,160}e\.stopPropagation\(\)[\s\S]{0,220}flashFullscreenUI\(\{type: 'click'/.test(code)
+        && /const src = \(e\.detail && e\.detail\.originalEvent\) \|\| e;/.test(code));
+    check('⑧ 拦截点是 document 捕获阶段 + 只认 .viewer-canvas（不然会误伤工具栏按钮）',
+        /const isCanvas = \(el\) => el instanceof Element && el\.classList\.contains\('viewer-canvas'\)/.test(code)
+        && /addEventListener\('click', \(e\) => \{\n\s*if \(! isCanvas\(e\.target\)\) \{ return; \}[\s\S]{0,9000}\}, true\)/.test(code));
+    check('⑧ 触屏也记"拖动"（pointermove 在部分安卓上会被 preventDefault 吃掉）',
+        /addEventListener\('touchmove'[\s\S]{0,220}dragged = true/.test(code));
+}
+
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);
