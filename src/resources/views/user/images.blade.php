@@ -927,7 +927,7 @@
                  * 这个函数会被库的每次切图/重绘带着跑一遍（viewer.view → syncViewerButton → 它），
                  * 早先写成 `if (on) remove(...)` ⇒ 点 toolbar 的 next/prev、或在缩略图条上滚轮切图时，
                  * 库一重绘就把刚淡出来的 ls-fs-ui 摘掉，看着就是"一操作 UI 立刻消失"。
-                 * 探针实测的调用栈钉死了这条路径。 */
+                 * 真机 DevTools 实测的调用栈钉死了这条路径。 */
                 const wasFs = document.documentElement.classList.contains('ls-viewer-fs');
                 document.documentElement.classList.toggle('ls-viewer-fs', on);
                 if (on && ! wasFs) {
@@ -2486,7 +2486,7 @@
             })();
 
             ds.subscribe('predragstart', ({ event }) => {
-                /* 【2026-10-08 第六轮】手机端**不让库启动「触摸交互」** —— 真机实测（探针数据 + 老师描述）：
+                /* 【2026-10-08 第六轮】手机端**不让库启动「触摸交互」** —— 真机实测（DevTools 采样 + 老师描述）：
                  * 屏幕上会出现一个**蓝色选择框**，但图片选不上（框是库自己画的，而落选判定用的是我们
                  * 那个零尺寸框）⇒ 看着像"框选被触发"。本机 CDP 复现不出（桌面 Chrome 的合成触摸序列
                  * 没能让库的 `_canInteract` 通过），只有真机走这条路径。

@@ -48,39 +48,17 @@ window.context = window.context || (function () {
     //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
     //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
     //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
-    // 叶子项被点后关菜单用的淡出时长（默认是 options.fadeSpeed = 100）—— 分两级、二级再分平台：
-    //   * 二级菜单项（子菜单里的项，如「复制链接 → Url」）：内容多、要看清选了哪一项 ⇒ 最长；
-    //     安卓的动画观感比 iOS 更"赶"，所以安卓再放长一点（老师 2026-10-08 反馈）。
-    //   * 一级菜单项（主菜单直接项，如「刷新」「复制图片」）：也要有停留，但**比二级短**。
-    //   * 其它关闭路径（点菜单外、Esc、滚动等）保持 options.fadeSpeed 不变。
-    // ⚠️ 老师 2026-10-08 明确：**只对安卓端做改动，iOS 已经很好了不要动**。
-    //    iOS：二级 280（原值）、一级 = options.fadeSpeed（原行为，默认 100）—— 与改动前完全一致。
-    //    安卓：二级 420、一级 200（两级都放长，且一级短于二级）。
-    // 【2026-10-08 修正】原判据只认 /Android/i，老师实测安卓上"几乎没变" —— 很可能 UA 里没有
-    // "Android"（桌面模式 / WebView 精简 UA / UA-CH 时代被冻结的 UA）。改成**反判**：
-    // 只有 iOS 保持原值，其余一律吃长延迟。这样即使平台判不出来，也只会偏向"更从容"，不会退化成没变。
-    const UA_STR = navigator.userAgent || '';
-    const isIOSUA = /iPhone|iPad|iPod/i.test(UA_STR);
+    // 【2026-10-08 终稿·老师定】关闭菜单：**一律不停住**，只按设备给一个淡出时长 ——
+    //   电脑：120ms；手机/平板（iOS + 安卓统一）：320ms。
+    // 历史包袱说明：中间版本按「层级（一级/二级）×平台（电脑/iOS/安卓）」分了多档 hold+fade，
+    // 老师最终定为"不分层级、不分 iOS/安卓，只分电脑和手机"⇒ 这里收敛成两个常量。
+    // 淡出由 CSS transition 驱动（见 .context-fading），不受 jQuery 跳帧影响，所以时长可以放心用。
+    const DESKTOP_FADE = 120;       // 电脑：不停地直接淡出 120ms
+    const TOUCH_FADE = 320;         // 手机/平板：不停地直接淡出 320ms
     // 桌面判定用 **UA**，不用 matchMedia('(hover: none)')：实测 headless Chrome 在没有真实鼠标设备时
-    // 该 media query 会返回 true，桌面会被误判成触摸设备。UA 判定稳得多，而且"电脑上不要延迟"
-    // 本来就是老师按设备类型提的要求。
+    // 该 media query 会返回 true，桌面会被误判成触摸设备。UA 判定稳得多。
+    const UA_STR = navigator.userAgent || '';
     const isDesktopUA = ! /Mobile|Android|iPhone|iPad|iPod/i.test(UA_STR);
-    // 【2026-10-08 老师两轮反馈后的结论】"关闭延迟"必须做成**先保持原样一小段时间、再收**，
-    // 而不是"立刻开始慢慢淡出" —— 后者第一帧就在变淡，观感上仍然是"马上就关了"
-    //（真机打点显示 420/200 确实都传进 fadeOut 了，可老师感觉"跟没变一样"，就是这个原因）。
-    // 所以拆成 hold（完全静止、让人看清）+ fade（之后的淡出）：
-    const SUB_HOLD_ANDROID = 320;   // 非 iOS · 二级：停住 320ms（这一段菜单一点都不变）
-    const SUB_FADE_ANDROID = 140;   // 非 iOS · 二级：然后 140ms 淡出
-    const MAIN_HOLD_ANDROID = 160;  // 触摸·非 iOS · 一级：停住 160ms（比二级短）
-    // 【2026-10-08 终稿】一级菜单的**淡出时长对齐二级**（老师：一级淡出太长了，和二级一致就好）。
-    // 所以关闭时不再按层级区分 fade，各平台统一用「二级那一档」：
-    //   电脑 options.fadeSpeed(100) / iOS SUB_FADE_IOS(280) / 安卓 SUB_FADE_ANDROID(140)。
-    // 换成 CSS transition 之后，短时长也不再担心"看不见"（不再受 jQuery 跳帧影响）。
-    // hold（停顿）仍按层级区分：电脑 0 / 安卓 一级 160、二级 320 / iOS 0。
-    // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
-    const SUB_HOLD_IOS = 0;
-    const SUB_FADE_IOS = 280;
-    const LEAF_CLOSE_FADE = SUB_FADE_IOS;   // 仅作 lastLeafTapFade 的初值（真正取值在点击时按设备决定）
     const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
     const LEAF_PRESSED_CLASS = 'context-pressed';
     const MENU_FADING_CLASS = 'context-fading';   // 关闭时的 CSS transition 淡出类（见 closeMenus）
@@ -266,8 +244,6 @@ window.context = window.context || (function () {
     let debugToConsole = false;     // context.debug = true 时实时打控制台
     let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
     let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
-    let lastLeafTapFade = LEAF_CLOSE_FADE;  // 那一次点击对应的淡出时长（一级/二级不一样，见上面常量）
-    let lastLeafTapHold = 0;                // 那一次点击对应的「先停住」时长（0 = 立即开始淡出）
     let suppressClickUntil = 0;
     let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
     let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -407,11 +383,12 @@ window.context = window.context || (function () {
         // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
         const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
         // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
-        const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
+        // 【终稿】一律不停住；只按设备给淡出时长（电脑 120 / 手机 320）。所有关闭路径统一 ——
+        // 点菜单项、点菜单外、Esc 都一样，不再区分"是不是刚点过叶子项"。
+        const fade = isDesktopUA ? DESKTOP_FADE : TOUCH_FADE;
         // 「先停住」的时长：这一段菜单**完全不变化**，让人看清点在哪儿，然后才开始淡出。
-        const hold = leafClose ? (lastLeafTapHold || 0) : 0;
         // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
-        menuClosingUntil = Date.now() + hold + fade + MENU_FADE_GUARD;
+        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 
         if (! leafClose) {
             exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
@@ -437,11 +414,7 @@ window.context = window.context || (function () {
                 $('.dropdown-context .touch-open').removeClass('touch-open');
             }, fade + 60);
         };
-        if (hold > 0) {
-            setTimeout(doFadeOut, hold);   // 先原样停住 hold 毫秒（菜单一动不动）再淡出
-        } else {
-            doFadeOut();
-        }
+        doFadeOut();
         // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
         //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
         //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
@@ -450,7 +423,7 @@ window.context = window.context || (function () {
             if (leafClose) {
                 exitSubmenuInplace(true);
             }
-        }, hold + fade + 150);
+        }, fade + 150);
     }
 
     function isInsideMenu(node) {
@@ -1008,7 +981,7 @@ window.context = window.context || (function () {
         installMenuGuard();
 
         // 【2026-10-08】点中菜单里的叶子项（如「复制链接 → Url」）：记一笔，并给这一项定格高亮。
-        //   * 记时刻 ⇒ closeMenus 会把这次淡出放慢（见 LEAF_CLOSE_FADE），眼睛跟得上"点的是哪一项"；
+        //   * 记时刻 ⇒ closeMenus 据此跳过"先退回一级菜单"那一步（老师 2026-10-08 的要求）；
         //   * 定格高亮（.context-pressed）⇒ 手指抬起后它继续亮着随菜单淡出，而不是瞬间就没了。
         // 注意判据必须挂在 **li** 上、而不是 `li > a`：实测（CDP 捕获真实点击的 target）点「Url」时
         // target 是那个 <li>（`<a>` 只占其中一部分高度，padding 区域点下去 target 就是 li）。
@@ -1028,21 +1001,6 @@ window.context = window.context || (function () {
             lastLeafTapAt = Date.now();
             // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
             // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
-            const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
-            // 淡出时长：**一级与二级一致**（老师 2026-10-08 终稿）；只有 hold（停顿）分层级。
-            if (isDesktopUA) {
-                // 电脑：不停顿（老师要求"电脑上不要延迟"），淡出保持各平台原值
-                lastLeafTapHold = 0;
-                lastLeafTapFade = options.fadeSpeed;
-            } else if (isIOSUA) {
-                // iOS：淡出 280（第七轮定的值），不停顿
-                lastLeafTapHold = SUB_HOLD_IOS;
-                lastLeafTapFade = SUB_FADE_IOS;
-            } else {
-                // 手机/平板（安卓等）：停住（一级 160 / 二级 320）+ 淡出 140
-                lastLeafTapHold = inSubmenu ? SUB_HOLD_ANDROID : MAIN_HOLD_ANDROID;
-                lastLeafTapFade = SUB_FADE_ANDROID;
-            }
             $a.addClass(LEAF_PRESSED_CLASS);
         });
 
