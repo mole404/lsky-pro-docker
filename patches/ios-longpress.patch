@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   c4042192cf8aba51594ec100ddf27d73  src/resources/views/user/images.blade.php
+#   c149a014a825ac65db3dc6f361afbe6e  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -229,11 +229,21 @@
 #     安卓一级：点击后 **348ms 不变** → 45ms 淡出。（改前同口径是「点击后 0ms 就开始变淡」）
 #  真机打点（老师安卓 Edge 153 · Android 10）确认：useLong=true、二级 fade=420、一级 fade=200 都真的
 #     传进了 fadeOut —— 说明代码取值一直是对的，问题在口径（「淡化」≠「延迟」）。
+# 2026-10-08 第十四轮（老师：①诊断全撤 ②一级菜单没有淡出、电脑上也有 ③电脑不该有延迟）：
+#  ㉓ 三级判据（关键修正）：
+#       电脑（isDesktopUA）→ hold 0 + fade options.fadeSpeed —— **完全原样**；
+#       iOS  → hold 0 + 二级 280 / 一级 options.fadeSpeed —— 第七轮既定行为，未动；
+#       其它（安卓等）→ 二级 hold 320 + fade 140；一级 hold 160 + fade **180**
+#         （一级原来 120，实测到不可见只有 58ms ⇒ 老师看着像「直接消失」，现改为 180 ⇒ 实测 134ms）。
+#     桌面判定改用 UA 而不是 matchMedia('(hover: none)')：实测 headless Chrome 在无真实鼠标设备时
+#     该 media query 返回 true，桌面会被误判成触摸设备。
+#  ㉔ 诊断全部撤除（dbg 函数 + 三处调用，grep 残留 0）。
+#  实测（页面内 rAF 采样）：桌面二级「延迟 90ms / 淡出 83ms」(≈立即)；安卓一级「延迟 317ms / 淡出 134ms」。
 
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
 +++ src/resources/js/context-js.js	（本 fork）
-@@ -2,8 +2,98 @@
+@@ -2,8 +2,86 @@
   * Context.js
   * Copyright Jacob Kelley, Modified by WispX
   * MIT License
@@ -296,43 +306,31 @@
 +    // 只有 iOS 保持原值，其余一律吃长延迟。这样即使平台判不出来，也只会偏向"更从容"，不会退化成没变。
 +    const UA_STR = navigator.userAgent || '';
 +    const isIOSUA = /iPhone|iPad|iPod/i.test(UA_STR);
-+    const isAndroidUA = /Android/i.test(UA_STR);          // 仅供诊断对比用，不参与取值
-+    const useLongFade = ! isIOSUA;
++    // 桌面判定用 **UA**，不用 matchMedia('(hover: none)')：实测 headless Chrome 在没有真实鼠标设备时
++    // 该 media query 会返回 true，桌面会被误判成触摸设备。UA 判定稳得多，而且"电脑上不要延迟"
++    // 本来就是老师按设备类型提的要求。
++    const isDesktopUA = ! /Mobile|Android|iPhone|iPad|iPod/i.test(UA_STR);
 +    // 【2026-10-08 老师两轮反馈后的结论】"关闭延迟"必须做成**先保持原样一小段时间、再收**，
 +    // 而不是"立刻开始慢慢淡出" —— 后者第一帧就在变淡，观感上仍然是"马上就关了"
 +    //（真机打点显示 420/200 确实都传进 fadeOut 了，可老师感觉"跟没变一样"，就是这个原因）。
 +    // 所以拆成 hold（完全静止、让人看清）+ fade（之后的淡出）：
 +    const SUB_HOLD_ANDROID = 320;   // 非 iOS · 二级：停住 320ms（这一段菜单一点都不变）
 +    const SUB_FADE_ANDROID = 140;   // 非 iOS · 二级：然后 140ms 淡出
-+    const MAIN_HOLD_ANDROID = 160;  // 非 iOS · 一级：停住 160ms（比二级短）
-+    const MAIN_FADE_ANDROID = 120;  // 非 iOS · 一级：然后 120ms 淡出
++    const MAIN_HOLD_ANDROID = 160;  // 触摸·非 iOS · 一级：停住 160ms（比二级短）
++    const MAIN_FADE_ANDROID = 180;  // 触摸·非 iOS · 一级：然后 180ms 淡出
++    // ↑ 老师反馈「一级是直接消失、没有淡出」：原来一级 fade 只有 120ms，实测到不可见仅 58ms，
++    //   观感就是"停一下然后没了"。加长到 180ms 让淡出这个过程看得见（总时长仍短于二级的 460）。
 +    // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
 +    const SUB_HOLD_IOS = 0;
 +    const SUB_FADE_IOS = 280;
-+    const LEAF_CLOSE_FADE = useLongFade ? SUB_FADE_ANDROID : SUB_FADE_IOS;
-+    // 【临时诊断，拿到老师真机数据后删除】?dbg=1 时把平台判据打出去
-+    const DBG_ON = /[?&]dbg=1\b/.test(location.search);
-+    const dbgSid = 'ctx' + Date.now().toString(36);
-+    let dbgSeq = 0;
-+    const dbg = (tag, detail) => {
-+        if (! DBG_ON || dbgSeq > 300) { return; }
-+        dbgSeq += 1;
-+        try {
-+            fetch('/dbg-' + dbgSid + '/' + dbgSeq + '/' + tag + '-' + encodeURIComponent(String(detail)),
-+                {mode: 'no-cors', keepalive: true});
-+        } catch (e) {}
-+    };
-+    dbg('boot', 'ua=' + UA_STR + '|plat=' + (navigator.platform || '')
-+        + '|uach=' + ((navigator.userAgentData && navigator.userAgentData.platform) || 'na')
-+        + '|isIOS=' + isIOSUA + '|isAndroid=' + isAndroidUA + '|useLong=' + useLongFade
-+        + '|subFade=' + LEAF_CLOSE_FADE);
++    const LEAF_CLOSE_FADE = SUB_FADE_IOS;   // 仅作 lastLeafTapFade 的初值（真正取值在点击时按设备决定）
 +    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
 +    const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
 +    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
  
      let options = {
          fadeSpeed: 100,
-@@ -15,14 +105,950 @@
+@@ -15,14 +93,952 @@
          compress: false
      };
  
@@ -650,8 +648,6 @@
 +        const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
 +        // 「先停住」的时长：这一段菜单**完全不变化**，让人看清点在哪儿，然后才开始淡出。
 +        const hold = leafClose ? (lastLeafTapHold || 0) : 0;
-+        dbg('close', 'leaf=' + leafClose + '|hold=' + hold + '|fade=' + fade + '|def=' + options.fadeSpeed
-+            + '|subFadeConst=' + LEAF_CLOSE_FADE + '|useLong=' + useLongFade);
 +        // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
 +        menuClosingUntil = Date.now() + hold + fade + MENU_FADE_GUARD;
 +
@@ -1262,16 +1258,20 @@
 +            // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
 +            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
 +            const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
-+            if (useLongFade) {
++            if (isDesktopUA) {
++                // 电脑：**完全保持原样** —— 老师明确要求"电脑上不要延迟"。
++                //（上一轮只排除 iOS，把桌面也算进了"要延迟"，是判据缺陷。）
++                lastLeafTapHold = 0;
++                lastLeafTapFade = options.fadeSpeed;
++            } else if (isIOSUA) {
++                // iOS：第七轮定下的既定行为，一字不动（老师：iOS 已经很好了）
++                lastLeafTapHold = SUB_HOLD_IOS;
++                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
++            } else {
++                // 手机/平板（安卓等）：停住 + 淡出，两级不同时长
 +                lastLeafTapHold = inSubmenu ? SUB_HOLD_ANDROID : MAIN_HOLD_ANDROID;
 +                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
-+            } else {
-+                lastLeafTapHold = SUB_HOLD_IOS;                 // iOS：不停顿（原行为）
-+                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
 +            }
-+            dbg('tap', 'tag=' + (event && event.target ? event.target.tagName : '?')
-+                + '|txt=' + String($a.text()).slice(0, 12)
-+                + '|inSub=' + inSubmenu + '|fade=' + lastLeafTapFade);
 +            $a.addClass(LEAF_PRESSED_CLASS);
 +        });
 +
@@ -1286,7 +1286,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +1056,8 @@
+@@ -30,13 +1046,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -1302,7 +1302,7 @@
          });
  
      }
-@@ -130,12 +1151,15 @@
+@@ -130,12 +1141,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -1324,7 +1324,7 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -144,42 +1168,122 @@
+@@ -144,42 +1158,122 @@
              $('body').append($menu);
  
              $('.dropdown-context:not(.dropdown-context-sub)').hide();
@@ -1461,7 +1461,7 @@
 ---- src/public/js/context-js/context-js.js
 --- lsky-pro@38d52c46/public/js/context-js/context-js.js	（上游原文件）
 +++ src/public/js/context-js/context-js.js	（本 fork）
-@@ -1 +1,1289 @@
+@@ -1 +1,1279 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1526,36 +1526,24 @@
 +    // 只有 iOS 保持原值，其余一律吃长延迟。这样即使平台判不出来，也只会偏向"更从容"，不会退化成没变。
 +    const UA_STR = navigator.userAgent || '';
 +    const isIOSUA = /iPhone|iPad|iPod/i.test(UA_STR);
-+    const isAndroidUA = /Android/i.test(UA_STR);          // 仅供诊断对比用，不参与取值
-+    const useLongFade = ! isIOSUA;
++    // 桌面判定用 **UA**，不用 matchMedia('(hover: none)')：实测 headless Chrome 在没有真实鼠标设备时
++    // 该 media query 会返回 true，桌面会被误判成触摸设备。UA 判定稳得多，而且"电脑上不要延迟"
++    // 本来就是老师按设备类型提的要求。
++    const isDesktopUA = ! /Mobile|Android|iPhone|iPad|iPod/i.test(UA_STR);
 +    // 【2026-10-08 老师两轮反馈后的结论】"关闭延迟"必须做成**先保持原样一小段时间、再收**，
 +    // 而不是"立刻开始慢慢淡出" —— 后者第一帧就在变淡，观感上仍然是"马上就关了"
 +    //（真机打点显示 420/200 确实都传进 fadeOut 了，可老师感觉"跟没变一样"，就是这个原因）。
 +    // 所以拆成 hold（完全静止、让人看清）+ fade（之后的淡出）：
 +    const SUB_HOLD_ANDROID = 320;   // 非 iOS · 二级：停住 320ms（这一段菜单一点都不变）
 +    const SUB_FADE_ANDROID = 140;   // 非 iOS · 二级：然后 140ms 淡出
-+    const MAIN_HOLD_ANDROID = 160;  // 非 iOS · 一级：停住 160ms（比二级短）
-+    const MAIN_FADE_ANDROID = 120;  // 非 iOS · 一级：然后 120ms 淡出
++    const MAIN_HOLD_ANDROID = 160;  // 触摸·非 iOS · 一级：停住 160ms（比二级短）
++    const MAIN_FADE_ANDROID = 180;  // 触摸·非 iOS · 一级：然后 180ms 淡出
++    // ↑ 老师反馈「一级是直接消失、没有淡出」：原来一级 fade 只有 120ms，实测到不可见仅 58ms，
++    //   观感就是"停一下然后没了"。加长到 180ms 让淡出这个过程看得见（总时长仍短于二级的 460）。
 +    // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
 +    const SUB_HOLD_IOS = 0;
 +    const SUB_FADE_IOS = 280;
-+    const LEAF_CLOSE_FADE = useLongFade ? SUB_FADE_ANDROID : SUB_FADE_IOS;
-+    // 【临时诊断，拿到老师真机数据后删除】?dbg=1 时把平台判据打出去
-+    const DBG_ON = /[?&]dbg=1\b/.test(location.search);
-+    const dbgSid = 'ctx' + Date.now().toString(36);
-+    let dbgSeq = 0;
-+    const dbg = (tag, detail) => {
-+        if (! DBG_ON || dbgSeq > 300) { return; }
-+        dbgSeq += 1;
-+        try {
-+            fetch('/dbg-' + dbgSid + '/' + dbgSeq + '/' + tag + '-' + encodeURIComponent(String(detail)),
-+                {mode: 'no-cors', keepalive: true});
-+        } catch (e) {}
-+    };
-+    dbg('boot', 'ua=' + UA_STR + '|plat=' + (navigator.platform || '')
-+        + '|uach=' + ((navigator.userAgentData && navigator.userAgentData.platform) || 'na')
-+        + '|isIOS=' + isIOSUA + '|isAndroid=' + isAndroidUA + '|useLong=' + useLongFade
-+        + '|subFade=' + LEAF_CLOSE_FADE);
++    const LEAF_CLOSE_FADE = SUB_FADE_IOS;   // 仅作 lastLeafTapFade 的初值（真正取值在点击时按设备决定）
 +    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
 +    const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
 +    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
@@ -1884,8 +1872,6 @@
 +        const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
 +        // 「先停住」的时长：这一段菜单**完全不变化**，让人看清点在哪儿，然后才开始淡出。
 +        const hold = leafClose ? (lastLeafTapHold || 0) : 0;
-+        dbg('close', 'leaf=' + leafClose + '|hold=' + hold + '|fade=' + fade + '|def=' + options.fadeSpeed
-+            + '|subFadeConst=' + LEAF_CLOSE_FADE + '|useLong=' + useLongFade);
 +        // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
 +        menuClosingUntil = Date.now() + hold + fade + MENU_FADE_GUARD;
 +
@@ -2496,16 +2482,20 @@
 +            // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
 +            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
 +            const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
-+            if (useLongFade) {
++            if (isDesktopUA) {
++                // 电脑：**完全保持原样** —— 老师明确要求"电脑上不要延迟"。
++                //（上一轮只排除 iOS，把桌面也算进了"要延迟"，是判据缺陷。）
++                lastLeafTapHold = 0;
++                lastLeafTapFade = options.fadeSpeed;
++            } else if (isIOSUA) {
++                // iOS：第七轮定下的既定行为，一字不动（老师：iOS 已经很好了）
++                lastLeafTapHold = SUB_HOLD_IOS;
++                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
++            } else {
++                // 手机/平板（安卓等）：停住 + 淡出，两级不同时长
 +                lastLeafTapHold = inSubmenu ? SUB_HOLD_ANDROID : MAIN_HOLD_ANDROID;
 +                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
-+            } else {
-+                lastLeafTapHold = SUB_HOLD_IOS;                 // iOS：不停顿（原行为）
-+                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
 +            }
-+            dbg('tap', 'tag=' + (event && event.target ? event.target.tagName : '?')
-+                + '|txt=' + String($a.text()).slice(0, 12)
-+                + '|inSub=' + inSubmenu + '|fade=' + lastLeafTapFade);
 +            $a.addClass(LEAF_PRESSED_CLASS);
 +        });
 +

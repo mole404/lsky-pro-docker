@@ -61,36 +61,24 @@ window.context = window.context || (function () {
     // 只有 iOS 保持原值，其余一律吃长延迟。这样即使平台判不出来，也只会偏向"更从容"，不会退化成没变。
     const UA_STR = navigator.userAgent || '';
     const isIOSUA = /iPhone|iPad|iPod/i.test(UA_STR);
-    const isAndroidUA = /Android/i.test(UA_STR);          // 仅供诊断对比用，不参与取值
-    const useLongFade = ! isIOSUA;
+    // 桌面判定用 **UA**，不用 matchMedia('(hover: none)')：实测 headless Chrome 在没有真实鼠标设备时
+    // 该 media query 会返回 true，桌面会被误判成触摸设备。UA 判定稳得多，而且"电脑上不要延迟"
+    // 本来就是老师按设备类型提的要求。
+    const isDesktopUA = ! /Mobile|Android|iPhone|iPad|iPod/i.test(UA_STR);
     // 【2026-10-08 老师两轮反馈后的结论】"关闭延迟"必须做成**先保持原样一小段时间、再收**，
     // 而不是"立刻开始慢慢淡出" —— 后者第一帧就在变淡，观感上仍然是"马上就关了"
     //（真机打点显示 420/200 确实都传进 fadeOut 了，可老师感觉"跟没变一样"，就是这个原因）。
     // 所以拆成 hold（完全静止、让人看清）+ fade（之后的淡出）：
     const SUB_HOLD_ANDROID = 320;   // 非 iOS · 二级：停住 320ms（这一段菜单一点都不变）
     const SUB_FADE_ANDROID = 140;   // 非 iOS · 二级：然后 140ms 淡出
-    const MAIN_HOLD_ANDROID = 160;  // 非 iOS · 一级：停住 160ms（比二级短）
-    const MAIN_FADE_ANDROID = 120;  // 非 iOS · 一级：然后 120ms 淡出
+    const MAIN_HOLD_ANDROID = 160;  // 触摸·非 iOS · 一级：停住 160ms（比二级短）
+    const MAIN_FADE_ANDROID = 180;  // 触摸·非 iOS · 一级：然后 180ms 淡出
+    // ↑ 老师反馈「一级是直接消失、没有淡出」：原来一级 fade 只有 120ms，实测到不可见仅 58ms，
+    //   观感就是"停一下然后没了"。加长到 180ms 让淡出这个过程看得见（总时长仍短于二级的 460）。
     // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
     const SUB_HOLD_IOS = 0;
     const SUB_FADE_IOS = 280;
-    const LEAF_CLOSE_FADE = useLongFade ? SUB_FADE_ANDROID : SUB_FADE_IOS;
-    // 【临时诊断，拿到老师真机数据后删除】?dbg=1 时把平台判据打出去
-    const DBG_ON = /[?&]dbg=1\b/.test(location.search);
-    const dbgSid = 'ctx' + Date.now().toString(36);
-    let dbgSeq = 0;
-    const dbg = (tag, detail) => {
-        if (! DBG_ON || dbgSeq > 300) { return; }
-        dbgSeq += 1;
-        try {
-            fetch('/dbg-' + dbgSid + '/' + dbgSeq + '/' + tag + '-' + encodeURIComponent(String(detail)),
-                {mode: 'no-cors', keepalive: true});
-        } catch (e) {}
-    };
-    dbg('boot', 'ua=' + UA_STR + '|plat=' + (navigator.platform || '')
-        + '|uach=' + ((navigator.userAgentData && navigator.userAgentData.platform) || 'na')
-        + '|isIOS=' + isIOSUA + '|isAndroid=' + isAndroidUA + '|useLong=' + useLongFade
-        + '|subFade=' + LEAF_CLOSE_FADE);
+    const LEAF_CLOSE_FADE = SUB_FADE_IOS;   // 仅作 lastLeafTapFade 的初值（真正取值在点击时按设备决定）
     const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
     const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
     const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
@@ -419,8 +407,6 @@ window.context = window.context || (function () {
         const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
         // 「先停住」的时长：这一段菜单**完全不变化**，让人看清点在哪儿，然后才开始淡出。
         const hold = leafClose ? (lastLeafTapHold || 0) : 0;
-        dbg('close', 'leaf=' + leafClose + '|hold=' + hold + '|fade=' + fade + '|def=' + options.fadeSpeed
-            + '|subFadeConst=' + LEAF_CLOSE_FADE + '|useLong=' + useLongFade);
         // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
         menuClosingUntil = Date.now() + hold + fade + MENU_FADE_GUARD;
 
@@ -1031,16 +1017,20 @@ window.context = window.context || (function () {
             // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
             // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
             const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
-            if (useLongFade) {
+            if (isDesktopUA) {
+                // 电脑：**完全保持原样** —— 老师明确要求"电脑上不要延迟"。
+                //（上一轮只排除 iOS，把桌面也算进了"要延迟"，是判据缺陷。）
+                lastLeafTapHold = 0;
+                lastLeafTapFade = options.fadeSpeed;
+            } else if (isIOSUA) {
+                // iOS：第七轮定下的既定行为，一字不动（老师：iOS 已经很好了）
+                lastLeafTapHold = SUB_HOLD_IOS;
+                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
+            } else {
+                // 手机/平板（安卓等）：停住 + 淡出，两级不同时长
                 lastLeafTapHold = inSubmenu ? SUB_HOLD_ANDROID : MAIN_HOLD_ANDROID;
                 lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
-            } else {
-                lastLeafTapHold = SUB_HOLD_IOS;                 // iOS：不停顿（原行为）
-                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
             }
-            dbg('tap', 'tag=' + (event && event.target ? event.target.tagName : '?')
-                + '|txt=' + String($a.text()).slice(0, 12)
-                + '|inSub=' + inSubmenu + '|fade=' + lastLeafTapFade);
             $a.addClass(LEAF_PRESSED_CLASS);
         });
 

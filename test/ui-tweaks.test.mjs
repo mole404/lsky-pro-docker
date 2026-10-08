@@ -340,10 +340,15 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     check('iOS 完全不改：二级仍是第七轮定的 280，一级回落到 options.fadeSpeed（原行为）',
         Number(ctxJs.match(/const SUB_FADE_IOS = (\d+);/)[1]) === 280
         && /lastLeafTapFade = inSubmenu \? SUB_FADE_IOS : options\.fadeSpeed;/.test(ctxJs));
-    check('平台判据是"反判"（只有 iOS 走原值），避免 UA 判不出 Android 时退化成没变',
-        /const isIOSUA = \/iPhone\|iPad\|iPod\/i\.test\(UA_STR\);/.test(ctxJs)
-        && /const useLongFade = ! isIOSUA;/.test(ctxJs)
-        && /if \(useLongFade\) \{[\s\S]{0,200}MAIN_FADE_ANDROID[\s\S]{0,300}\} else \{[\s\S]{0,300}options\.fadeSpeed/.test(ctxJs));
+    check('三级判据：桌面用 UA 判定（不用 hover:none —— headless/无鼠标设备会误报），桌面走"完全原样"',
+        /const isDesktopUA = ! \/Mobile\|Android\|iPhone\|iPad\|iPod\/i\.test\(UA_STR\);/.test(ctxJs)
+        && /if \(isDesktopUA\) \{[\s\S]{0,200}lastLeafTapHold = 0;[\s\S]{0,200}options\.fadeSpeed/.test(ctxJs));
+    check('诊断已全部撤除（没有 ?dbg 打点残留）',
+        ! /dbg-ctx|DBG_ON|dbgSid/.test(ctxJs) && ! /\?dbg=1/.test(ctxJs));
+    check('一级的淡出加长到看得见（>= 160ms），且总时长仍短于二级',
+        Number(ctxJs.match(/const MAIN_FADE_ANDROID = (\d+);/)[1]) >= 160
+        && (Number(ctxJs.match(/const MAIN_HOLD_ANDROID = (\d+);/)[1]) + Number(ctxJs.match(/const MAIN_FADE_ANDROID = (\d+);/)[1]))
+           < (Number(ctxJs.match(/const SUB_HOLD_ANDROID = (\d+);/)[1]) + Number(ctxJs.match(/const SUB_FADE_ANDROID = (\d+);/)[1])));
     check('点二级项后不「先退回一级」：叶子项路径跳过即时 exitSubmenuInplace，改用延时收尾',
         /const leafClose = \(Date\.now\(\) - lastLeafTapAt\) < LEAF_FADE_WINDOW;/.test(ctxJs)
         && /if \(! leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs)
@@ -351,9 +356,10 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     check('叶子项点击后定格高亮：有 .context-pressed 样式（用强调色变量，不写死）',
         /\.dropdown-context a\.context-pressed\{[^}]*var\(--lsky-accent\)/.test(ctxCss)
         && /\.dropdown-context a\.context-pressed\s*\{[\s\S]{0,120}var\(--lsky-accent\)/.test(ctxLess));
-    check('叶子项关闭走的仍是分平台/分级的时长（非 iOS 二级 140 + 停 320，iOS 二级 280 不停）',
-        /const LEAF_CLOSE_FADE = useLongFade \? SUB_FADE_ANDROID : SUB_FADE_IOS;/.test(ctxJs)
-        && /const SUB_FADE_IOS = 280;/.test(ctxJs));
+    check('叶子项关闭走的仍是分平台/分级的时长（常量齐备：iOS 二级 280 / 安卓 320+140）',
+        /const SUB_FADE_IOS = 280;/.test(ctxJs)
+        && /const SUB_HOLD_ANDROID = \d+;/.test(ctxJs)
+        && /const SUB_FADE_ANDROID = \d+;/.test(ctxJs));
     check('叶子项判据挂在 li 上（挂 `li > a` 实测不触发 —— target 是 li）',
         /\$\(document\)\.on\('click', '\.dropdown-context li', function \(\) \{/.test(ctxJs)
         && ! /\$\(document\)\.on\('click', '\.dropdown-context li:not\(\.dropdown-submenu\) > a'/.test(ctxJs));
@@ -373,7 +379,7 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         Number(ctxJs.match(/const MAIN_HOLD_ANDROID = (\d+);/)[1])
             < Number(ctxJs.match(/const SUB_HOLD_ANDROID = (\d+);/)[1])
         && /const SUB_HOLD_IOS = 0;/.test(ctxJs)
-        && /else \{\s*\n\s*lastLeafTapHold = SUB_HOLD_IOS;/.test(ctxJs));
+        && /isIOSUA\) \{\s*\n\s*\/\/[^\n]*\n\s*lastLeafTapHold = SUB_HOLD_IOS;/.test(ctxJs));
     check('清理与状态还原也一起延后到 hold + fade 之后（否则菜单还没淡完就被动）',
         /\}, hold \+ fade \+ 150\);/.test(ctxJs));
     const activeRuleLine = ctxCss.split('\n').find((l) => l.includes('li>a:active')) || '';
