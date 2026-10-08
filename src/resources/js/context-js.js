@@ -56,11 +56,33 @@ window.context = window.context || (function () {
     // ⚠️ 老师 2026-10-08 明确：**只对安卓端做改动，iOS 已经很好了不要动**。
     //    iOS：二级 280（原值）、一级 = options.fadeSpeed（原行为，默认 100）—— 与改动前完全一致。
     //    安卓：二级 420、一级 200（两级都放长，且一级短于二级）。
-    const isAndroidUA = /Android/i.test(navigator.userAgent || '');
-    const SUB_FADE_ANDROID = 420;   // 安卓 · 二级菜单项（子菜单里的项）
-    const MAIN_FADE_ANDROID = 200;  // 安卓 · 一级菜单项（主菜单直接项）—— 比二级短
+    // 【2026-10-08 修正】原判据只认 /Android/i，老师实测安卓上"几乎没变" —— 很可能 UA 里没有
+    // "Android"（桌面模式 / WebView 精简 UA / UA-CH 时代被冻结的 UA）。改成**反判**：
+    // 只有 iOS 保持原值，其余一律吃长延迟。这样即使平台判不出来，也只会偏向"更从容"，不会退化成没变。
+    const UA_STR = navigator.userAgent || '';
+    const isIOSUA = /iPhone|iPad|iPod/i.test(UA_STR);
+    const isAndroidUA = /Android/i.test(UA_STR);          // 仅供诊断对比用，不参与取值
+    const useLongFade = ! isIOSUA;
+    const SUB_FADE_ANDROID = 420;   // 非 iOS（安卓等）· 二级菜单项（子菜单里的项）
+    const MAIN_FADE_ANDROID = 200;  // 非 iOS · 一级菜单项（主菜单直接项）—— 比二级短
     const SUB_FADE_IOS = 280;       // iOS · 二级菜单项（保持 2026-10-08 第七轮定下的值，别再动）
-    const LEAF_CLOSE_FADE = isAndroidUA ? SUB_FADE_ANDROID : SUB_FADE_IOS;
+    const LEAF_CLOSE_FADE = useLongFade ? SUB_FADE_ANDROID : SUB_FADE_IOS;
+    // 【临时诊断，拿到老师真机数据后删除】?dbg=1 时把平台判据打出去
+    const DBG_ON = /[?&]dbg=1\b/.test(location.search);
+    const dbgSid = 'ctx' + Date.now().toString(36);
+    let dbgSeq = 0;
+    const dbg = (tag, detail) => {
+        if (! DBG_ON || dbgSeq > 300) { return; }
+        dbgSeq += 1;
+        try {
+            fetch('/dbg-' + dbgSid + '/' + dbgSeq + '/' + tag + '-' + encodeURIComponent(String(detail)),
+                {mode: 'no-cors', keepalive: true});
+        } catch (e) {}
+    };
+    dbg('boot', 'ua=' + UA_STR + '|plat=' + (navigator.platform || '')
+        + '|uach=' + ((navigator.userAgentData && navigator.userAgentData.platform) || 'na')
+        + '|isIOS=' + isIOSUA + '|isAndroid=' + isAndroidUA + '|useLong=' + useLongFade
+        + '|subFade=' + LEAF_CLOSE_FADE);
     const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
     const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
     const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
@@ -386,6 +408,8 @@ window.context = window.context || (function () {
         const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
         // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
         const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
+        dbg('close', 'leaf=' + leafClose + '|fade=' + fade + '|def=' + options.fadeSpeed
+            + '|subFadeConst=' + LEAF_CLOSE_FADE + '|useLong=' + useLongFade);
         // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
         menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 
@@ -989,11 +1013,14 @@ window.context = window.context || (function () {
             // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
             // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
             const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
-            if (isAndroidUA) {
+            if (useLongFade) {
                 lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
             } else {
                 lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
             }
+            dbg('tap', 'tag=' + (event && event.target ? event.target.tagName : '?')
+                + '|txt=' + String($a.text()).slice(0, 12)
+                + '|inSub=' + inSubmenu + '|fade=' + lastLeafTapFade);
             $a.addClass(LEAF_PRESSED_CLASS);
         });
 
