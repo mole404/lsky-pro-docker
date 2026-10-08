@@ -77,13 +77,14 @@ window.context = window.context || (function () {
     // 原来一级 fade 只有 120ms（实测到不可见仅 58ms，看着像"直接消失"）⇒ 现在 260ms。
     // 注意：这只影响"淡出过程"，不影响 hold（停顿）——
     //   电脑 hold 仍是 0（老师要求"电脑上不要延迟"），安卓 hold 仍是 160。
-    const MAIN_FADE = 260;
+    const MAIN_FADE = 500;
     // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
     const SUB_HOLD_IOS = 0;
     const SUB_FADE_IOS = 280;
     const LEAF_CLOSE_FADE = SUB_FADE_IOS;   // 仅作 lastLeafTapFade 的初值（真正取值在点击时按设备决定）
     const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
-    const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
+    const LEAF_PRESSED_CLASS = 'context-pressed';
+    const MENU_FADING_CLASS = 'context-fading';   // 关闭时的 CSS transition 淡出类（见 closeMenus）
     const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
 
     let options = {
@@ -421,12 +422,21 @@ window.context = window.context || (function () {
         // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
         // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 
+        // 【2026-10-08 老师真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
+        // 证据：老师在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
+        // 而代码里 `fadeOut(260)` 被调用后元素状态**一个都没变** —— jQuery 的动画依赖它自己的计时器推进，
+        // 时长短（260ms ≈ 15 帧）+ 主线程忙时会被整段跳过，表现就是"啪"一下没了。
+        // 改成 CSS transition：浏览器合成器驱动，主线程再忙也能看到渐变；时长也不再敏感。
+        const $menu = $('.dropdown-context:not(.dropdown-context-sub)');
         const doFadeOut = function () {
-            $('.dropdown-context').fadeOut(fade, function () {
-                $('.dropdown-context').css({ display: '' });
+            $menu.addClass(MENU_FADING_CLASS);          // CSS：opacity → 0，带 transition: opacity <fade>ms
+            $menu.css('transition-duration', fade + 'ms');
+            setTimeout(function () {
+                $menu.removeClass(MENU_FADING_CLASS)
+                    .css({ display: '', opacity: '', transitionDuration: '' });
                 $('.dropdown-context .drop-left').removeClass('drop-left');
                 $('.dropdown-context .touch-open').removeClass('touch-open');
-            });
+            }, fade + 60);
         };
         if (hold > 0) {
             setTimeout(doFadeOut, hold);   // 先原样停住 hold 毫秒（菜单一动不动）再淡出

@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   12f3e2956730455d2710b6104866389e  src/resources/views/user/images.blade.php
+#   3bc7ddc4b2e10e944d9733e2b786de32  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -247,11 +247,25 @@
 #       安卓等一级：hold 160 + fade 260（总 420，仍短于二级的 320+140=460）。
 #  实测（页面内 rAF 采样，纯淡出时长）：iOS 一级 198ms / 电脑一级 200ms / 安卓一级 201ms（改前约 58~80ms）；
 #     电脑一级仍是「无停顿」（起淡延迟 114ms ≈ 点击往返），iOS 二级仍 217ms（= 280 不变）。
+# 2026-10-08 第十六轮（老师真机 DevTools 定位：淡出改用 CSS transition）：
+#  ㉖ 根因（老师三组对照实验）：同一台电脑上手动 `$('.dropdown-context').fadeOut(500)` 与
+#     `fadeOut(500, 回调)` **都能看到淡出**，而代码里 `fadeOut(260)` 被调用后元素状态一个都没变 ——
+#     jQuery 的动画靠它自己的计时器推进，时长太短（260ms ≈ 15 帧）叠上主线程忙时会被整段跳过，
+#     表现就是「啪」一下没了。所以**不再用 jQuery 的 fadeOut**，改用 CSS transition：
+#       - CSS：`.dropdown-context.context-fading { opacity: 0 !important; transition: opacity 300ms ease-out }`
+#         （!important 用来压过打开时 jQuery fadeIn 留下的 inline opacity:1）；
+#       - JS：关菜单时加类 + `$menu.css('transition-duration', fade + 'ms')`，
+#         `setTimeout(fade + 60)` 后再移除类并恢复 display/opacity —— 动画交给浏览器合成器，时长不再敏感。
+#  ㉗ MAIN_FADE 由 260 提到 500（老师实验证明 500ms 在该环境下能看见淡出）。
+#     注：这使一级的总时长（安卓 160+500）长于二级（320+140）—— 老师最早「一级比二级短」是针对**停顿**，
+#     最新「一级淡出要更明显」优先，测试断言相应改为只钉住停顿部分的层级。
+#  实测（rAF 采样，CDP 三平台）：iOS 一级 延迟 168ms + 淡出 306ms；安卓 301 + 400ms；电脑 75 + 401ms；
+#     三者都确认 `context-fading` 类加上、inline transition-duration = 500ms。
 
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
 +++ src/resources/js/context-js.js	（本 fork）
-@@ -2,8 +2,89 @@
+@@ -2,8 +2,90 @@
   * Context.js
   * Copyright Jacob Kelley, Modified by WispX
   * MIT License
@@ -330,18 +344,19 @@
 +    // 原来一级 fade 只有 120ms（实测到不可见仅 58ms，看着像"直接消失"）⇒ 现在 260ms。
 +    // 注意：这只影响"淡出过程"，不影响 hold（停顿）——
 +    //   电脑 hold 仍是 0（老师要求"电脑上不要延迟"），安卓 hold 仍是 160。
-+    const MAIN_FADE = 260;
++    const MAIN_FADE = 500;
 +    // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
 +    const SUB_HOLD_IOS = 0;
 +    const SUB_FADE_IOS = 280;
 +    const LEAF_CLOSE_FADE = SUB_FADE_IOS;   // 仅作 lastLeafTapFade 的初值（真正取值在点击时按设备决定）
 +    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
-+    const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
++    const LEAF_PRESSED_CLASS = 'context-pressed';
++    const MENU_FADING_CLASS = 'context-fading';   // 关闭时的 CSS transition 淡出类（见 closeMenus）
 +    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
  
      let options = {
          fadeSpeed: 100,
-@@ -15,14 +96,953 @@
+@@ -15,14 +97,962 @@
          compress: false
      };
  
@@ -670,12 +685,21 @@
 +        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
 +        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 +
++        // 【2026-10-08 老师真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
++        // 证据：老师在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
++        // 而代码里 `fadeOut(260)` 被调用后元素状态**一个都没变** —— jQuery 的动画依赖它自己的计时器推进，
++        // 时长短（260ms ≈ 15 帧）+ 主线程忙时会被整段跳过，表现就是"啪"一下没了。
++        // 改成 CSS transition：浏览器合成器驱动，主线程再忙也能看到渐变；时长也不再敏感。
++        const $menu = $('.dropdown-context:not(.dropdown-context-sub)');
 +        const doFadeOut = function () {
-+            $('.dropdown-context').fadeOut(fade, function () {
-+                $('.dropdown-context').css({ display: '' });
++            $menu.addClass(MENU_FADING_CLASS);          // CSS：opacity → 0，带 transition: opacity <fade>ms
++            $menu.css('transition-duration', fade + 'ms');
++            setTimeout(function () {
++                $menu.removeClass(MENU_FADING_CLASS)
++                    .css({ display: '', opacity: '', transitionDuration: '' });
 +                $('.dropdown-context .drop-left').removeClass('drop-left');
 +                $('.dropdown-context .touch-open').removeClass('touch-open');
-+            });
++            }, fade + 60);
 +        };
 +        if (hold > 0) {
 +            setTimeout(doFadeOut, hold);   // 先原样停住 hold 毫秒（菜单一动不动）再淡出
@@ -1298,7 +1322,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +1050,8 @@
+@@ -30,13 +1060,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -1314,7 +1338,7 @@
          });
  
      }
-@@ -130,12 +1145,15 @@
+@@ -130,12 +1155,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -1336,7 +1360,7 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -144,42 +1162,122 @@
+@@ -144,42 +1172,122 @@
              $('body').append($menu);
  
              $('.dropdown-context:not(.dropdown-context-sub)').hide();
@@ -1473,7 +1497,7 @@
 ---- src/public/js/context-js/context-js.js
 --- lsky-pro@38d52c46/public/js/context-js/context-js.js	（上游原文件）
 +++ src/public/js/context-js/context-js.js	（本 fork）
-@@ -1 +1,1283 @@
+@@ -1 +1,1293 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1554,13 +1578,14 @@
 +    // 原来一级 fade 只有 120ms（实测到不可见仅 58ms，看着像"直接消失"）⇒ 现在 260ms。
 +    // 注意：这只影响"淡出过程"，不影响 hold（停顿）——
 +    //   电脑 hold 仍是 0（老师要求"电脑上不要延迟"），安卓 hold 仍是 160。
-+    const MAIN_FADE = 260;
++    const MAIN_FADE = 500;
 +    // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
 +    const SUB_HOLD_IOS = 0;
 +    const SUB_FADE_IOS = 280;
 +    const LEAF_CLOSE_FADE = SUB_FADE_IOS;   // 仅作 lastLeafTapFade 的初值（真正取值在点击时按设备决定）
 +    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
-+    const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
++    const LEAF_PRESSED_CLASS = 'context-pressed';
++    const MENU_FADING_CLASS = 'context-fading';   // 关闭时的 CSS transition 淡出类（见 closeMenus）
 +    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
 +
 +    let options = {
@@ -1898,12 +1923,21 @@
 +        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
 +        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 +
++        // 【2026-10-08 老师真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
++        // 证据：老师在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
++        // 而代码里 `fadeOut(260)` 被调用后元素状态**一个都没变** —— jQuery 的动画依赖它自己的计时器推进，
++        // 时长短（260ms ≈ 15 帧）+ 主线程忙时会被整段跳过，表现就是"啪"一下没了。
++        // 改成 CSS transition：浏览器合成器驱动，主线程再忙也能看到渐变；时长也不再敏感。
++        const $menu = $('.dropdown-context:not(.dropdown-context-sub)');
 +        const doFadeOut = function () {
-+            $('.dropdown-context').fadeOut(fade, function () {
-+                $('.dropdown-context').css({ display: '' });
++            $menu.addClass(MENU_FADING_CLASS);          // CSS：opacity → 0，带 transition: opacity <fade>ms
++            $menu.css('transition-duration', fade + 'ms');
++            setTimeout(function () {
++                $menu.removeClass(MENU_FADING_CLASS)
++                    .css({ display: '', opacity: '', transitionDuration: '' });
 +                $('.dropdown-context .drop-left').removeClass('drop-left');
 +                $('.dropdown-context .touch-open').removeClass('touch-open');
-+            });
++            }, fade + 60);
 +        };
 +        if (hold > 0) {
 +            setTimeout(doFadeOut, hold);   // 先原样停住 hold 毫秒（菜单一动不动）再淡出
@@ -2876,7 +2910,7 @@
              border-style: solid;
              border-width: 5px 0 5px 5px;
              content: " ";
-@@ -152,7 +157,22 @@
+@@ -152,7 +157,33 @@
  /**
   * 	Context Styles
   */
@@ -2886,6 +2920,17 @@
 +.dropdown-context a.context-pressed {
 +    background-color: var(--lsky-accent);
 +    color: #ffffff;
++}
++
++/* 【2026-10-08 老师真机定位后的最终写法】关闭菜单的淡出改用 **CSS transition**，
++   而不是 jQuery 的 fadeOut。证据：同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`
++   （含带回调版本）都能看到淡出，而代码里的 `fadeOut(260)` 调用后元素状态一个都没变 ——
++   jQuery 的动画靠自己的计时器推进，时长太短（260ms ≈ 15 帧）叠上主线程忙时会被整段跳过，
++   表现就是"啪"一下没了。交给浏览器合成器的 transition 就稳定了，时长也不再敏感。
++   时长由 JS 动态写 inline 的 transition-duration（一级 500ms / 二级各档）。 */
++.dropdown-context.context-fading {
++    opacity: 0 !important;          /* !important 用于压过打开时 jQuery fadeIn 留下的 inline opacity:1 */
++    transition: opacity 300ms ease-out;
 +}
 +
  .dropdown-context {
@@ -2899,7 +2944,7 @@
      .nav-header {
          cursor: default;
      }
-@@ -167,16 +187,34 @@
+@@ -167,16 +198,34 @@
          }
      }
  }
@@ -2936,7 +2981,7 @@
  }
  .dropdown-context:after, .dropdown-context-up:after {
      position: absolute;
-@@ -184,9 +222,9 @@
+@@ -184,9 +233,9 @@
      left: 10px;
      display: inline-block;
      border-right: 6px solid transparent;
@@ -2948,7 +2993,7 @@
  }
  .dropdown-context-up:before, .dropdown-context-up:after {
      top: auto;
-@@ -196,13 +234,13 @@
+@@ -196,13 +245,13 @@
  .dropdown-context-up {
      &:before {
          border-right: 7px solid transparent;
@@ -2964,7 +3009,7 @@
          border-left: 6px solid transparent;
          border-bottom: none;
      }
-@@ -215,7 +253,7 @@
+@@ -215,7 +264,7 @@
          padding-left: 14px;
          padding-top: 0;
          padding-bottom: 0;
@@ -2977,11 +3022,12 @@
 ---- src/public/css/context-js/context-js.css
 --- lsky-pro@38d52c46/public/css/context-js/context-js.css	（上游原文件）
 +++ src/public/css/context-js/context-js.css	（本 fork）
-@@ -1 +1,3 @@
+@@ -1 +1,4 @@
 -.nav-header{color:#999;display:block;font-size:11px;font-weight:700;line-height:20px;padding:3px 15px;text-shadow:0 1px 0 hsla(0,0%,100%,.5);text-transform:uppercase}.dropdown-menu{background-clip:padding-box;background-color:#fff;border:0;border-radius:6px;box-shadow:0 5px 10px hsla(0,0%,68%,.3);display:none;float:left;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;font-size:14px;left:0;list-style:none;margin:2px 0 0;min-width:160px;padding:5px 0;position:absolute;text-align:left;top:100%;z-index:1000}.dropdown-menu.pull-right{left:auto;right:0}.dropdown-menu .divider{background-color:#e5e5e5;border-bottom:1px solid #f5f5f5;height:1px;margin:9px 1px;overflow:hidden}.dropdown-menu a{clear:both;color:#333;display:block;font-weight:400;line-height:20px;padding:5px 20px;text-decoration:none;white-space:nowrap}.dropdown-menu .disabled>a:hover{background-color:transparent;cursor:default;text-decoration:none}.dropdown-menu .dropdown-submenu:hover>a,.dropdown-menu li>a:focus,.dropdown-menu li>a:hover{background-color:#627aff;background-image:-moz-linear-gradient(top,#08c,#0077b3);background-repeat:repeat-x;color:#fff;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover{background-color:#627aff;background-image:linear-gradient(180deg,#08c,#0077b3);background-repeat:repeat-x;color:#fff;outline:0;text-decoration:none}.dropdown-menu .disabled>a,.dropdown-menu .disabled>a:hover{color:#999}.dropdown-menu .open{*z-index:1000}.dropdown-menu .open>.dropdown-menu{display:block}.dropdown-menu .pull-right>.dropdown-menu{left:auto;right:0}.dropup .caret,.navbar-fixed-bottom .dropdown .caret{border-bottom:4px solid #000;border-top:0;content:"\2191"}.dropup .dropdown-menu,.navbar-fixed-bottom .dropdown .dropdown-menu{bottom:100%;margin-bottom:1px;top:auto}.dropdown-submenu{position:relative}.dropdown-submenu>.dropdown-menu{border-radius:0 6px 6px 6px;left:100%;margin-left:-1px;margin-top:-6px;top:0}.dropdown-submenu>.dropdown-menu.drop-left{left:-100%}.dropdown-submenu:hover .dropdown-menu{display:block}.dropdown-submenu:hover>a:after{border-left-color:#fff}.dropdown-submenu>a:after{border-color:transparent transparent transparent #ccc;border-style:solid;border-width:5px 0 5px 5px;content:" ";display:block;float:right;height:0;margin-right:-10px;margin-top:5px;width:0}.dropdown .dropdown-menu .nav-header{padding-left:20px;padding-right:20px}.dropdown-context .nav-header{cursor:default}.dropdown-context .dropdown-submenu:hover .dropdown-menu{display:none}.dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}.dropdown-context-up:before,.dropdown-context:before{border-bottom:7px solid rgba(0,0,0,.2);border-left:7px solid transparent;border-right:7px solid transparent;content:"";display:inline-block;left:9px;position:absolute;top:-7px}.dropdown-context-up:after,.dropdown-context:after{border-bottom:6px solid #fff;border-left:6px solid transparent;border-right:6px solid transparent;content:"";display:inline-block;left:10px;position:absolute;top:-6px}.dropdown-context-up:after,.dropdown-context-up:before{bottom:-7px;top:auto;z-index:9999}.dropdown-context-up:before{border:7px solid transparent;border-bottom:none;border-top-color:#ccc}.dropdown-context-up:after{border:6px solid transparent;border-bottom:none;border-top-color:#fff}.dropdown-context-sub:after,.dropdown-context-sub:before{display:none}.compressed-context a{font-size:13px;padding-bottom:0;padding-left:14px;padding-top:0}.compressed-context .divider{margin:5px 1px}.compressed-context .nav-header{padding:1px 13px}
 +.nav-header{color:var(--lsky-text-3);display:block;font-size:12.5px;font-weight:700;line-height:20px;padding:3px 15px;text-shadow:none;text-transform:uppercase}.dropdown-menu{background-clip:padding-box;background-color:var(--lsky-surface);border:0;border-radius:6px;box-shadow:var(--lsky-shadow-pop);display:none;float:left;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;font-size:14px;left:0;list-style:none;margin:2px 0 0;min-width:160px;padding:5px 0;position:absolute;text-align:left;top:100%;z-index:1000}.dropdown-menu.pull-right{left:auto;right:0}.dropdown-menu .divider{background-color:var(--lsky-surface-3);border-bottom:1px solid var(--lsky-border);height:1px;margin:9px 1px;overflow:hidden}.dropdown-menu a{clear:both;color:var(--lsky-text);display:block;font-weight:400;line-height:20px;padding:5px 20px;text-decoration:none;white-space:nowrap}.dropdown-menu .disabled>a:hover{background-color:transparent;cursor:default;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover,.dropdown-menu .dropdown-submenu:hover>a,.dropdown-menu .dropdown-submenu>a:active,.dropdown-menu li>a:active,.dropdown-menu li>a:focus,.dropdown-menu li>a:hover{background-color:var(--lsky-accent);background-image:none;background-repeat:repeat-x;color:#fff;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover{outline:0}.dropdown-menu .disabled>a,.dropdown-menu .disabled>a:hover{color:var(--lsky-text-3)}.dropdown-menu .open{*z-index:1000}.dropdown-menu .open>.dropdown-menu{display:block}.dropdown-menu .pull-right>.dropdown-menu{left:auto;right:0}.dropup .caret,.navbar-fixed-bottom .dropdown .caret{border-bottom:4px solid var(--lsky-border-2);border-top:0;content:"\2191"}.dropup .dropdown-menu,.navbar-fixed-bottom .dropdown .dropdown-menu{bottom:100%;margin-bottom:1px;top:auto}.dropdown-submenu{position:relative}.dropdown-submenu>.dropdown-menu{border-radius:0 6px 6px 6px;left:100%;margin-left:-1px;margin-top:-6px;top:0}.dropdown-submenu>.dropdown-menu.drop-left{left:-100%}.dropdown-submenu:hover .dropdown-menu{display:block}.dropdown-submenu:hover>a:after{border-left-color:var(--lsky-surface)}.dropdown-submenu>a:after{border-bottom:5px solid transparent;border-left:5px solid transparent;border-left-color:var(--lsky-border-2);border-right:0 solid transparent;border-top:5px solid transparent;content:" ";display:block;float:right;height:0;margin-right:-10px;margin-top:5px;width:0}.dropdown .dropdown-menu .nav-header{padding-left:20px;padding-right:20px}.dropdown-context .nav-header{cursor:default}.dropdown-context .dropdown-submenu:hover .dropdown-menu{display:none}.dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}.dropdown-context .submenu-back>a>i{margin-right:7px}.dropdown-context-up:before,.dropdown-context:before{border-bottom:7px solid rgba(0,0,0,.2);border-left:7px solid transparent;border-right:7px solid transparent;content:none;display:inline-block;left:9px;position:absolute;top:-7px}.dropdown-context-up:after,.dropdown-context:after{border-bottom:6px solid var(--lsky-surface);border-left:6px solid transparent;border-right:6px solid transparent;content:none;display:inline-block;left:10px;position:absolute;top:-6px}.dropdown-context-up:after,.dropdown-context-up:before{bottom:-7px;top:auto;z-index:9999}.dropdown-context-up:before{border-bottom:none;border-left:7px solid transparent;border-right:7px solid transparent;border-top:7px solid var(--lsky-border-2)}.dropdown-context-up:after{border-bottom:none;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid var(--lsky-surface)}.dropdown-context-sub:after,.dropdown-context-sub:before{display:none}.compressed-context a{font-size:13.5px;padding-bottom:0;padding-left:14px;padding-top:0}.compressed-context .divider{margin:5px 1px}.compressed-context .nav-header{padding:1px 13px}
 +.dropdown-context,.dropdown-context a{-webkit-tap-highlight-color:transparent}
 +.dropdown-context a.context-pressed{background-color:var(--lsky-accent);color:#fff}
++.dropdown-context.context-fading{opacity:0 !important;transition:opacity .3s ease-out}
 
 ---- src/resources/views/user/images.blade.php
 --- lsky-pro@38d52c46/resources/views/user/images.blade.php	（上游原文件）

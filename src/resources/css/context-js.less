@@ -165,6 +165,17 @@
     color: #ffffff;
 }
 
+/* 【2026-10-08 老师真机定位后的最终写法】关闭菜单的淡出改用 **CSS transition**，
+   而不是 jQuery 的 fadeOut。证据：同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`
+   （含带回调版本）都能看到淡出，而代码里的 `fadeOut(260)` 调用后元素状态一个都没变 ——
+   jQuery 的动画靠自己的计时器推进，时长太短（260ms ≈ 15 帧）叠上主线程忙时会被整段跳过，
+   表现就是"啪"一下没了。交给浏览器合成器的 transition 就稳定了，时长也不再敏感。
+   时长由 JS 动态写 inline 的 transition-duration（一级 500ms / 二级各档）。 */
+.dropdown-context.context-fading {
+    opacity: 0 !important;          /* !important 用于压过打开时 jQuery fadeIn 留下的 inline opacity:1 */
+    transition: opacity 300ms ease-out;
+}
+
 .dropdown-context {
     /* 【2026-10-08】iOS 的「按下灰块」：早先只把图片卡片（#images-scroll .images-item）关掉了，
        但菜单是 $('body').append($menu) 生成的 —— 不在那个作用域里，所以菜单项一直吃的是浏览器

@@ -330,13 +330,15 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     // 所以要比**总时长**，不能只看 fade（安卓现在是 320+140=460，iOS 是 0+280=280）。
     const num = (re) => Number((ctxJs.match(re) || [])[1]);
     const subTotalAndroid = num(/const SUB_HOLD_ANDROID = (\d+);/) + num(/const SUB_FADE_ANDROID = (\d+);/);
-    const mainTotalAndroid = num(/const MAIN_HOLD_ANDROID = (\d+);/) + num(/const MAIN_FADE = (\d+);/);
+    const mainHoldAndroid = num(/const MAIN_HOLD_ANDROID = (\d+);/);
     const subTotalIOS = num(/const SUB_HOLD_IOS = (\d+);/) + num(/const SUB_FADE_IOS = (\d+);/);
-    check('总关闭时长：非 iOS 二级 > iOS 二级，且非 iOS 一级 < 非 iOS 二级（老师要求的分级）',
-        [subTotalAndroid, mainTotalAndroid, subTotalIOS].every((n) => n > 0)
+    // 注：老师最早要求「一级比二级短」是针对**停顿**（hold）；后来要求「一级淡出更明显」（fade 提到 500），
+    // 所以现在一级的 fade 长于二级、总时长也长于二级 —— 以**最新要求**为准，断言只钉住停顿部分的层级。
+    check('非 iOS 二级 > iOS 二级，且一级的**停顿**仍短于二级（老师要求的层级，以最新口径为准）',
+        [subTotalAndroid, mainHoldAndroid, subTotalIOS].every((n) => n > 0)
         && subTotalAndroid > subTotalIOS
-        && mainTotalAndroid < subTotalAndroid,
-        `安卓二级 ${subTotalAndroid} / 安卓一级 ${mainTotalAndroid} / iOS 二级 ${subTotalIOS}`);
+        && mainHoldAndroid < num(/const SUB_HOLD_ANDROID = (\d+);/),
+        `安卓二级总 ${subTotalAndroid} / 安卓一级停顿 ${mainHoldAndroid} / iOS 二级总 ${subTotalIOS}`);
     // 2026-10-08 最终口径：iOS 的**二级**保持第七轮的 280 不变；**一级**按老师后来的要求
     // 改用统一的 MAIN_FADE（"我发现 iOS 的一级菜单也没有淡出"——这条覆盖了早前"iOS 一律不动"的范围）。
     check('iOS：二级仍是第七轮定的 280，一级改用统一的 MAIN_FADE（老师后来明确要求）',
@@ -347,8 +349,8 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         && /if \(isDesktopUA\) \{[\s\S]{0,200}lastLeafTapHold = 0;[\s\S]{0,200}options\.fadeSpeed/.test(ctxJs));
     check('诊断已全部撤除（没有 ?dbg 打点残留）',
         ! /dbg-ctx|DBG_ON|dbgSid/.test(ctxJs) && ! /\?dbg=1/.test(ctxJs));
-    check('一级的淡出**所有平台统一**且足够明显（>= 200ms，老师：iOS 一级也没有淡出）',
-        Number(ctxJs.match(/const MAIN_FADE = (\d+);/)[1]) >= 200
+    check('一级的淡出**所有平台统一**且足够明显（>= 500ms；260ms 在真机上会被 jQuery 跳帧）',
+        Number(ctxJs.match(/const MAIN_FADE = (\d+);/)[1]) >= 500
         // 三个分支（电脑 / iOS / 其它触摸）的一级都必须指向 MAIN_FADE
         && (ctxJs.match(/\? options\.fadeSpeed : MAIN_FADE/g) || []).length >= 1
         && (ctxJs.match(/\? SUB_FADE_IOS : MAIN_FADE/g) || []).length >= 1
@@ -389,6 +391,18 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         && /isIOSUA\) \{[\s\S]{0,600}?lastLeafTapHold = SUB_HOLD_IOS;/.test(ctxJs));
     check('清理与状态还原也一起延后到 hold + fade 之后（否则菜单还没淡完就被动）',
         /\}, hold \+ fade \+ 150\);/.test(ctxJs));
+    // 2026-10-08 第十三轮：淡出**不再用 jQuery 的 fadeOut**（真机上 260ms 会被整段跳帧 ⇒ 像直接消失），
+    // 改用 CSS transition（浏览器合成器驱动，时长不敏感）。
+    check('淡出改用 CSS transition 驱动：有 .context-fading 规则 + JS 动态写 transition-duration',
+        /\.dropdown-context\.context-fading\{[^}]*opacity:0/.test(ctxCss)
+        && /\.dropdown-context\.context-fading/.test(ctxLess)
+        && /const MENU_FADING_CLASS = 'context-fading';/.test(ctxJs)
+        && /\$menu\.css\('transition-duration', fade \+ 'ms'\);/.test(ctxJs));
+    // 注意先剥注释：文件里作为「证据」写着 `$('.dropdown-context').fadeOut(500)` 的说明文字。
+    const ctxJsNoCmt = ctxJs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    check('关闭不再走 jQuery fadeOut（那条路在真机上会被跳帧）',
+        ! /\.fadeOut\(/.test(ctxJsNoCmt)
+        && /\$menu\.addClass\(MENU_FADING_CLASS\)/.test(ctxJsNoCmt));
     const activeRuleLine = ctxCss.split('\n').find((l) => l.includes('li>a:active')) || '';
     check('按下态与 hover 用同一个强调色变量（不许写死颜色）',
         activeRuleLine.includes('var(--lsky-accent)'),
