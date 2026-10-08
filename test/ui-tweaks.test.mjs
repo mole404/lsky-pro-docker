@@ -325,6 +325,18 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     check('CSS 也带版本串（原来是裸 link，iOS 会吃启发式缓存 ⇒ 改了看不到）',
         /asset\('css\/context-js\/context-js\.css'\)\s*\}\}\?v=\{\{\s*\\App\\Utils::assetVersion\('css\/context-js\/context-js\.css'\)/.test(imagesBlade));
     const ctxJs = read('public', 'js', 'context-js', 'context-js.js');
+    // 2026-10-08 第十一轮：关闭淡出分级，且**只对安卓是新增行为**（老师明确：iOS 不要动）。
+    check('关闭淡出分级：安卓二级比 iOS 二级长，安卓一级短于安卓二级',
+        /const SUB_FADE_ANDROID = (\d+);/.test(ctxJs) && /const MAIN_FADE_ANDROID = (\d+);/.test(ctxJs)
+        && /const SUB_FADE_IOS = (\d+);/.test(ctxJs)
+        && Number(ctxJs.match(/const SUB_FADE_ANDROID = (\d+);/)[1]) > Number(ctxJs.match(/const SUB_FADE_IOS = (\d+);/)[1])
+        && Number(ctxJs.match(/const MAIN_FADE_ANDROID = (\d+);/)[1]) < Number(ctxJs.match(/const SUB_FADE_ANDROID = (\d+);/)[1]));
+    check('iOS 完全不改：二级仍是第七轮定的 280，一级回落到 options.fadeSpeed（原行为）',
+        Number(ctxJs.match(/const SUB_FADE_IOS = (\d+);/)[1]) === 280
+        && /lastLeafTapFade = inSubmenu \? SUB_FADE_IOS : options\.fadeSpeed;/.test(ctxJs));
+    check('平台判据只在模块初始化算一次（isAndroidUA），且分支里不出现 iOS 专属新常量',
+        /const isAndroidUA = \/Android\/i\.test\(navigator\.userAgent \|\| ''\);/.test(ctxJs)
+        && /if \(isAndroidUA\) \{[\s\S]{0,200}MAIN_FADE_ANDROID[\s\S]{0,200}\} else \{[\s\S]{0,200}options\.fadeSpeed/.test(ctxJs));
     check('点二级项后不「先退回一级」：叶子项路径跳过即时 exitSubmenuInplace，改用延时收尾',
         /const leafClose = \(Date\.now\(\) - lastLeafTapAt\) < LEAF_FADE_WINDOW;/.test(ctxJs)
         && /if \(! leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs)
@@ -332,9 +344,8 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     check('叶子项点击后定格高亮：有 .context-pressed 样式（用强调色变量，不写死）',
         /\.dropdown-context a\.context-pressed\{[^}]*var\(--lsky-accent\)/.test(ctxCss)
         && /\.dropdown-context a\.context-pressed\s*\{[\s\S]{0,120}var\(--lsky-accent\)/.test(ctxLess));
-    check('本次关闭的淡出被放慢（叶子项 280ms，默认仍是 options.fadeSpeed）',
-        /const LEAF_CLOSE_FADE = (\d+);/.test(ctxJs)
-        && Number((ctxJs.match(/const LEAF_CLOSE_FADE = (\d+);/) || [])[1]) > 100
+    check('本次关闭的淡出被放慢（安卓二级 420 / iOS 二级 280，默认仍是 options.fadeSpeed）',
+        /const LEAF_CLOSE_FADE = isAndroidUA \? SUB_FADE_ANDROID : SUB_FADE_IOS;/.test(ctxJs)
         && /menuClosingUntil = Date\.now\(\) \+ fade \+ MENU_FADE_GUARD/.test(ctxJs));
     check('叶子项判据挂在 li 上（挂 `li > a` 实测不触发 —— target 是 li）',
         /\$\(document\)\.on\('click', '\.dropdown-context li', function \(\) \{/.test(ctxJs)

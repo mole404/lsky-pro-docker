@@ -48,7 +48,19 @@ window.context = window.context || (function () {
     //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
     //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
     //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
-    const LEAF_CLOSE_FADE = 280;    // 叶子项被点后关菜单用的淡出时长（默认是 options.fadeSpeed = 100）
+    // 叶子项被点后关菜单用的淡出时长（默认是 options.fadeSpeed = 100）—— 分两级、二级再分平台：
+    //   * 二级菜单项（子菜单里的项，如「复制链接 → Url」）：内容多、要看清选了哪一项 ⇒ 最长；
+    //     安卓的动画观感比 iOS 更"赶"，所以安卓再放长一点（老师 2026-10-08 反馈）。
+    //   * 一级菜单项（主菜单直接项，如「刷新」「复制图片」）：也要有停留，但**比二级短**。
+    //   * 其它关闭路径（点菜单外、Esc、滚动等）保持 options.fadeSpeed 不变。
+    // ⚠️ 老师 2026-10-08 明确：**只对安卓端做改动，iOS 已经很好了不要动**。
+    //    iOS：二级 280（原值）、一级 = options.fadeSpeed（原行为，默认 100）—— 与改动前完全一致。
+    //    安卓：二级 420、一级 200（两级都放长，且一级短于二级）。
+    const isAndroidUA = /Android/i.test(navigator.userAgent || '');
+    const SUB_FADE_ANDROID = 420;   // 安卓 · 二级菜单项（子菜单里的项）
+    const MAIN_FADE_ANDROID = 200;  // 安卓 · 一级菜单项（主菜单直接项）—— 比二级短
+    const SUB_FADE_IOS = 280;       // iOS · 二级菜单项（保持 2026-10-08 第七轮定下的值，别再动）
+    const LEAF_CLOSE_FADE = isAndroidUA ? SUB_FADE_ANDROID : SUB_FADE_IOS;
     const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
     const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
     const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
@@ -233,6 +245,7 @@ window.context = window.context || (function () {
     let debugToConsole = false;     // context.debug = true 时实时打控制台
     let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
     let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
+    let lastLeafTapFade = LEAF_CLOSE_FADE;  // 那一次点击对应的淡出时长（一级/二级不一样，见上面常量）
     let suppressClickUntil = 0;
     let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
     let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -371,7 +384,8 @@ window.context = window.context || (function () {
         // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
         // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
         const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
-        const fade = leafClose ? LEAF_CLOSE_FADE : options.fadeSpeed;
+        // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
+        const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
         // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
         menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 
@@ -972,6 +986,14 @@ window.context = window.context || (function () {
                 return;
             }
             lastLeafTapAt = Date.now();
+            // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
+            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
+            const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
+            if (isAndroidUA) {
+                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
+            } else {
+                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
+            }
             $a.addClass(LEAF_PRESSED_CLASS);
         });
 

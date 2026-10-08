@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   4a9db9f6b11aac83ebd2898e1daec341  src/resources/views/user/images.blade.php
+#   d6be2f8bbdf17c7a864dede946f5a44a  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -197,11 +197,21 @@
 #  实测（CDP 模拟 hover:none 让点「复制链接」走就地展开那条真实手机路径）：
 #     点击当帧 pressed=true、bg=rgb(37,99,235)、**inplace 仍为 true**（没退回一级）、Url 仍可见；
 #     120ms 后高亮保持；菜单 395ms 到不可见；随后 inplace=false、返回行=0、高亮残留=0。
+# 2026-10-08 第十一轮（老师：安卓端二级延迟再长一点 + 一级也加一点但短于二级；**只动安卓**）：
+#  ⑲ context-js.js 的关闭淡出按时长分级，且**只有安卓是新增行为**：
+#     iOS：二级保持 SUB_FADE_IOS=280（第七轮定的值），一级保持 options.fadeSpeed（原行为）—— 与改动前完全一致。
+#     安卓：二级 SUB_FADE_ANDROID=420、一级 MAIN_FADE_ANDROID=200（一级 < 二级）。
+#     判据 isAndroidUA = /Android/i.test(navigator.userAgent)（模块初始化时算一次）。
+#     点菜单外/Esc/滚动等路径仍走 options.fadeSpeed 不变。
+#  口径与实测（页面内 requestAnimationFrame 采样 opacity 曲线，测「从开始淡出到几乎不可见」）：
+#     iOS 二级 195ms / 安卓二级 333ms（安卓更长）；iOS 一级 77ms（原样）/ 安卓一级 150ms（短于安卓二级）。
+#     注：别用 context.isMenuOnScreen() 计时 —— 它含「DOM 高度>0」兜底，fadeOut 回调把 display 改回 ''
+#     后高度又非 0，读数会虚高且不线性；也别用 CDP 轮询 opacity（往返几十毫秒抓不住短窗口）。
 
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
 +++ src/resources/js/context-js.js	（本 fork）
-@@ -2,8 +2,56 @@
+@@ -2,8 +2,68 @@
   * Context.js
   * Copyright Jacob Kelley, Modified by WispX
   * MIT License
@@ -251,14 +261,26 @@
 +    //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
 +    //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
 +    //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
-+    const LEAF_CLOSE_FADE = 280;    // 叶子项被点后关菜单用的淡出时长（默认是 options.fadeSpeed = 100）
++    // 叶子项被点后关菜单用的淡出时长（默认是 options.fadeSpeed = 100）—— 分两级、二级再分平台：
++    //   * 二级菜单项（子菜单里的项，如「复制链接 → Url」）：内容多、要看清选了哪一项 ⇒ 最长；
++    //     安卓的动画观感比 iOS 更"赶"，所以安卓再放长一点（老师 2026-10-08 反馈）。
++    //   * 一级菜单项（主菜单直接项，如「刷新」「复制图片」）：也要有停留，但**比二级短**。
++    //   * 其它关闭路径（点菜单外、Esc、滚动等）保持 options.fadeSpeed 不变。
++    // ⚠️ 老师 2026-10-08 明确：**只对安卓端做改动，iOS 已经很好了不要动**。
++    //    iOS：二级 280（原值）、一级 = options.fadeSpeed（原行为，默认 100）—— 与改动前完全一致。
++    //    安卓：二级 420、一级 200（两级都放长，且一级短于二级）。
++    const isAndroidUA = /Android/i.test(navigator.userAgent || '');
++    const SUB_FADE_ANDROID = 420;   // 安卓 · 二级菜单项（子菜单里的项）
++    const MAIN_FADE_ANDROID = 200;  // 安卓 · 一级菜单项（主菜单直接项）—— 比二级短
++    const SUB_FADE_IOS = 280;       // iOS · 二级菜单项（保持 2026-10-08 第七轮定下的值，别再动）
++    const LEAF_CLOSE_FADE = isAndroidUA ? SUB_FADE_ANDROID : SUB_FADE_IOS;
 +    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
 +    const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
 +    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
  
      let options = {
          fadeSpeed: 100,
-@@ -15,14 +63,923 @@
+@@ -15,14 +75,933 @@
          compress: false
      };
  
@@ -432,6 +454,7 @@
 +    let debugToConsole = false;     // context.debug = true 时实时打控制台
 +    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
 +    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
++    let lastLeafTapFade = LEAF_CLOSE_FADE;  // 那一次点击对应的淡出时长（一级/二级不一样，见上面常量）
 +    let suppressClickUntil = 0;
 +    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
 +    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -570,7 +593,8 @@
 +        // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
 +        // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
 +        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
-+        const fade = leafClose ? LEAF_CLOSE_FADE : options.fadeSpeed;
++        // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
++        const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
 +        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
 +        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 +
@@ -1171,6 +1195,14 @@
 +                return;
 +            }
 +            lastLeafTapAt = Date.now();
++            // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
++            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
++            const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
++            if (isAndroidUA) {
++                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
++            } else {
++                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
++            }
 +            $a.addClass(LEAF_PRESSED_CLASS);
 +        });
 +
@@ -1185,7 +1217,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +987,8 @@
+@@ -30,13 +1009,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -1201,7 +1233,7 @@
          });
  
      }
-@@ -130,12 +1082,15 @@
+@@ -130,12 +1104,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -1223,7 +1255,7 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -144,42 +1099,122 @@
+@@ -144,42 +1121,122 @@
              $('body').append($menu);
  
              $('.dropdown-context:not(.dropdown-context-sub)').hide();
@@ -1360,7 +1392,7 @@
 ---- src/public/js/context-js/context-js.js
 --- lsky-pro@38d52c46/public/js/context-js/context-js.js	（上游原文件）
 +++ src/public/js/context-js/context-js.js	（本 fork）
-@@ -1 +1,1220 @@
+@@ -1 +1,1242 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1412,7 +1444,19 @@
 +    //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
 +    //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
 +    //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
-+    const LEAF_CLOSE_FADE = 280;    // 叶子项被点后关菜单用的淡出时长（默认是 options.fadeSpeed = 100）
++    // 叶子项被点后关菜单用的淡出时长（默认是 options.fadeSpeed = 100）—— 分两级、二级再分平台：
++    //   * 二级菜单项（子菜单里的项，如「复制链接 → Url」）：内容多、要看清选了哪一项 ⇒ 最长；
++    //     安卓的动画观感比 iOS 更"赶"，所以安卓再放长一点（老师 2026-10-08 反馈）。
++    //   * 一级菜单项（主菜单直接项，如「刷新」「复制图片」）：也要有停留，但**比二级短**。
++    //   * 其它关闭路径（点菜单外、Esc、滚动等）保持 options.fadeSpeed 不变。
++    // ⚠️ 老师 2026-10-08 明确：**只对安卓端做改动，iOS 已经很好了不要动**。
++    //    iOS：二级 280（原值）、一级 = options.fadeSpeed（原行为，默认 100）—— 与改动前完全一致。
++    //    安卓：二级 420、一级 200（两级都放长，且一级短于二级）。
++    const isAndroidUA = /Android/i.test(navigator.userAgent || '');
++    const SUB_FADE_ANDROID = 420;   // 安卓 · 二级菜单项（子菜单里的项）
++    const MAIN_FADE_ANDROID = 200;  // 安卓 · 一级菜单项（主菜单直接项）—— 比二级短
++    const SUB_FADE_IOS = 280;       // iOS · 二级菜单项（保持 2026-10-08 第七轮定下的值，别再动）
++    const LEAF_CLOSE_FADE = isAndroidUA ? SUB_FADE_ANDROID : SUB_FADE_IOS;
 +    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
 +    const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
 +    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
@@ -1597,6 +1641,7 @@
 +    let debugToConsole = false;     // context.debug = true 时实时打控制台
 +    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
 +    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
++    let lastLeafTapFade = LEAF_CLOSE_FADE;  // 那一次点击对应的淡出时长（一级/二级不一样，见上面常量）
 +    let suppressClickUntil = 0;
 +    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
 +    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -1735,7 +1780,8 @@
 +        // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
 +        // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
 +        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
-+        const fade = leafClose ? LEAF_CLOSE_FADE : options.fadeSpeed;
++        // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
++        const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
 +        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
 +        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 +
@@ -2336,6 +2382,14 @@
 +                return;
 +            }
 +            lastLeafTapAt = Date.now();
++            // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
++            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
++            const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
++            if (isAndroidUA) {
++                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
++            } else {
++                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
++            }
 +            $a.addClass(LEAF_PRESSED_CLASS);
 +        });
 +
