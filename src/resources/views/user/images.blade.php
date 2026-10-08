@@ -2424,6 +2424,65 @@
             });
 
 
+            /* ===================== 临时诊断打点（只在 ?dbg=1 时启用） =====================
+             * 用途：定位「手机端滑动仍会触发框选」（2026-10-08 老师报，iOS/安卓都有）。
+             * 只读：只挂监听 + fetch 打点，不改任何状态；不带 ?dbg=1 时整段不执行。
+             * 数据落在容器访问日志里（fetch 到 /dbg-… 路径），我在远程 docker logs 里读。
+             * 用完即删（连同 Dockerfile 的 md5 重钉）。 */
+            (function () {
+                if (! /[?&]dbg=1\b/.test(location.search)) { return; }
+                const SID = 'dbg' + Date.now().toString(36);
+                let seq = 0;
+                let lastBox = '';
+                let lastEvt = '';
+                const send = (tag, detail) => {
+                    if (seq > 500) { return; }
+                    seq += 1;
+                    const url = '/dbg-' + SID + '/' + seq + '/' + tag
+                        + '-' + encodeURIComponent(String(detail));
+                    try { fetch(url, {mode: 'no-cors', keepalive: true}); } catch (e) {}
+                };
+                const boxState = () => {
+                    try {
+                        const b = dsBoxRect();
+                        return Math.round(b.width) + 'x' + Math.round(b.height);
+                    } catch (e) { return 'na'; }
+                };
+                const selState = () => {
+                    try { return ds.getSelection().length; } catch (e) { return 'na'; }
+                };
+                const touchAge = () => (Date.now() - lastTouchAt);
+
+                ['touchstart', 'touchmove', 'touchend', 'touchcancel',
+                    'mousedown', 'mousemove', 'mouseup', 'click'].forEach((type) => {
+                    document.addEventListener(type, (e) => {
+                        // move 类事件量大：每 3 条只留 1 条（够看出轨迹，又不刷爆日志）
+                        if ((type === 'touchmove' || type === 'mousemove') && seq % 3 !== 0) { return; }
+                        lastEvt = type;
+                        const p = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+                        send('e', type
+                            + '|x' + Math.round(p.clientX || 0) + '|y' + Math.round(p.clientY || 0)
+                            + '|pd' + (e.defaultPrevented ? 1 : 0)
+                            + '|tgt' + String((e.target && (e.target.className || e.target.tagName)) || '?').slice(0, 20)
+                            + '|box' + boxState() + '|sel' + selState()
+                            + '|mob' + (utils.isMobile() ? 1 : 0)
+                            + '|lt' + touchAge());
+                    }, true);
+                });
+                // 框尺寸变化（100ms 采样，变了才发）
+                setInterval(() => {
+                    const b = boxState();
+                    if (b !== lastBox) {
+                        lastBox = b;
+                        send('box', b + '|lastEvt' + lastEvt + '|sel' + selState() + '|lt' + touchAge());
+                    }
+                }, 100);
+                // 选择变化
+                ds.subscribe('elementselect', () => send('sel+', 'n' + selState() + '|lastEvt' + lastEvt + '|box' + boxState()));
+                ds.subscribe('elementunselect', () => send('sel-', 'n' + selState() + '|lastEvt' + lastEvt + '|box' + boxState()));
+                send('boot', 'sid' + SID + '|cards' + document.querySelectorAll('.images-item').length + '|mob' + (utils.isMobile() ? 1 : 0));
+            })();
+
             const bindOperates = () => {
                 let selected = ds.getSelection();
                 if (selected.length) {
