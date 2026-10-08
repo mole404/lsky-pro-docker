@@ -705,6 +705,14 @@
                框选的选择框不跟随、松手也不会结束互动（实测「锁定不释放」）。Chromium/Safari 用
                -webkit-user-drag 关掉原生拖拽（Firefox 不看这条，由脚本里的 dragstart 兜底）。 */
             /* 注意卡片本身也要：<a href> 默认就是可拖拽元素，只禁 img 没用（实测 dragstart 照样发） */
+            /* iOS 的「点一下灰闪」（-webkit-tap-highlight-color）：fork 2026-10-08 ——
+               触摸端不再让 DragSelect preventDefault 之后，iOS 恢复了这个默认高亮，
+               点图片会闪一下灰。这里只在**图片墙范围内**关掉它（页面其它地方没被本次改动影响，
+               不动它们）。它是继承属性，写在卡片上即可覆盖卡片里的 img 与右上角小圆勾。 */
+            #images-scroll .images-item {
+                -webkit-tap-highlight-color: transparent;
+            }
+
             #images-grid .images-item,
             #images-grid .images-item img {
                 -webkit-user-drag: none;
@@ -2338,6 +2346,13 @@
                 if (! dsBox.on) {
                     return;
                 }
+                /* 手机端不跟手扩框（老师 2026-10-08 定：**框选只在电脑端生效**）——
+                 * 手指在图片墙上滑动应当是滚页面，不该顺带把沿途的图都框上、和滚动手势打架。
+                 * ★ 只让框「不再长大」，不取消 mousedown 那一发：库的**点选**正是靠按下时的
+                 *   点状框与卡片相交来落选的（见上面 Selector.rect 的说明）⇒ 点图片/点圆勾照常。 */
+                if (utils.isMobile()) {
+                    return;
+                }
                 dsBox.x1 = e.clientX;
                 dsBox.y1 = e.clientY;
             }, true);
@@ -2346,7 +2361,7 @@
                  * 只认"真的是拖动"（框任一边 > 4px）—— 侧栏上单击导航仍然是单击。
                  * 用库的对外 API 落选，这样 elementselect / elementunselect 事件照常发，
                  * 顶部的「已选择 N 张」操作栏也照常更新（bindOperates 再兜一次）。 */
-                if (dsBox.on && dsBox.selfSelect) {
+                if (dsBox.on && dsBox.selfSelect && ! utils.isMobile()) {
                     const r = dsBoxRect();
                     if (r.width > 4 || r.height > 4) {
                         try {

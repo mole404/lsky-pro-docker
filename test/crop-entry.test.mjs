@@ -276,8 +276,15 @@ console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失
     check('④ 允许"区域外（侧栏上）"起框，并在松手时自己落选中',
         /const outOfAreaOk = !! ar && e\.clientX <= ar\.right && e\.clientY >= ar\.top/.test(code)
         && /dsBox\.selfSelect = ! inArea/.test(code)
-        && /dsBox\.selfSelect\)[\s\S]{0,600}ds\.clearSelection\(\)[\s\S]{0,200}ds\.addSelection\(el\)/.test(code)
-        && /bindOperates\(\)/.test(code.slice(code.indexOf('dsBox.selfSelect)'), code.indexOf('dsBox.selfSelect)') + 900)));
+        && /dsBox\.selfSelect[\s\S]{0,800}ds\.clearSelection\(\)[\s\S]{0,200}ds\.addSelection\(el\)/.test(code)
+        && /bindOperates\(\)/.test(code.slice(code.indexOf('dsBox.selfSelect &&'), code.indexOf('dsBox.selfSelect &&') + 900)));
+    // 2026-10-08：老师定「框选只在电脑端生效」（手机上拖框会和滚页面手势打架）。
+    // 契约：mousemove 里必须先判 utils.isMobile() 再更新框 —— 只让框不再长大，不动 mousedown 那一发
+    //（库的点选正是靠按下时的点状框），否则手机端连点选都没了。
+    check('⑨ 手机端不拖框：mousemove 更新框之前有 utils.isMobile() 守卫',
+        /addEventListener\('mousemove',[\s\S]{0,600}utils\.isMobile\(\)[\s\S]{0,80}return;[\s\S]{0,200}dsBox\.x1 = e\.clientX/.test(code));
+    check('⑨ 手机端不靠拖动落选：mouseup 的自选分支也带 utils.isMobile() 守卫',
+        /dsBox\.selfSelect && ! utils\.isMobile\(\)/.test(code));
     check('④ 区域外的单击不算框选（框任一边 > 4px 才算拖动）',
         /if \(r\.width > 4 \|\| r\.height > 4\)/.test(code));
     check('④ 网格内部起始的拖动仍走库原路径（selfSelect 只在区域外为 true）',

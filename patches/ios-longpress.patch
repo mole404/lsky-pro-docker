@@ -52,7 +52,10 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   ee9c6fcebb7aacbad6a43112b1aede1e  src/resources/views/user/images.blade.php
+#   ef040c294081908063078975eeb3b4f9  src/resources/views/user/images.blade.php
+#   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
+#   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
+#     的已知偏离清单里，此处只作存档对照。）
 #   （2026-10-05 第八批：该文件又改了「工具栏断点 lg→xl + 文字永不折行」，md5 由 fe0852b7b6f4e71d1569ef08db16d480
 #     更新；2026-10-07 3.6.0 发版后为 e0c706b2d511e18abff7b8d6213fbe24；
 #     2026-10-08 现值见上。历史值只作对照，一律以 Dockerfile「自证 2」为准）
@@ -107,6 +110,17 @@
 #      touchend 时若定时器仍活着且真实时长 ≥ LONG_PRESS_DELAY，就地补开一次菜单（并吞掉随后那发 click）。
 #      守卫不变：已弹过不重弹、手指移动过（touchmove 已 cancel）不补、阈值沿用常量。实测卡顿 0/3 → 4/4，
 #      正常长按 5/5 不受影响；两份文件必须字节一致。
+# 2026-10-08 第三轮（老师试完测试版的反馈）：
+#   ⑥ 登录页居中：components/auth-card.blade.php 里 LOGO 与卡片原来同处一个 justify-center 列，
+#      居中基准是「LOGO + 卡片」整体 ⇒ 卡片必然偏下（线上实测 390×844 偏下 35.5px、1280×720 偏下 38.9px）。
+#      改成 LOGO 悬在卡片正上方的绝对定位元素（inline style；避开未生成的 Tailwind 类），
+#      居中基准只剩卡片本身 —— 三个视口实测偏移全为 0。
+#   ⑦ 手机端不再支持拖框选择（老师定：框选只在电脑端生效，否则和滚页面手势打架）：
+#      images.blade.php 的 mousemove 守卫里加 `if (utils.isMobile()) return;` —— 只让框「不再长大」，
+#      不取消 mousedown 那一发（库的点选正是靠按下时的点状框相交），所以点图片/点圆勾照常。
+#      实测：手机 UA 拖动 → 框宽 0、不多选（仍可点选）；桌面拖动 → 框宽 274、选中 9 张。
+#   ⑧ iOS 点图片闪灰：改动后不再 preventDefault，iOS 把默认的 -webkit-tap-highlight-color 放回来了；
+#      在图片墙范围内关掉它（#images-scroll .images-item）。它是继承属性，卡片内的 img 与小圆勾一并覆盖。
 
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
@@ -2841,7 +2855,7 @@
          </div>
      </div>
  
-@@ -96,112 +424,301 @@
+@@ -96,112 +424,309 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -3189,6 +3203,14 @@
 +               框选的选择框不跟随、松手也不会结束互动（实测「锁定不释放」）。Chromium/Safari 用
 +               -webkit-user-drag 关掉原生拖拽（Firefox 不看这条，由脚本里的 dragstart 兜底）。 */
 +            /* 注意卡片本身也要：<a href> 默认就是可拖拽元素，只禁 img 没用（实测 dragstart 照样发） */
++            /* iOS 的「点一下灰闪」（-webkit-tap-highlight-color）：fork 2026-10-08 ——
++               触摸端不再让 DragSelect preventDefault 之后，iOS 恢复了这个默认高亮，
++               点图片会闪一下灰。这里只在**图片墙范围内**关掉它（页面其它地方没被本次改动影响，
++               不动它们）。它是继承属性，写在卡片上即可覆盖卡片里的 img 与右上角小圆勾。 */
++            #images-scroll .images-item {
++                -webkit-tap-highlight-color: transparent;
++            }
++
 +            #images-grid .images-item,
 +            #images-grid .images-item img {
 +                -webkit-user-drag: none;
@@ -3207,7 +3229,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +734,770 @@
+@@ -217,44 +742,770 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -4002,7 +4024,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,7 +1519,11 @@
+@@ -276,7 +1527,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
@@ -4015,7 +4037,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +1547,73 @@
+@@ -300,22 +1555,73 @@
                  }
              });
  
@@ -4093,7 +4115,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +1626,40 @@
+@@ -328,29 +1634,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -4144,7 +4166,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +1667,13 @@
+@@ -358,12 +1675,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -4160,7 +4182,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +1682,14 @@
+@@ -372,13 +1690,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -4178,7 +4200,7 @@
                              );
                          }
                      });
-@@ -386,6 +1697,12 @@
+@@ -386,6 +1705,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -4191,7 +4213,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +1712,14 @@
+@@ -395,12 +1720,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -4208,7 +4230,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +1751,18 @@
+@@ -432,15 +1759,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -4230,7 +4252,7 @@
                  });
              }
  
-@@ -449,9 +1771,366 @@
+@@ -449,9 +1779,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -4600,7 +4622,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,10 +2147,256 @@
+@@ -468,10 +2155,263 @@
              });
          </script>
          <script>
@@ -4795,6 +4817,13 @@
 +                if (! dsBox.on) {
 +                    return;
 +                }
++                /* 手机端不跟手扩框（老师 2026-10-08 定：**框选只在电脑端生效**）——
++                 * 手指在图片墙上滑动应当是滚页面，不该顺带把沿途的图都框上、和滚动手势打架。
++                 * ★ 只让框「不再长大」，不取消 mousedown 那一发：库的**点选**正是靠按下时的
++                 *   点状框与卡片相交来落选的（见上面 Selector.rect 的说明）⇒ 点图片/点圆勾照常。 */
++                if (utils.isMobile()) {
++                    return;
++                }
 +                dsBox.x1 = e.clientX;
 +                dsBox.y1 = e.clientY;
 +            }, true);
@@ -4803,7 +4832,7 @@
 +                 * 只认"真的是拖动"（框任一边 > 4px）—— 侧栏上单击导航仍然是单击。
 +                 * 用库的对外 API 落选，这样 elementselect / elementunselect 事件照常发，
 +                 * 顶部的「已选择 N 张」操作栏也照常更新（bindOperates 再兜一次）。 */
-+                if (dsBox.on && dsBox.selfSelect) {
++                if (dsBox.on && dsBox.selfSelect && ! utils.isMobile()) {
 +                    const r = dsBoxRect();
 +                    if (r.width > 4 || r.height > 4) {
 +                        try {
@@ -4857,7 +4886,7 @@
  
              const bindOperates = () => {
                  let selected = ds.getSelection();
-@@ -486,10 +2411,14 @@
+@@ -486,10 +2426,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4874,7 +4903,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -498,21 +2427,73 @@
+@@ -498,21 +2442,73 @@
              };
  
              ds.subscribe('predragstart', ({ event }) => {
@@ -4953,7 +4982,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2514,250 @@
+@@ -533,27 +2529,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -5221,7 +5250,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2768,9 @@
+@@ -564,7 +2783,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -5232,7 +5261,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2778,19 @@
+@@ -572,47 +2793,19 @@
                          }
                      });
                  },
@@ -5289,7 +5318,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2827,10 @@
+@@ -649,6 +2842,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -5300,7 +5329,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2844,23 @@
+@@ -662,13 +2859,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -5326,7 +5355,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2875,11 @@
+@@ -683,7 +2890,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -5338,7 +5367,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2890,13 @@
+@@ -694,10 +2905,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -5354,7 +5383,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +2918,11 @@
+@@ -719,6 +2933,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -5366,7 +5395,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +2987,9 @@
+@@ -783,9 +3002,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -5379,7 +5408,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +3007,10 @@
+@@ -803,9 +3022,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -5391,7 +5420,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -844,17 +3049,27 @@
+@@ -844,17 +3064,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;
@@ -5421,4 +5450,33 @@
          </script>
      @endpush
  </x-app-layout>
+
+---- src/resources/views/components/auth-card.blade.php
+--- lsky-pro@38d52c46/resources/views/components/auth-card.blade.php	（上游原文件）
++++ src/resources/views/components/auth-card.blade.php	（本 fork）
+@@ -1,9 +1,18 @@
+-<div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-gray-100 px-4">
+-    <div>
+-        {{ $logo }}
+-    </div>
++{{-- 老师 2026-10-08：登录框要**自己**几何居中。
++     原来 LOGO 与卡片同处一个 justify-center 的列里 ⇒ 居中基准是「LOGO + 卡片」这个整体，
++     卡片必然被压到中线以下（线上实测：390×844 偏下 35.5px、1280×720 偏下 38.9px）。
++     注意这与右上角的「外观切换」无关 —— 它是 absolute，不占布局（实测只在 16→56 那条带里）。
++     现在把 LOGO 改成悬在卡片正上方的绝对定位元素，居中基准只剩卡片本身。
++     ★ 定位用 inline style，不用 bottom-full / inset-x-0 这类 Tailwind 类：产物里可能还没生成，
++       新类不重建 CSS 就不生效（本机预览时因此当场露馅一次）。 --}}
++<div class="min-h-screen ls-zoom-minh-screen flex flex-col justify-center items-center py-6 bg-bg px-4">
++    <div class="relative w-full flex flex-col items-center">
++        <div class="absolute flex justify-center" style="left: 0; right: 0; bottom: 100%; margin-bottom: 1.5rem;">
++            {{ $logo }}
++        </div>
+ 
+-    <div class="w-full sm:max-w-md mt-6 px-6 py-4 bg-white overflow-hidden sm:rounded-lg shadow-custom">
+-        {{ $slot }}
++        <div class="ls-card w-full sm:max-w-md px-6 py-5 overflow-hidden sm:rounded-xl2">
++            {{ $slot }}
++        </div>
+     </div>
+ </div>
 
