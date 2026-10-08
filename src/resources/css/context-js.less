@@ -58,7 +58,12 @@
         }
     }
 
-    li > a:hover, li > a:focus, .dropdown-submenu:hover > a {
+    /* 【2026-10-08】补按下态。菜单项原来只有 :hover/:focus 一处高亮来源：
+        - iOS 触摸会补发合成 mouseover ⇒ 还能亮（另叠一层浏览器默认的 tap 灰块，见下面 .dropdown-context 那条），
+        - 安卓触摸**没有 hover 阶段** ⇒ 全程没有任何强调色，点完菜单就关，用户看不清选中了哪一项。
+       :active 在 touchstart 即成立（早于 click），两个平台都能在按下的一瞬间给出反馈。 */
+    li > a:hover, li > a:focus, li > a:active,
+    .dropdown-submenu:hover > a, .dropdown-submenu > a:active {
         color: #ffffff;
         text-decoration: none;
         background-color: var(--lsky-accent);
@@ -153,6 +158,13 @@
  * 	Context Styles
  */
 .dropdown-context {
+    /* 【2026-10-08】iOS 的「按下灰块」：早先只把图片卡片（#images-scroll .images-item）关掉了，
+       但菜单是 $('body').append($menu) 生成的 —— 不在那个作用域里，所以菜单项一直吃的是浏览器
+       默认的灰色 tap 高亮。iOS 上「灰一下 + 蓝一下」两闪里那第一下就是它。这里按类名收口，
+       .dropdown-context 只由 context-js.js 生成（顶层下拉走 Alpine 的 .ls-menu），不会误伤别处。 */
+    &, a {
+        -webkit-tap-highlight-color: transparent;
+    }
     .nav-header {
         cursor: default;
     }

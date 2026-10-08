@@ -306,6 +306,30 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         ! nav.includes('scale-150') && ! nav.includes('-top-2 -left-2'));
 }
 
+// ---------------------------------------------------------------- 2026-10-08 手机端菜单项的按下反馈
+{
+    // 背景：菜单项原来只有 :hover/:focus 一处高亮来源，全仓没有 :active。
+    //   iOS 触摸会补发合成 mouseover ⇒ 还能亮（另叠一层浏览器默认的 tap 灰块，于是「闪两下」）；
+    //   安卓触摸没有 hover 阶段 ⇒ 按下去完全没有强调色，且点完菜单即关 ⇒ 看不清选中了哪一项。
+    // 修法：补 :active + 把菜单容器纳入 tap-highlight 透明 + 给 CSS 加版本串（否则 iOS 缓存旧样式）。
+    const ctxLess = read('resources', 'css', 'context-js.less');
+    const ctxCss = read('public', 'css', 'context-js', 'context-js.css');
+    const imagesBlade = read('resources', 'views', 'user', 'images.blade.php');
+    check('菜单项有按下态：less 与编译产物都含 li>a:active',
+        /li > a:active/.test(ctxLess) && /li>a:active/.test(ctxCss));
+    check('子菜单父项也有按下态：less 与编译产物都含 .dropdown-submenu>a:active',
+        /\.dropdown-submenu > a:active/.test(ctxLess) && /\.dropdown-submenu>a:active/.test(ctxCss));
+    check('iOS tap 灰块收口：.dropdown-context 及其内 a 都设 -webkit-tap-highlight-color: transparent',
+        /-webkit-tap-highlight-color:\s*transparent/.test(ctxLess)
+        && /\.dropdown-context,\.dropdown-context a\{-webkit-tap-highlight-color:transparent\}/.test(ctxCss));
+    check('CSS 也带版本串（原来是裸 link，iOS 会吃启发式缓存 ⇒ 改了看不到）',
+        /asset\('css\/context-js\/context-js\.css'\)\s*\}\}\?v=\{\{\s*\\App\\Utils::assetVersion\('css\/context-js\/context-js\.css'\)/.test(imagesBlade));
+    const activeRuleLine = ctxCss.split('\n').find((l) => l.includes('li>a:active')) || '';
+    check('按下态与 hover 用同一个强调色变量（不许写死颜色）',
+        activeRuleLine.includes('var(--lsky-accent)'),
+        activeRuleLine.slice(0, 60));
+}
+
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);

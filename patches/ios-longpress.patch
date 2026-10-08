@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   5588d9b9370a7133a697a4bf6904c003  src/resources/views/user/images.blade.php
+#   9b4b0c386a811bcf1ea2df02331d3c5a  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -163,6 +163,19 @@
 #      上一版只量我们自己的框，才会出现「我们这边全 0、用户却看得见蓝框」的分歧。
 #      2026-10-08 第七轮：真机复验「所有行为达到预期、手机端不再出框」⇒ 探针整段删除。
 #  实测证据：触摸滑动全程 `libhid0x0|int00`（修复前 `libVIS2x2|int10`）；桌面 `libVIS273x497`、选中 9 张。
+# 2026-10-08 第八轮（手机端菜单项的按下反馈）：
+#  ⑬ context-js.less / context-js.css：菜单项原来只有 `li>a:hover`/`:focus` 一处高亮来源，
+#     全仓没有 `:active`。iOS 触摸会补发合成 hover ⇒ 还能亮；安卓没有 hover 阶段 ⇒ 按下去
+#     完全没有强调色，且点完菜单即关 ⇒「看不清选中了哪一项」。加 `li>a:active` 与
+#     `.dropdown-submenu>a:active`（touchstart 即成立，早于 click）。
+#  ⑭ 同两个文件：`.dropdown-context, .dropdown-context a { -webkit-tap-highlight-color: transparent }`
+#     —— iOS 那层「按下灰块」。早先只关了图片卡片（#images-scroll .images-item），而菜单是
+#     $('body').append 生成的、不在那个作用域里 ⇒ iOS 表现为「灰一下 + 蓝一下」两闪，现变一闪。
+#  ⑮ images.blade.php：`css/context-js/context-js.css` 的 <link> 补上 ?v=assetVersion(...)
+#     —— 与 JS 那侧一致；原来 CSS 没版本串，iOS/Safari 启发式缓存会让改了的样式不生效。
+#  实测证据（CDP 强制伪状态 CSS.forcePseudoState）：未按下背景 rgba(0,0,0,0) → 强制 :active 后
+#     rgb(37,99,235)（= --lsky-accent #2563eb）+ 文字白；容器 -webkit-tap-highlight-color 读到透明。
+
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
 +++ src/resources/js/context-js.js	（本 fork）
@@ -2446,13 +2459,232 @@
 +    return api;
 +})();
 
+---- src/resources/css/context-js.less
+--- lsky-pro@38d52c46/resources/css/context-js.less	（上游原文件）
++++ src/resources/css/context-js.less	（本 fork）
+@@ -1,11 +1,11 @@
+ .nav-header {
+     display: block;
+     padding: 3px 15px;
+-    font-size: 11px;
++    font-size: 12.5px;
+     font-weight: bold;
+     line-height: 20px;
+-    color: #999;
+-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
++    color: var(--lsky-text-3);
++    text-shadow: none;
+     text-transform: uppercase;
+ }
+ .dropdown-menu {
+@@ -19,12 +19,12 @@
+     padding: 5px 0;
+     margin: 2px 0 0;
+     list-style: none;
+-    background-color: #ffffff;
++    background-color: var(--lsky-surface);
+     border: 0;
+     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+     font-size: 14px;
+     border-radius: 6px;
+-    box-shadow: 0 5px 10px rgba(173, 173, 173, 30%);
++    box-shadow: var(--lsky-shadow-pop);
+     background-clip: padding-box;
+     text-align: left;
+     &.pull-right {
+@@ -35,8 +35,8 @@
+         height: 1px;
+         margin: 9px 1px;
+         overflow: hidden;
+-        background-color: #e5e5e5;
+-        border-bottom: 1px solid #f5f5f5;
++        background-color: var(--lsky-surface-3);
++        border-bottom: 1px solid var(--lsky-border);
+     }
+     a {
+         display: block;
+@@ -44,7 +44,7 @@
+         clear: both;
+         font-weight: normal;
+         line-height: 20px;
+-        color: #333333;
++        color: var(--lsky-text);
+         white-space: nowrap;
+         text-decoration: none;
+     }
+@@ -58,25 +58,30 @@
+         }
+     }
+ 
+-    li > a:hover, li > a:focus, .dropdown-submenu:hover > a {
++    /* 【2026-10-08】补按下态。菜单项原来只有 :hover/:focus 一处高亮来源：
++        - iOS 触摸会补发合成 mouseover ⇒ 还能亮（另叠一层浏览器默认的 tap 灰块，见下面 .dropdown-context 那条），
++        - 安卓触摸**没有 hover 阶段** ⇒ 全程没有任何强调色，点完菜单就关，用户看不清选中了哪一项。
++       :active 在 touchstart 即成立（早于 click），两个平台都能在按下的一瞬间给出反馈。 */
++    li > a:hover, li > a:focus, li > a:active,
++    .dropdown-submenu:hover > a, .dropdown-submenu > a:active {
+         color: #ffffff;
+         text-decoration: none;
+-        background-color: #627aff;
+-        background-image: -moz-linear-gradient(top, #0088cc, #0077b3);
++        background-color: var(--lsky-accent);
++        background-image: none;
+         background-repeat: repeat-x;
+     }
+ 
+     .active > a, .active > a:hover {
+         color: #ffffff;
+         text-decoration: none;
+-        background-color: #627aff;
+-        background-image: linear-gradient(to bottom, #0088cc, #0077b3);
++        background-color: var(--lsky-accent);
++        background-image: none;
+         background-repeat: repeat-x;
+         outline: 0;
+     }
+ 
+     .disabled > a, .disabled > a:hover {
+-        color: #999999;
++        color: var(--lsky-text-3);
+     }
+ 
+     .open {
+@@ -95,7 +100,7 @@
+ 
+ .dropup .caret, .navbar-fixed-bottom .dropdown .caret {
+     border-top: 0;
+-    border-bottom: 4px solid #000000;
++    border-bottom: 4px solid var(--lsky-border-2);
+     content: "\2191";
+ }
+ .dropup .dropdown-menu, .navbar-fixed-bottom .dropdown .dropdown-menu {
+@@ -121,7 +126,7 @@
+         }
+         & > a {
+             &:after {
+-                border-left-color: #ffffff;
++                border-left-color: var(--lsky-surface);
+             }
+         }
+     }
+@@ -134,7 +139,7 @@
+             margin-top: 5px;
+             margin-right: -10px;
+             border-color: transparent;
+-            border-left-color: #cccccc;
++            border-left-color: var(--lsky-border-2);
+             border-style: solid;
+             border-width: 5px 0 5px 5px;
+             content: " ";
+@@ -153,6 +158,13 @@
+  * 	Context Styles
+  */
+ .dropdown-context {
++    /* 【2026-10-08】iOS 的「按下灰块」：早先只把图片卡片（#images-scroll .images-item）关掉了，
++       但菜单是 $('body').append($menu) 生成的 —— 不在那个作用域里，所以菜单项一直吃的是浏览器
++       默认的灰色 tap 高亮。iOS 上「灰一下 + 蓝一下」两闪里那第一下就是它。这里按类名收口，
++       .dropdown-context 只由 context-js.js 生成（顶层下拉走 Alpine 的 .ls-menu），不会误伤别处。 */
++    &, a {
++        -webkit-tap-highlight-color: transparent;
++    }
+     .nav-header {
+         cursor: default;
+     }
+@@ -167,16 +179,34 @@
+         }
+     }
+ }
++
++/* 手机端二级菜单「就地展开」时，顶部那行「＜ 返回」里的箭头与文字贴在一起很难看：
++   箭头是图标（fas fa-chevron-left），标记里虽然写了 mr-1，但那个工具类**根本没被 Tailwind 生成**
++   （tailwind.config.js 的 content 只扫 resources/views 下的 blade，扫不到 resources/js 里的类名字符串），
++   所以图标的实际 margin-right 是 0px —— 这才是「紧挨着」的真正原因。
++   这里按真实 DOM（li.submenu-back > a > i，由 context-js.js 生成）补 7px；
++   权重（3 个类 + 2 个元素 = 0,3,2）高于工具类 .mr-1（0,1,0），不依赖 CSS 打包顺序。
++   ⚠ 同一条规则在 common.less 里还有一份兜底，原因见那边的注释（本文件编译出的
++   public/css/context-js/context-js.css 在 images.blade.php 里没有版本串 → 会被浏览器缓存喂旧的）。 */
++.dropdown-context .submenu-back > a > i {
++    margin-right: 7px;
++}
++/* fork：去掉右键 / 长按菜单左上角的气泡尖角（老师要求，电脑端 + 手机端一致）。
++   尖角就是这两条伪元素画出来的（上面一条深色描边 + 下面一条面板色叠出「箭头」）。
++   用 content: none 让伪元素根本不生成 —— 只少这一个装饰；菜单的尺寸 / 圆角 / 阴影 /
++   定位 / 滚动关闭行为一个字都没动。
++   ⚠ 范围：.dropdown-context 只由 context-js.js 生成（顶栏下拉走 Alpine 组件的 .ls-menu，
++   不用这个类 —— 全仓 grep 只有 context-js.js 会产出它），所以这里是全局去掉、不会误伤别的浮层。 */
+ .dropdown-context:before, .dropdown-context-up:before {
+     position: absolute;
+     top: -7px;
+     left: 9px;
+     display: inline-block;
+     border-right: 7px solid transparent;
+-    border-bottom: 7px solid #ccc;
++    border-bottom: 7px solid var(--lsky-border-2);
+     border-left: 7px solid transparent;
+     border-bottom-color: rgba(0, 0, 0, 0.2);
+-    content: '';
++    content: none;
+ }
+ .dropdown-context:after, .dropdown-context-up:after {
+     position: absolute;
+@@ -184,9 +214,9 @@
+     left: 10px;
+     display: inline-block;
+     border-right: 6px solid transparent;
+-    border-bottom: 6px solid #ffffff;
++    border-bottom: 6px solid var(--lsky-surface);
+     border-left: 6px solid transparent;
+-    content: '';
++    content: none;
+ }
+ .dropdown-context-up:before, .dropdown-context-up:after {
+     top: auto;
+@@ -196,13 +226,13 @@
+ .dropdown-context-up {
+     &:before {
+         border-right: 7px solid transparent;
+-        border-top: 7px solid #ccc;
++        border-top: 7px solid var(--lsky-border-2);
+         border-bottom: none;
+         border-left: 7px solid transparent;
+     }
+     &:after {
+         border-right: 6px solid transparent;
+-        border-top: 6px solid #ffffff;
++        border-top: 6px solid var(--lsky-surface);
+         border-left: 6px solid transparent;
+         border-bottom: none;
+     }
+@@ -215,7 +245,7 @@
+         padding-left: 14px;
+         padding-top: 0;
+         padding-bottom: 0;
+-        font-size: 13px;
++        font-size: 13.5px;
+     }
+     .divider {
+         margin: 5px 1px;
+
+---- src/public/css/context-js/context-js.css
+--- lsky-pro@38d52c46/public/css/context-js/context-js.css	（上游原文件）
++++ src/public/css/context-js/context-js.css	（本 fork）
+@@ -1 +1,2 @@
+-.nav-header{color:#999;display:block;font-size:11px;font-weight:700;line-height:20px;padding:3px 15px;text-shadow:0 1px 0 hsla(0,0%,100%,.5);text-transform:uppercase}.dropdown-menu{background-clip:padding-box;background-color:#fff;border:0;border-radius:6px;box-shadow:0 5px 10px hsla(0,0%,68%,.3);display:none;float:left;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;font-size:14px;left:0;list-style:none;margin:2px 0 0;min-width:160px;padding:5px 0;position:absolute;text-align:left;top:100%;z-index:1000}.dropdown-menu.pull-right{left:auto;right:0}.dropdown-menu .divider{background-color:#e5e5e5;border-bottom:1px solid #f5f5f5;height:1px;margin:9px 1px;overflow:hidden}.dropdown-menu a{clear:both;color:#333;display:block;font-weight:400;line-height:20px;padding:5px 20px;text-decoration:none;white-space:nowrap}.dropdown-menu .disabled>a:hover{background-color:transparent;cursor:default;text-decoration:none}.dropdown-menu .dropdown-submenu:hover>a,.dropdown-menu li>a:focus,.dropdown-menu li>a:hover{background-color:#627aff;background-image:-moz-linear-gradient(top,#08c,#0077b3);background-repeat:repeat-x;color:#fff;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover{background-color:#627aff;background-image:linear-gradient(180deg,#08c,#0077b3);background-repeat:repeat-x;color:#fff;outline:0;text-decoration:none}.dropdown-menu .disabled>a,.dropdown-menu .disabled>a:hover{color:#999}.dropdown-menu .open{*z-index:1000}.dropdown-menu .open>.dropdown-menu{display:block}.dropdown-menu .pull-right>.dropdown-menu{left:auto;right:0}.dropup .caret,.navbar-fixed-bottom .dropdown .caret{border-bottom:4px solid #000;border-top:0;content:"\2191"}.dropup .dropdown-menu,.navbar-fixed-bottom .dropdown .dropdown-menu{bottom:100%;margin-bottom:1px;top:auto}.dropdown-submenu{position:relative}.dropdown-submenu>.dropdown-menu{border-radius:0 6px 6px 6px;left:100%;margin-left:-1px;margin-top:-6px;top:0}.dropdown-submenu>.dropdown-menu.drop-left{left:-100%}.dropdown-submenu:hover .dropdown-menu{display:block}.dropdown-submenu:hover>a:after{border-left-color:#fff}.dropdown-submenu>a:after{border-color:transparent transparent transparent #ccc;border-style:solid;border-width:5px 0 5px 5px;content:" ";display:block;float:right;height:0;margin-right:-10px;margin-top:5px;width:0}.dropdown .dropdown-menu .nav-header{padding-left:20px;padding-right:20px}.dropdown-context .nav-header{cursor:default}.dropdown-context .dropdown-submenu:hover .dropdown-menu{display:none}.dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}.dropdown-context-up:before,.dropdown-context:before{border-bottom:7px solid rgba(0,0,0,.2);border-left:7px solid transparent;border-right:7px solid transparent;content:"";display:inline-block;left:9px;position:absolute;top:-7px}.dropdown-context-up:after,.dropdown-context:after{border-bottom:6px solid #fff;border-left:6px solid transparent;border-right:6px solid transparent;content:"";display:inline-block;left:10px;position:absolute;top:-6px}.dropdown-context-up:after,.dropdown-context-up:before{bottom:-7px;top:auto;z-index:9999}.dropdown-context-up:before{border:7px solid transparent;border-bottom:none;border-top-color:#ccc}.dropdown-context-up:after{border:6px solid transparent;border-bottom:none;border-top-color:#fff}.dropdown-context-sub:after,.dropdown-context-sub:before{display:none}.compressed-context a{font-size:13px;padding-bottom:0;padding-left:14px;padding-top:0}.compressed-context .divider{margin:5px 1px}.compressed-context .nav-header{padding:1px 13px}
++.nav-header{color:var(--lsky-text-3);display:block;font-size:12.5px;font-weight:700;line-height:20px;padding:3px 15px;text-shadow:none;text-transform:uppercase}.dropdown-menu{background-clip:padding-box;background-color:var(--lsky-surface);border:0;border-radius:6px;box-shadow:var(--lsky-shadow-pop);display:none;float:left;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;font-size:14px;left:0;list-style:none;margin:2px 0 0;min-width:160px;padding:5px 0;position:absolute;text-align:left;top:100%;z-index:1000}.dropdown-menu.pull-right{left:auto;right:0}.dropdown-menu .divider{background-color:var(--lsky-surface-3);border-bottom:1px solid var(--lsky-border);height:1px;margin:9px 1px;overflow:hidden}.dropdown-menu a{clear:both;color:var(--lsky-text);display:block;font-weight:400;line-height:20px;padding:5px 20px;text-decoration:none;white-space:nowrap}.dropdown-menu .disabled>a:hover{background-color:transparent;cursor:default;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover,.dropdown-menu .dropdown-submenu:hover>a,.dropdown-menu .dropdown-submenu>a:active,.dropdown-menu li>a:active,.dropdown-menu li>a:focus,.dropdown-menu li>a:hover{background-color:var(--lsky-accent);background-image:none;background-repeat:repeat-x;color:#fff;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover{outline:0}.dropdown-menu .disabled>a,.dropdown-menu .disabled>a:hover{color:var(--lsky-text-3)}.dropdown-menu .open{*z-index:1000}.dropdown-menu .open>.dropdown-menu{display:block}.dropdown-menu .pull-right>.dropdown-menu{left:auto;right:0}.dropup .caret,.navbar-fixed-bottom .dropdown .caret{border-bottom:4px solid var(--lsky-border-2);border-top:0;content:"\2191"}.dropup .dropdown-menu,.navbar-fixed-bottom .dropdown .dropdown-menu{bottom:100%;margin-bottom:1px;top:auto}.dropdown-submenu{position:relative}.dropdown-submenu>.dropdown-menu{border-radius:0 6px 6px 6px;left:100%;margin-left:-1px;margin-top:-6px;top:0}.dropdown-submenu>.dropdown-menu.drop-left{left:-100%}.dropdown-submenu:hover .dropdown-menu{display:block}.dropdown-submenu:hover>a:after{border-left-color:var(--lsky-surface)}.dropdown-submenu>a:after{border-bottom:5px solid transparent;border-left:5px solid transparent;border-left-color:var(--lsky-border-2);border-right:0 solid transparent;border-top:5px solid transparent;content:" ";display:block;float:right;height:0;margin-right:-10px;margin-top:5px;width:0}.dropdown .dropdown-menu .nav-header{padding-left:20px;padding-right:20px}.dropdown-context .nav-header{cursor:default}.dropdown-context .dropdown-submenu:hover .dropdown-menu{display:none}.dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}.dropdown-context .submenu-back>a>i{margin-right:7px}.dropdown-context-up:before,.dropdown-context:before{border-bottom:7px solid rgba(0,0,0,.2);border-left:7px solid transparent;border-right:7px solid transparent;content:none;display:inline-block;left:9px;position:absolute;top:-7px}.dropdown-context-up:after,.dropdown-context:after{border-bottom:6px solid var(--lsky-surface);border-left:6px solid transparent;border-right:6px solid transparent;content:none;display:inline-block;left:10px;position:absolute;top:-6px}.dropdown-context-up:after,.dropdown-context-up:before{bottom:-7px;top:auto;z-index:9999}.dropdown-context-up:before{border-bottom:none;border-left:7px solid transparent;border-right:7px solid transparent;border-top:7px solid var(--lsky-border-2)}.dropdown-context-up:after{border-bottom:none;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid var(--lsky-surface)}.dropdown-context-sub:after,.dropdown-context-sub:before{display:none}.compressed-context a{font-size:13.5px;padding-bottom:0;padding-left:14px;padding-top:0}.compressed-context .divider{margin:5px 1px}.compressed-context .nav-header{padding:1px 13px}
++.dropdown-context,.dropdown-context a{-webkit-tap-highlight-color:transparent}
+
 ---- src/resources/views/user/images.blade.php
 --- lsky-pro@38d52c46/resources/views/user/images.blade.php	（上游原文件）
 +++ src/resources/views/user/images.blade.php	（本 fork）
-@@ -4,45 +4,289 @@
+@@ -3,46 +3,293 @@
+ @push('styles')
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
-     <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
+-    <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
++    {{-- fork 补丁：CSS 也加版本串。JS 那侧早就加了 ?v=（见下面 script 行），CSS 一直没加 ——
++         iOS/Safari 的启发式缓存会拿旧样式继续喂老用户，改了 CSS 也"看不到变化"。
++         用同一个 assetVersion()（= 文件 mtime），文件一改串就变。 --}}
++    <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}?v={{ \App\Utils::assetVersion('css/context-js/context-js.css') }}">
 +    <link rel="stylesheet" href="{{ asset('css/cropper-js/cropper.min.css') }}?v={{ \App\Utils::assetVersion('css/cropper-js/cropper.min.css') }}">
 +    {{-- fork：相册弹窗（#album-switch-modal）自己的样式。本仓库这个补丁只改这一个文件
 +         （common.less 不动，所以写在页面里）：
@@ -2755,7 +2987,7 @@
                      </a>
                  </x-slot>
  
-@@ -57,38 +301,122 @@
+@@ -57,38 +304,122 @@
                      </x-dropdown-link>
                  </x-slot>
              </x-dropdown>
@@ -2896,7 +3128,7 @@
          </div>
      </div>
  
-@@ -96,112 +424,309 @@
+@@ -96,112 +427,309 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -3270,7 +3502,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +742,770 @@
+@@ -217,44 +745,770 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -4065,7 +4297,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,7 +1527,11 @@
+@@ -276,7 +1530,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
@@ -4078,7 +4310,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +1555,73 @@
+@@ -300,22 +1558,73 @@
                  }
              });
  
@@ -4156,7 +4388,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +1634,40 @@
+@@ -328,29 +1637,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -4207,7 +4439,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +1675,13 @@
+@@ -358,12 +1678,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -4223,7 +4455,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +1690,14 @@
+@@ -372,13 +1693,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -4241,7 +4473,7 @@
                              );
                          }
                      });
-@@ -386,6 +1705,12 @@
+@@ -386,6 +1708,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -4254,7 +4486,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +1720,14 @@
+@@ -395,12 +1723,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -4271,7 +4503,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +1759,18 @@
+@@ -432,15 +1762,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -4293,7 +4525,7 @@
                  });
              }
  
-@@ -449,9 +1779,366 @@
+@@ -449,9 +1782,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -4663,7 +4895,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,10 +2155,274 @@
+@@ -468,10 +2158,274 @@
              });
          </script>
          <script>
@@ -4938,7 +5170,7 @@
  
              const bindOperates = () => {
                  let selected = ds.getSelection();
-@@ -486,10 +2437,14 @@
+@@ -486,10 +2440,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4955,7 +5187,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -497,22 +2452,112 @@
+@@ -497,22 +2455,112 @@
                  $(operates.map(item => `[data-operate=${item}]`).toString()).css('display', 'block');
              };
  
@@ -5073,7 +5305,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2578,250 @@
+@@ -533,27 +2581,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -5341,7 +5573,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2832,9 @@
+@@ -564,7 +2835,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -5352,7 +5584,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2842,19 @@
+@@ -572,47 +2845,19 @@
                          }
                      });
                  },
@@ -5409,7 +5641,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2891,10 @@
+@@ -649,6 +2894,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -5420,7 +5652,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2908,23 @@
+@@ -662,13 +2911,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -5446,7 +5678,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2939,11 @@
+@@ -683,7 +2942,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -5458,7 +5690,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2954,13 @@
+@@ -694,10 +2957,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -5474,7 +5706,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +2982,11 @@
+@@ -719,6 +2985,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -5486,7 +5718,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +3051,9 @@
+@@ -783,9 +3054,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -5499,7 +5731,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +3071,10 @@
+@@ -803,9 +3074,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -5511,7 +5743,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -844,17 +3113,27 @@
+@@ -844,17 +3116,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;

@@ -3,7 +3,10 @@
 @push('styles')
     <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
+    {{-- fork 补丁：CSS 也加版本串。JS 那侧早就加了 ?v=（见下面 script 行），CSS 一直没加 ——
+         iOS/Safari 的启发式缓存会拿旧样式继续喂老用户，改了 CSS 也"看不到变化"。
+         用同一个 assetVersion()（= 文件 mtime），文件一改串就变。 --}}
+    <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}?v={{ \App\Utils::assetVersion('css/context-js/context-js.css') }}">
     <link rel="stylesheet" href="{{ asset('css/cropper-js/cropper.min.css') }}?v={{ \App\Utils::assetVersion('css/cropper-js/cropper.min.css') }}">
     {{-- fork：相册弹窗（#album-switch-modal）自己的样式。本仓库这个补丁只改这一个文件
          （common.less 不动，所以写在页面里）：
