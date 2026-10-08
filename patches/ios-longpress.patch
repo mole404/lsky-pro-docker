@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   3bc7ddc4b2e10e944d9733e2b786de32  src/resources/views/user/images.blade.php
+#   b19dd81b24bc9f30425d68d461fdf4d5  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -261,11 +261,18 @@
 #     最新「一级淡出要更明显」优先，测试断言相应改为只钉住停顿部分的层级。
 #  实测（rAF 采样，CDP 三平台）：iOS 一级 延迟 168ms + 淡出 306ms；安卓 301 + 400ms；电脑 75 + 401ms；
 #     三者都确认 `context-fading` 类加上、inline transition-duration = 500ms。
+# 2026-10-08 第十七轮（老师：一级淡出太长了，和二级一致就好）：
+#  ㉘ 关闭时的**淡出时长不再按层级区分** —— 一级直接用各平台二级那一档：
+#       电脑 options.fadeSpeed(100) / iOS SUB_FADE_IOS(280) / 安卓 SUB_FADE_ANDROID(140)。
+#     MAIN_FADE（一级专属 fade）删除。hold（停顿）仍分层级：电脑 0 / iOS 0 / 安卓 一级 160、二级 320。
+#     注：因为已换成 CSS transition（不受 jQuery 跳帧影响），100~280ms 这种短时长也能看见淡出。
+#  实测（rAF 采样，CDP）：电脑 一级 64ms / 二级 67ms；安卓 一级 100ms / 二级 100ms；
+#     iOS 一级 210ms / 二级 216ms —— 三平台的一级与二级**淡出时长一致**。
 
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
 +++ src/resources/js/context-js.js	（本 fork）
-@@ -2,8 +2,90 @@
+@@ -2,8 +2,89 @@
   * Context.js
   * Copyright Jacob Kelley, Modified by WispX
   * MIT License
@@ -339,12 +346,11 @@
 +    const SUB_HOLD_ANDROID = 320;   // 非 iOS · 二级：停住 320ms（这一段菜单一点都不变）
 +    const SUB_FADE_ANDROID = 140;   // 非 iOS · 二级：然后 140ms 淡出
 +    const MAIN_HOLD_ANDROID = 160;  // 触摸·非 iOS · 一级：停住 160ms（比二级短）
-+    // 一级菜单项的**淡出时长：所有平台统一**（老师 2026-10-08 最终口径：
-+    // "所有平台的一级菜单淡出我希望都更明显，因为我发现 iOS 的一级菜单也没有淡出"）。
-+    // 原来一级 fade 只有 120ms（实测到不可见仅 58ms，看着像"直接消失"）⇒ 现在 260ms。
-+    // 注意：这只影响"淡出过程"，不影响 hold（停顿）——
-+    //   电脑 hold 仍是 0（老师要求"电脑上不要延迟"），安卓 hold 仍是 160。
-+    const MAIN_FADE = 500;
++    // 【2026-10-08 终稿】一级菜单的**淡出时长对齐二级**（老师：一级淡出太长了，和二级一致就好）。
++    // 所以关闭时不再按层级区分 fade，各平台统一用「二级那一档」：
++    //   电脑 options.fadeSpeed(100) / iOS SUB_FADE_IOS(280) / 安卓 SUB_FADE_ANDROID(140)。
++    // 换成 CSS transition 之后，短时长也不再担心"看不见"（不再受 jQuery 跳帧影响）。
++    // hold（停顿）仍按层级区分：电脑 0 / 安卓 一级 160、二级 320 / iOS 0。
 +    // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
 +    const SUB_HOLD_IOS = 0;
 +    const SUB_FADE_IOS = 280;
@@ -356,7 +362,7 @@
  
      let options = {
          fadeSpeed: 100,
-@@ -15,14 +97,962 @@
+@@ -15,14 +96,961 @@
          compress: false
      };
  
@@ -1293,20 +1299,19 @@
 +            // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
 +            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
 +            const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
++            // 淡出时长：**一级与二级一致**（老师 2026-10-08 终稿）；只有 hold（停顿）分层级。
 +            if (isDesktopUA) {
-+                // 电脑：**不停顿**（老师明确要求"电脑上不要延迟"），二级淡出保持原样；
-+                // 但一级项的**淡出**按老师要求加长（停顿与淡出是两件事）。
++                // 电脑：不停顿（老师要求"电脑上不要延迟"），淡出保持各平台原值
 +                lastLeafTapHold = 0;
-+                lastLeafTapFade = inSubmenu ? options.fadeSpeed : MAIN_FADE;
++                lastLeafTapFade = options.fadeSpeed;
 +            } else if (isIOSUA) {
-+                // iOS：二级保持第七轮的 280 不变；一级按老师 2026-10-08 的要求加长淡出
-+                //（"我发现 iOS 的一级菜单也没有淡出"）—— 这条覆盖了此前"iOS 一律不要动"的范围。
++                // iOS：淡出 280（第七轮定的值），不停顿
 +                lastLeafTapHold = SUB_HOLD_IOS;
-+                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : MAIN_FADE;
++                lastLeafTapFade = SUB_FADE_IOS;
 +            } else {
-+                // 手机/平板（安卓等）：停住 + 淡出，两级不同时长
++                // 手机/平板（安卓等）：停住（一级 160 / 二级 320）+ 淡出 140
 +                lastLeafTapHold = inSubmenu ? SUB_HOLD_ANDROID : MAIN_HOLD_ANDROID;
-+                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE;
++                lastLeafTapFade = SUB_FADE_ANDROID;
 +            }
 +            $a.addClass(LEAF_PRESSED_CLASS);
 +        });
@@ -1322,7 +1327,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +1060,8 @@
+@@ -30,13 +1058,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -1338,7 +1343,7 @@
          });
  
      }
-@@ -130,12 +1155,15 @@
+@@ -130,12 +1153,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -1360,7 +1365,7 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -144,42 +1172,122 @@
+@@ -144,42 +1170,122 @@
              $('body').append($menu);
  
              $('.dropdown-context:not(.dropdown-context-sub)').hide();
@@ -1497,7 +1502,7 @@
 ---- src/public/js/context-js/context-js.js
 --- lsky-pro@38d52c46/public/js/context-js/context-js.js	（上游原文件）
 +++ src/public/js/context-js/context-js.js	（本 fork）
-@@ -1 +1,1293 @@
+@@ -1 +1,1291 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1573,12 +1578,11 @@
 +    const SUB_HOLD_ANDROID = 320;   // 非 iOS · 二级：停住 320ms（这一段菜单一点都不变）
 +    const SUB_FADE_ANDROID = 140;   // 非 iOS · 二级：然后 140ms 淡出
 +    const MAIN_HOLD_ANDROID = 160;  // 触摸·非 iOS · 一级：停住 160ms（比二级短）
-+    // 一级菜单项的**淡出时长：所有平台统一**（老师 2026-10-08 最终口径：
-+    // "所有平台的一级菜单淡出我希望都更明显，因为我发现 iOS 的一级菜单也没有淡出"）。
-+    // 原来一级 fade 只有 120ms（实测到不可见仅 58ms，看着像"直接消失"）⇒ 现在 260ms。
-+    // 注意：这只影响"淡出过程"，不影响 hold（停顿）——
-+    //   电脑 hold 仍是 0（老师要求"电脑上不要延迟"），安卓 hold 仍是 160。
-+    const MAIN_FADE = 500;
++    // 【2026-10-08 终稿】一级菜单的**淡出时长对齐二级**（老师：一级淡出太长了，和二级一致就好）。
++    // 所以关闭时不再按层级区分 fade，各平台统一用「二级那一档」：
++    //   电脑 options.fadeSpeed(100) / iOS SUB_FADE_IOS(280) / 安卓 SUB_FADE_ANDROID(140)。
++    // 换成 CSS transition 之后，短时长也不再担心"看不见"（不再受 jQuery 跳帧影响）。
++    // hold（停顿）仍按层级区分：电脑 0 / 安卓 一级 160、二级 320 / iOS 0。
 +    // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
 +    const SUB_HOLD_IOS = 0;
 +    const SUB_FADE_IOS = 280;
@@ -2531,20 +2535,19 @@
 +            // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
 +            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
 +            const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
++            // 淡出时长：**一级与二级一致**（老师 2026-10-08 终稿）；只有 hold（停顿）分层级。
 +            if (isDesktopUA) {
-+                // 电脑：**不停顿**（老师明确要求"电脑上不要延迟"），二级淡出保持原样；
-+                // 但一级项的**淡出**按老师要求加长（停顿与淡出是两件事）。
++                // 电脑：不停顿（老师要求"电脑上不要延迟"），淡出保持各平台原值
 +                lastLeafTapHold = 0;
-+                lastLeafTapFade = inSubmenu ? options.fadeSpeed : MAIN_FADE;
++                lastLeafTapFade = options.fadeSpeed;
 +            } else if (isIOSUA) {
-+                // iOS：二级保持第七轮的 280 不变；一级按老师 2026-10-08 的要求加长淡出
-+                //（"我发现 iOS 的一级菜单也没有淡出"）—— 这条覆盖了此前"iOS 一律不要动"的范围。
++                // iOS：淡出 280（第七轮定的值），不停顿
 +                lastLeafTapHold = SUB_HOLD_IOS;
-+                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : MAIN_FADE;
++                lastLeafTapFade = SUB_FADE_IOS;
 +            } else {
-+                // 手机/平板（安卓等）：停住 + 淡出，两级不同时长
++                // 手机/平板（安卓等）：停住（一级 160 / 二级 320）+ 淡出 140
 +                lastLeafTapHold = inSubmenu ? SUB_HOLD_ANDROID : MAIN_HOLD_ANDROID;
-+                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE;
++                lastLeafTapFade = SUB_FADE_ANDROID;
 +            }
 +            $a.addClass(LEAF_PRESSED_CLASS);
 +        });

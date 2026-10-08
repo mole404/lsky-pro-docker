@@ -341,21 +341,21 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         `安卓二级总 ${subTotalAndroid} / 安卓一级停顿 ${mainHoldAndroid} / iOS 二级总 ${subTotalIOS}`);
     // 2026-10-08 最终口径：iOS 的**二级**保持第七轮的 280 不变；**一级**按老师后来的要求
     // 改用统一的 MAIN_FADE（"我发现 iOS 的一级菜单也没有淡出"——这条覆盖了早前"iOS 一律不动"的范围）。
-    check('iOS：二级仍是第七轮定的 280，一级改用统一的 MAIN_FADE（老师后来明确要求）',
+    check('iOS：一级与二级的淡出一致，都用第七轮定的 280',
         Number(ctxJs.match(/const SUB_FADE_IOS = (\d+);/)[1]) === 280
-        && /lastLeafTapFade = inSubmenu \? SUB_FADE_IOS : MAIN_FADE;/.test(ctxJs));
+        && /lastLeafTapFade = SUB_FADE_IOS;/.test(ctxJs));
     check('三级判据：桌面用 UA 判定（不用 hover:none —— headless/无鼠标设备会误报），桌面走"完全原样"',
         /const isDesktopUA = ! \/Mobile\|Android\|iPhone\|iPad\|iPod\/i\.test\(UA_STR\);/.test(ctxJs)
         && /if \(isDesktopUA\) \{[\s\S]{0,200}lastLeafTapHold = 0;[\s\S]{0,200}options\.fadeSpeed/.test(ctxJs));
     check('诊断已全部撤除（没有 ?dbg 打点残留）',
         ! /dbg-ctx|DBG_ON|dbgSid/.test(ctxJs) && ! /\?dbg=1/.test(ctxJs));
-    check('一级的淡出**所有平台统一**且足够明显（>= 500ms；260ms 在真机上会被 jQuery 跳帧）',
-        Number(ctxJs.match(/const MAIN_FADE = (\d+);/)[1]) >= 500
-        // 三个分支（电脑 / iOS / 其它触摸）的一级都必须指向 MAIN_FADE
-        && (ctxJs.match(/\? options\.fadeSpeed : MAIN_FADE/g) || []).length >= 1
-        && (ctxJs.match(/\? SUB_FADE_IOS : MAIN_FADE/g) || []).length >= 1
-        && (ctxJs.match(/\? SUB_FADE_ANDROID : MAIN_FADE/g) || []).length >= 1
-        && ! /MAIN_FADE_ANDROID|MAIN_FADE_DESKTOP/.test(ctxJs));
+    // 2026-10-08 终稿：一级的**淡出时长与二级一致**（老师：一级太长，和二级一致就好）；
+    // 只有 hold（停顿）继续分层级。所以代码里不应再有 MAIN_FADE 这类"一级专属 fade"常量。
+    check('一级的淡出与二级一致（不再有 MAIN_FADE 之类别的一级专属 fade 常量）',
+        ! /MAIN_FADE/.test(ctxJs)
+        && /lastLeafTapFade = options\.fadeSpeed;/.test(ctxJs)
+        && /lastLeafTapFade = SUB_FADE_IOS;/.test(ctxJs)
+        && /lastLeafTapFade = SUB_FADE_ANDROID;/.test(ctxJs));
     check('电脑仍然「不停顿」（hold 0），只有淡出被加长 —— 老师要求电脑不要延迟',
         /if \(isDesktopUA\) \{[\s\S]{0,200}lastLeafTapHold = 0;/.test(ctxJs));
     check('点二级项后不「先退回一级」：叶子项路径跳过即时 exitSubmenuInplace，改用延时收尾',
