@@ -325,6 +325,10 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     check('CSS 也带版本串（原来是裸 link，iOS 会吃启发式缓存 ⇒ 改了看不到）',
         /asset\('css\/context-js\/context-js\.css'\)\s*\}\}\?v=\{\{\s*\\App\\Utils::assetVersion\('css\/context-js\/context-js\.css'\)/.test(imagesBlade));
     const ctxJs = read('public', 'js', 'context-js', 'context-js.js');
+    check('点二级项后不「先退回一级」：叶子项路径跳过即时 exitSubmenuInplace，改用延时收尾',
+        /const leafClose = \(Date\.now\(\) - lastLeafTapAt\) < LEAF_FADE_WINDOW;/.test(ctxJs)
+        && /if \(! leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs)
+        && /if \(leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs));
     check('叶子项点击后定格高亮：有 .context-pressed 样式（用强调色变量，不写死）',
         /\.dropdown-context a\.context-pressed\{[^}]*var\(--lsky-accent\)/.test(ctxCss)
         && /\.dropdown-context a\.context-pressed\s*\{[\s\S]{0,120}var\(--lsky-accent\)/.test(ctxLess));

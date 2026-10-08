@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   d2c2c463a318a3a78d018dfc8d254497  src/resources/views/user/images.blade.php
+#   4a9db9f6b11aac83ebd2898e1daec341  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -186,6 +186,17 @@
 #     现在挂 li，再取它直接的 a；父项 .dropdown-submenu 与标题行 .nav-header 不算叶子项。
 #  实测（真实鼠标事件，CDP）：点 Url 当帧 bg = rgb(37,99,235)（= --lsky-accent）、pressed=true，
 #     菜单到不可见 418ms（原先约 100~150ms），关完后 .context-pressed 残留 0。
+# 2026-10-08 第十轮（老师：点二级菜单项后不要看到「先返回一级菜单再消失」）：
+#  ⑱ closeMenus 里那句 `exitSubmenuInplace(true)` 原先是**即时**执行的 —— 它会把菜单从
+#     「子菜单就地展开」切回一级，于是用户看到「先返回一级、再整个消失」。
+#     改：**叶子项关闭路径**（leafClose）跳过即时调用，与 .context-pressed 的清理一起放到
+#     `setTimeout(fade + 150)` 里执行 —— 那时元素已不可见，用户看不到那次状态还原。
+#     非叶子路径（桌面、点菜单外等）保持原样即时执行，现有行为不变。
+#     幂等性已确认：`exitSubmenuInplace` 首行 `$('.dropdown-context.submenu-inplace')` 取不到
+#     就直接 return，重复调用无害。
+#  实测（CDP 模拟 hover:none 让点「复制链接」走就地展开那条真实手机路径）：
+#     点击当帧 pressed=true、bg=rgb(37,99,235)、**inplace 仍为 true**（没退回一级）、Url 仍可见；
+#     120ms 后高亮保持；菜单 395ms 到不可见；随后 inplace=false、返回行=0、高亮残留=0。
 
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
@@ -247,7 +258,7 @@
  
      let options = {
          fadeSpeed: 100,
-@@ -15,14 +63,912 @@
+@@ -15,14 +63,923 @@
          compress: false
      };
  
@@ -558,21 +569,32 @@
 +        // 【2026-10-08】刚点过叶子项（如「复制链接 → Url」）⇒ 这次淡出慢一点，让眼睛跟得上
 +        // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
 +        // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
-+        const fade = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW ? LEAF_CLOSE_FADE : options.fadeSpeed;
++        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
++        const fade = leafClose ? LEAF_CLOSE_FADE : options.fadeSpeed;
 +        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
 +        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 +
-+        exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
++        if (! leafClose) {
++            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
++        }
++        // 【2026-10-08】点中二级菜单里的叶子项时**不能**在这里即时收子菜单 ——
++        // 那会让用户看到"先返回一级菜单、再整个消失"（老师报的观感）。改成延到淡出之后
++        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
++        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 +
 +        $('.dropdown-context').fadeOut(fade, function () {
 +            $('.dropdown-context').css({ display: '' });
 +            $('.dropdown-context .drop-left').removeClass('drop-left');
 +            $('.dropdown-context .touch-open').removeClass('touch-open');
 +        });
-+        // 定格高亮必须清干净（否则菜单是复用的 DOM，下次打开那一项还亮着）。
-+        // 不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行，这里再兜一道。
++        // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
++        //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
++        //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
 +        setTimeout(function () {
 +            $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
++            if (leafClose) {
++                exitSubmenuInplace(true);
++            }
 +        }, fade + 150);
 +    }
 +
@@ -1163,7 +1185,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +976,8 @@
+@@ -30,13 +987,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -1179,7 +1201,7 @@
          });
  
      }
-@@ -130,12 +1071,15 @@
+@@ -130,12 +1082,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -1201,7 +1223,7 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -144,42 +1088,122 @@
+@@ -144,42 +1099,122 @@
              $('body').append($menu);
  
              $('.dropdown-context:not(.dropdown-context-sub)').hide();
@@ -1338,7 +1360,7 @@
 ---- src/public/js/context-js/context-js.js
 --- lsky-pro@38d52c46/public/js/context-js/context-js.js	（上游原文件）
 +++ src/public/js/context-js/context-js.js	（本 fork）
-@@ -1 +1,1209 @@
+@@ -1 +1,1220 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1712,21 +1734,32 @@
 +        // 【2026-10-08】刚点过叶子项（如「复制链接 → Url」）⇒ 这次淡出慢一点，让眼睛跟得上
 +        // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
 +        // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
-+        const fade = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW ? LEAF_CLOSE_FADE : options.fadeSpeed;
++        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
++        const fade = leafClose ? LEAF_CLOSE_FADE : options.fadeSpeed;
 +        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
 +        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 +
-+        exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
++        if (! leafClose) {
++            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
++        }
++        // 【2026-10-08】点中二级菜单里的叶子项时**不能**在这里即时收子菜单 ——
++        // 那会让用户看到"先返回一级菜单、再整个消失"（老师报的观感）。改成延到淡出之后
++        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
++        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 +
 +        $('.dropdown-context').fadeOut(fade, function () {
 +            $('.dropdown-context').css({ display: '' });
 +            $('.dropdown-context .drop-left').removeClass('drop-left');
 +            $('.dropdown-context .touch-open').removeClass('touch-open');
 +        });
-+        // 定格高亮必须清干净（否则菜单是复用的 DOM，下次打开那一项还亮着）。
-+        // 不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行，这里再兜一道。
++        // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
++        //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
++        //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
 +        setTimeout(function () {
 +            $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
++            if (leafClose) {
++                exitSubmenuInplace(true);
++            }
 +        }, fade + 150);
 +    }
 +

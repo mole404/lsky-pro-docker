@@ -370,21 +370,32 @@ window.context = window.context || (function () {
         // 【2026-10-08】刚点过叶子项（如「复制链接 → Url」）⇒ 这次淡出慢一点，让眼睛跟得上
         // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
         // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
-        const fade = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW ? LEAF_CLOSE_FADE : options.fadeSpeed;
+        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
+        const fade = leafClose ? LEAF_CLOSE_FADE : options.fadeSpeed;
         // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
         menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 
-        exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
+        if (! leafClose) {
+            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
+        }
+        // 【2026-10-08】点中二级菜单里的叶子项时**不能**在这里即时收子菜单 ——
+        // 那会让用户看到"先返回一级菜单、再整个消失"（老师报的观感）。改成延到淡出之后
+        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
+        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 
         $('.dropdown-context').fadeOut(fade, function () {
             $('.dropdown-context').css({ display: '' });
             $('.dropdown-context .drop-left').removeClass('drop-left');
             $('.dropdown-context .touch-open').removeClass('touch-open');
         });
-        // 定格高亮必须清干净（否则菜单是复用的 DOM，下次打开那一项还亮着）。
-        // 不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行，这里再兜一道。
+        // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
+        //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
+        //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
         setTimeout(function () {
             $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
+            if (leafClose) {
+                exitSubmenuInplace(true);
+            }
         }, fade + 150);
     }
 
