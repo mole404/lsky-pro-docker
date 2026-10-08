@@ -2452,6 +2452,22 @@
                     try { return ds.getSelection().length; } catch (e) { return 'na'; }
                 };
                 const touchAge = () => (Date.now() - lastTouchAt);
+                // 2026-10-08 补：第一次采样漏了**库自己画的框**（老师截图里那个蓝框就是它）——
+                // 本次连它一起量，免得再出现「我们这边全是 0、用户却看得见」的分歧。
+                const libBox = () => {
+                    try {
+                        const el = document.querySelector('.ds-selector');
+                        if (!el) { return 'none'; }
+                        const r = el.getBoundingClientRect();
+                        const cs = getComputedStyle(el);
+                        return (cs.display === 'none' ? 'hid' : 'VIS')
+                            + Math.round(r.width) + 'x' + Math.round(r.height);
+                    } catch (e) { return 'na'; }
+                };
+                const interacting = () => {
+                    try { return (ds.Interaction.isInteracting ? 1 : 0) + '' + (ds.Interaction.isDragging ? 1 : 0); }
+                    catch (e) { return 'na'; }
+                };
 
                 ['touchstart', 'touchmove', 'touchend', 'touchcancel',
                     'mousedown', 'mousemove', 'mouseup', 'click'].forEach((type) => {
@@ -2466,7 +2482,9 @@
                             + '|tgt' + String((e.target && (e.target.className || e.target.tagName)) || '?').slice(0, 20)
                             + '|box' + boxState() + '|sel' + selState()
                             + '|mob' + (utils.isMobile() ? 1 : 0)
-                            + '|lt' + touchAge());
+                            + '|lt' + touchAge()
+                            + '|lib' + libBox()
+                            + '|int' + interacting());
                     }, true);
                 });
                 // 框尺寸变化（100ms 采样，变了才发）
@@ -2474,7 +2492,8 @@
                     const b = boxState();
                     if (b !== lastBox) {
                         lastBox = b;
-                        send('box', b + '|lastEvt' + lastEvt + '|sel' + selState() + '|lt' + touchAge());
+                        send('box', b + '|lastEvt' + lastEvt + '|sel' + selState() + '|lt' + touchAge()
+                            + '|lib' + libBox() + '|int' + interacting());
                     }
                 }, 100);
                 // 选择变化
@@ -2511,7 +2530,45 @@
                 $(operates.map(item => `[data-operate=${item}]`).toString()).css('display', 'block');
             };
 
+            /* 【2026-10-08 第六轮·修正】手机端不让库启动「触摸交互」（真机实测：不拦的话库会自己画出蓝框，
+             * 而落选判定用我们的零尺寸框 ⇒ 看着像"框选被触发但框不上"，与老师截图一致）。
+             * 上一版在 `predragstart` 里 `ds.break()` **无效** —— 读 ds.min.js 源码可见：
+             *     start(e) { this._canInteract(e) && (this.isInteracting = true, ..., this.DS.publish("Interaction:start", ...)) }
+             * `isInteracting` 在 publish 之前就置上了，回调里再 break 已经来不及；
+             * 而且这条路径 publish 的是 "Interaction:start"（对应订阅名 dragstart），我们订阅的
+             * `predragstart`（= "Interaction:start:pre"）压根不会被触发。
+             * 所以直接改判据：**触摸来源的交互一律不允许启动**（库压根进不了交互状态 ⇒ 画不出框）。
+             * 触摸之后浏览器补发的合成 mouse 事件（mousedown 的 type 就是 'mousedown'、pointerType 为
+             * 'mouse'）不受影响 ⇒ 点图片（勾选+开大图）、点小圆勾（多选）、长按菜单全部照常。 */
+            (function () {
+                const interaction = ds.Interaction;
+                if (! interaction || typeof interaction._canInteract !== 'function') {
+                    return;   // 环境里没有真实的库（如单元测试的桩）时静默跳过
+                }
+                const origCanInteract = interaction._canInteract.bind(interaction);
+                interaction._canInteract = (e) => {
+                    if (e) {
+                        if (e.type === 'touchstart' || e.type === 'touchmove' || e.type === 'touchend') {
+                            return false;
+                        }
+                        if ((e.type === 'pointerdown' || e.type === 'pointermove')
+                            && e.pointerType === 'touch') {
+                            return false;
+                        }
+                    }
+                    return origCanInteract(e);
+                };
+            })();
+
             ds.subscribe('predragstart', ({ event }) => {
+                /* 【2026-10-08 第六轮】手机端**不让库启动「触摸交互」** —— 真机实测（探针数据 + 老师描述）：
+                 * 屏幕上会出现一个**蓝色选择框**，但图片选不上（框是库自己画的，而落选判定用的是我们
+                 * 那个零尺寸框）⇒ 看着像"框选被触发"。本机 CDP 复现不出（桌面 Chrome 的合成触摸序列
+                 * 没能让库的 `_canInteract` 通过），只有真机走这条路径。
+                 * 挡在源头：这一发交互若由 `touchstart` 触发，直接 break 掉它 —— 库不进入交互状态，
+                 * 自然既画不出框、也不会有后续 update。触摸之后浏览器**合成的那串 mouse 事件**
+                 * （mousedown/mouseup/click）会重新启动一次交互，走的是鼠标路径 ⇒
+                 * 点图片（勾选 + 打开大图）、点小圆勾（单选/多选）一律照常。 */
                 /* 【2026-10-08】这里原来有一句 `if (utils.isMobile()) ds.stop();`（手机端不拖框），
                  * 它把库的整个交互停掉 ⇒ 手机端「点图片」只剩打开大图、不勾选，与桌面端不一致
                  *（这正是老师报的那条的直接原因）。现在触摸端由上面那段「不让库取消默认行为」

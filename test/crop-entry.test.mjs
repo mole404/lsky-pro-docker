@@ -291,6 +291,14 @@ console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失
         && /touchmove', \(\) => \{ lastTouchAt = Date\.now\(\); \}, \{capture: true, passive: true\}/.test(code)
         && /touchend', \(\) => \{ lastTouchAt = Date\.now\(\); \}, \{capture: true, passive: true\}/.test(code)
         && /const touchJustNow = \(\) => \(Date\.now\(\) - lastTouchAt\) < TOUCH_GRACE_MS/.test(code));
+    // 2026-10-08 追加（真机根因）：光挡住「我们自己扩框」不够 —— 真机上库会被 touchstart 启动、自己画蓝框
+    //（老师截图：蓝框出现但图选不上）。所以必须从库的判据下手。read ds.min.js: start(e) 里
+    // `_canInteract(e) && (isInteracting = !0, ..., publish("Interaction:start"))` —— 状态在 publish 之前
+    // 就置上，回调里 break 来不及；且这条路径发 "Interaction:start"，订阅名 predragstart 收不到。
+    check('⑩ 手机端不让库启动触摸交互：包装 _canInteract，touch 来源一律返回 false 且保留原函数',
+        /_canInteract = \(e\) => \{[\s\S]{0,400}'touchstart'[\s\S]{0,300}return false;[\s\S]{0,400}origCanInteract\(e\)/.test(code));
+    check('⑩ 拦截对「没有真实库」的环境（单元测试的桩）要静默跳过，不能抛错',
+        /const interaction = ds\.Interaction;[\s\S]{0,200}typeof interaction\._canInteract !== 'function'[\s\S]{0,120}return;/.test(code));
     check('⑨ 鼠标松手后的「区域外自选」也带同样两道守卫',
         /dsBox\.selfSelect && ! utils\.isMobile\(\) && ! touchJustNow\(\)/.test(code));
     check('⑨ 手机端不靠拖动落选：mouseup 的自选分支也带 utils.isMobile() 守卫',

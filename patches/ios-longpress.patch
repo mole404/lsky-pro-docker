@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   69790a9d69c72d3d2d9ea7dd5b43e6ef  src/resources/views/user/images.blade.php
+#   ecf89b82ecf6d966c78029868317c28e  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -132,6 +132,36 @@
 #   ⑩ images.blade.php 末尾加了一段只在 `?dbg=1` 时启用的只读打点（事件流 + 框尺寸 + 选中数，
 #      fetch 到 /dbg-<sid>/<seq>/… ⇒ 落进容器访问日志，我在远程 docker logs 读）。
 #      原因：老师实测「手机端滑动仍会触发框选」（iOS/安卓都有），本机 CDP 复现不出 ⇒ 必须拿真机数据。
+# 2026-10-08 第六轮（真机根因确认 + 修复）：
+#   ⑪ 【修复】predragstart 里加：`if (event && event.type === 'touchstart') { ds.break(); return; }`
+#      —— 手机端不让库启动「触摸交互」。老师截图证实：真机上库被 touchstart 启动成功后自己画出
+#      蓝色选择框（DS 默认 rgba(0,0,255,.45) 细边），而落选判定用我们的零尺寸框 ⇒ 框出来但选不上。
+#      本机 CDP 复现不出（桌面 Chrome 的合成触摸序列过不了库的 _canInteract）。
+#      触摸之后浏览器补发的合成 mousedown/mouseup/click 会重新启动一次交互（鼠标路径）⇒
+#      点图片（勾选+开图）、点小圆勾（多选）、长按菜单一律照常（本机实测 sel=1 / sel=2 / 菜单弹出）。
+#   ⑫ 探针补量「库画的框」(.ds-selector 的 rect+display) 与 ds.Interaction.isInteracting/isDragging
+#      —— 上一版只量了我们自己的框，才会出现「我们这边全 0、用户却看得见」的分歧。
+#   ⑪ 最终修法（上一版 predragstart + ds.break() 无效，已删）：直接改库的判据 ——
+#      `ds.Interaction._canInteract` 对 touchstart/touchmove/touchend（及 pointerType==='touch'）返回 false，
+#      库压根进不了交互状态 ⇒ 不再自己画蓝框。读 ds.min.js 可知 start() 是
+#      `_canInteract(e) && (this.isInteracting = !0, ..., publish("Interaction:start"))`，
+#      状态在 publish 之前就置上了，所以回调里 break 来不及；且该路径发的是 "Interaction:start"，
+#      订阅名 `predragstart`(= "Interaction:start:pre") 根本收不到。
+#      合成 mouse 事件（type 'mousedown'）不受影响 ⇒ 点图片勾选+开图、点小圆勾多选、长按菜单照常。
+#      本机实测：触摸滑动全程 libhid0x0/int00（修复前 libVIS2x2/int10）；桌面拖动 libVIS273x497、选中 9 张。
+# 2026-10-08 第六轮（真机根因确认 + 最终修法；上一版 predragstart+break 无效已删）：
+#  ⑪ 【修复】包装 `ds.Interaction._canInteract`：touchstart/touchmove/touchend（及
+#      pointerType==='touch'）一律返回 false ⇒ 库压根进不了交互状态，不再自己画蓝框。
+#      为什么不能在 predragstart 里 break —— 读 ds.min.js：`start(e){ this._canInteract(e) &&
+#      (this.isInteracting=!0, ..., this.DS.publish("Interaction:start", ...)) }`，状态在 publish
+#      之前就置上了；而且这条路径发的是 "Interaction:start"（订阅名 dragstart），订阅
+#      `predragstart`(= "Interaction:start:pre") 根本收不到 ⇒ 上一版是空转。
+#      合成 mouse 事件（type 'mousedown'）不受影响 ⇒ 点图片（勾选+开图）、点小圆勾（多选）、
+#      长按菜单一律照常（本机实测 sel=1 / sel=2 多选 / 菜单弹出）。
+#      防御式写法：环境里没有真实库（单元测试的桩）时静默跳过。
+#  ⑫ 探针补量「库画的框」(.ds-selector rect+display) 与 isInteracting/isDragging ——
+#      上一版只量我们自己的框，才会出现「我们这边全 0、用户却看得见蓝框」的分歧。
+#  实测证据：触摸滑动全程 `libhid0x0|int00`（修复前 `libVIS2x2|int10`）；桌面 `libVIS273x497`、选中 9 张。
 
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
@@ -4633,7 +4663,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,10 +2155,333 @@
+@@ -468,10 +2155,352 @@
              });
          </script>
          <script>
@@ -4934,6 +4964,22 @@
 +                    try { return ds.getSelection().length; } catch (e) { return 'na'; }
 +                };
 +                const touchAge = () => (Date.now() - lastTouchAt);
++                // 2026-10-08 补：第一次采样漏了**库自己画的框**（老师截图里那个蓝框就是它）——
++                // 本次连它一起量，免得再出现「我们这边全是 0、用户却看得见」的分歧。
++                const libBox = () => {
++                    try {
++                        const el = document.querySelector('.ds-selector');
++                        if (!el) { return 'none'; }
++                        const r = el.getBoundingClientRect();
++                        const cs = getComputedStyle(el);
++                        return (cs.display === 'none' ? 'hid' : 'VIS')
++                            + Math.round(r.width) + 'x' + Math.round(r.height);
++                    } catch (e) { return 'na'; }
++                };
++                const interacting = () => {
++                    try { return (ds.Interaction.isInteracting ? 1 : 0) + '' + (ds.Interaction.isDragging ? 1 : 0); }
++                    catch (e) { return 'na'; }
++                };
 +
 +                ['touchstart', 'touchmove', 'touchend', 'touchcancel',
 +                    'mousedown', 'mousemove', 'mouseup', 'click'].forEach((type) => {
@@ -4948,7 +4994,9 @@
 +                            + '|tgt' + String((e.target && (e.target.className || e.target.tagName)) || '?').slice(0, 20)
 +                            + '|box' + boxState() + '|sel' + selState()
 +                            + '|mob' + (utils.isMobile() ? 1 : 0)
-+                            + '|lt' + touchAge());
++                            + '|lt' + touchAge()
++                            + '|lib' + libBox()
++                            + '|int' + interacting());
 +                    }, true);
 +                });
 +                // 框尺寸变化（100ms 采样，变了才发）
@@ -4956,7 +5004,8 @@
 +                    const b = boxState();
 +                    if (b !== lastBox) {
 +                        lastBox = b;
-+                        send('box', b + '|lastEvt' + lastEvt + '|sel' + selState() + '|lt' + touchAge());
++                        send('box', b + '|lastEvt' + lastEvt + '|sel' + selState() + '|lt' + touchAge()
++                            + '|lib' + libBox() + '|int' + interacting());
 +                    }
 +                }, 100);
 +                // 选择变化
@@ -4967,7 +5016,7 @@
  
              const bindOperates = () => {
                  let selected = ds.getSelection();
-@@ -486,10 +2496,14 @@
+@@ -486,10 +2515,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4984,15 +5033,54 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -498,21 +2512,73 @@
+@@ -497,22 +2530,112 @@
+                 $(operates.map(item => `[data-operate=${item}]`).toString()).css('display', 'block');
              };
  
++            /* 【2026-10-08 第六轮·修正】手机端不让库启动「触摸交互」（真机实测：不拦的话库会自己画出蓝框，
++             * 而落选判定用我们的零尺寸框 ⇒ 看着像"框选被触发但框不上"，与老师截图一致）。
++             * 上一版在 `predragstart` 里 `ds.break()` **无效** —— 读 ds.min.js 源码可见：
++             *     start(e) { this._canInteract(e) && (this.isInteracting = true, ..., this.DS.publish("Interaction:start", ...)) }
++             * `isInteracting` 在 publish 之前就置上了，回调里再 break 已经来不及；
++             * 而且这条路径 publish 的是 "Interaction:start"（对应订阅名 dragstart），我们订阅的
++             * `predragstart`（= "Interaction:start:pre"）压根不会被触发。
++             * 所以直接改判据：**触摸来源的交互一律不允许启动**（库压根进不了交互状态 ⇒ 画不出框）。
++             * 触摸之后浏览器补发的合成 mouse 事件（mousedown 的 type 就是 'mousedown'、pointerType 为
++             * 'mouse'）不受影响 ⇒ 点图片（勾选+开大图）、点小圆勾（多选）、长按菜单全部照常。 */
++            (function () {
++                const interaction = ds.Interaction;
++                if (! interaction || typeof interaction._canInteract !== 'function') {
++                    return;   // 环境里没有真实的库（如单元测试的桩）时静默跳过
++                }
++                const origCanInteract = interaction._canInteract.bind(interaction);
++                interaction._canInteract = (e) => {
++                    if (e) {
++                        if (e.type === 'touchstart' || e.type === 'touchmove' || e.type === 'touchend') {
++                            return false;
++                        }
++                        if ((e.type === 'pointerdown' || e.type === 'pointermove')
++                            && e.pointerType === 'touch') {
++                            return false;
++                        }
++                    }
++                    return origCanInteract(e);
++                };
++            })();
++
              ds.subscribe('predragstart', ({ event }) => {
 -                if (utils.isMobile()) {
 -                    ds.stop();
 -                }
 -
 -                if (! $(event.target).hasClass('dragselect')) {
++                /* 【2026-10-08 第六轮】手机端**不让库启动「触摸交互」** —— 真机实测（探针数据 + 老师描述）：
++                 * 屏幕上会出现一个**蓝色选择框**，但图片选不上（框是库自己画的，而落选判定用的是我们
++                 * 那个零尺寸框）⇒ 看着像"框选被触发"。本机 CDP 复现不出（桌面 Chrome 的合成触摸序列
++                 * 没能让库的 `_canInteract` 通过），只有真机走这条路径。
++                 * 挡在源头：这一发交互若由 `touchstart` 触发，直接 break 掉它 —— 库不进入交互状态，
++                 * 自然既画不出框、也不会有后续 update。触摸之后浏览器**合成的那串 mouse 事件**
++                 * （mousedown/mouseup/click）会重新启动一次交互，走的是鼠标路径 ⇒
++                 * 点图片（勾选 + 打开大图）、点小圆勾（单选/多选）一律照常。 */
 +                /* 【2026-10-08】这里原来有一句 `if (utils.isMobile()) ds.stop();`（手机端不拖框），
 +                 * 它把库的整个交互停掉 ⇒ 手机端「点图片」只剩打开大图、不勾选，与桌面端不一致
 +                 *（这正是老师报的那条的直接原因）。现在触摸端由上面那段「不让库取消默认行为」
@@ -5063,7 +5151,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2599,250 @@
+@@ -533,27 +2656,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -5331,7 +5419,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2853,9 @@
+@@ -564,7 +2910,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -5342,7 +5430,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2863,19 @@
+@@ -572,47 +2920,19 @@
                          }
                      });
                  },
@@ -5399,7 +5487,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2912,10 @@
+@@ -649,6 +2969,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -5410,7 +5498,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2929,23 @@
+@@ -662,13 +2986,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -5436,7 +5524,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2960,11 @@
+@@ -683,7 +3017,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -5448,7 +5536,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2975,13 @@
+@@ -694,10 +3032,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -5464,7 +5552,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +3003,11 @@
+@@ -719,6 +3060,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -5476,7 +5564,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +3072,9 @@
+@@ -783,9 +3129,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -5489,7 +5577,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +3092,10 @@
+@@ -803,9 +3149,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -5501,7 +5589,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -844,17 +3134,27 @@
+@@ -844,17 +3191,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;
