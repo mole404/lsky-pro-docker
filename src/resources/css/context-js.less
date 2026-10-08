@@ -157,6 +157,14 @@
 /**
  * 	Context Styles
  */
+/* 【2026-10-08】点中菜单里的叶子项后，给这一项「定格高亮」：手指抬起、菜单开始淡出的这段时间里
+   它继续亮着（配合 closeMenus 的 LEAF_CLOSE_FADE 慢速淡出），让用户看清刚才点的是哪一项。
+   类名由 context-js.js 在点击时加上、菜单关完后清掉（菜单是复用的 DOM，残留会让下次打开误亮）。 */
+.dropdown-context a.context-pressed {
+    background-color: var(--lsky-accent);
+    color: #ffffff;
+}
+
 .dropdown-context {
     /* 【2026-10-08】iOS 的「按下灰块」：早先只把图片卡片（#images-scroll .images-item）关掉了，
        但菜单是 $('body').append($menu) 生成的 —— 不在那个作用域里，所以菜单项一直吃的是浏览器

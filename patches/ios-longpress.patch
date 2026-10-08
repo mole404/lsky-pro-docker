@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   9b4b0c386a811bcf1ea2df02331d3c5a  src/resources/views/user/images.blade.php
+#   d2c2c463a318a3a78d018dfc8d254497  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -175,11 +175,22 @@
 #     —— 与 JS 那侧一致；原来 CSS 没版本串，iOS/Safari 启发式缓存会让改了的样式不生效。
 #  实测证据（CDP 强制伪状态 CSS.forcePseudoState）：未按下背景 rgba(0,0,0,0) → 强制 :active 后
 #     rgb(37,99,235)（= --lsky-accent #2563eb）+ 文字白；容器 -webkit-tap-highlight-color 读到透明。
+# 2026-10-08 第九轮（老师反馈：点二级菜单项还是消失太快，希望加一点延迟）：
+#  ⑯ context-js.js：点中叶子项后，**这一次**关闭的淡出从 100ms 放到 LEAF_CLOSE_FADE=280ms；
+#     同时给该项加 .context-pressed 定格高亮（手指抬起后它继续亮着随菜单淡出）。
+#     逻辑关闭依旧立即（menuVisible 立刻 false），menuClosingUntil 与淡出时长一起延长，
+#     menuOnScreen() 的 DOM 兜底仍在 ⇒ 这段时间的点击照样被吞，不会把「点穿」放回来。
+#  ⑰ 关键踩坑：叶子项的点击委托**必须挂在 li 上**，不能写 `li > a` —— CDP 捕获真实点击的
+#     target 显示，点「Url」时 target 是那个 <li>（a 只占部分高度，padding 区点下去就是 li），
+#     jQuery 拿 target 与祖先去 matches `li > a` 全不满足 ⇒ 处理器根本不执行（高亮永远加不上）。
+#     现在挂 li，再取它直接的 a；父项 .dropdown-submenu 与标题行 .nav-header 不算叶子项。
+#  实测（真实鼠标事件，CDP）：点 Url 当帧 bg = rgb(37,99,235)（= --lsky-accent）、pressed=true，
+#     菜单到不可见 418ms（原先约 100~150ms），关完后 .context-pressed 残留 0。
 
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
 +++ src/resources/js/context-js.js	（本 fork）
-@@ -2,8 +2,48 @@
+@@ -2,8 +2,56 @@
   * Context.js
   * Copyright Jacob Kelley, Modified by WispX
   * MIT License
@@ -224,11 +235,19 @@
 +                                    // 而关掉之后元素还要淡出，屏幕上看着菜单还在 —— 那一瞬间的点击就会点穿。
 +    const MENU_FADE_GUARD = 50;     // 关菜单后，元素还要淡出 fadeSpeed 毫秒；这段时间它在屏幕上，
 +                                    // 点击必须照样被吞（否则就是“看得见菜单却点穿了”）。这里再加一点余量。
++    // 【2026-10-08】叶子项（如「复制链接 → Url」）点完菜单就关，默认 100ms 淡出太快 ——
++    // 两个平台都"只能凭一瞬间捕捉点到了什么"。这里给这次关闭放慢一拍：
++    //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
++    //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
++    //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
++    const LEAF_CLOSE_FADE = 280;    // 叶子项被点后关菜单用的淡出时长（默认是 options.fadeSpeed = 100）
++    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
++    const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
 +    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
  
      let options = {
          fadeSpeed: 100,
-@@ -15,14 +55,880 @@
+@@ -15,14 +63,912 @@
          compress: false
      };
  
@@ -401,6 +420,7 @@
 +    let debugBuffer = [];           // 诊断环缓冲
 +    let debugToConsole = false;     // context.debug = true 时实时打控制台
 +    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
++    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
 +    let suppressClickUntil = 0;
 +    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
 +    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -535,16 +555,25 @@
 +        }
 +
 +        menuVisible = false;
++        // 【2026-10-08】刚点过叶子项（如「复制链接 → Url」）⇒ 这次淡出慢一点，让眼睛跟得上
++        // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
++        // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
++        const fade = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW ? LEAF_CLOSE_FADE : options.fadeSpeed;
 +        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
-+        menuClosingUntil = Date.now() + options.fadeSpeed + MENU_FADE_GUARD;
++        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 +
 +        exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
 +
-+        $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
++        $('.dropdown-context').fadeOut(fade, function () {
 +            $('.dropdown-context').css({ display: '' });
 +            $('.dropdown-context .drop-left').removeClass('drop-left');
 +            $('.dropdown-context .touch-open').removeClass('touch-open');
 +        });
++        // 定格高亮必须清干净（否则菜单是复用的 DOM，下次打开那一项还亮着）。
++        // 不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行，这里再兜一道。
++        setTimeout(function () {
++            $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
++        }, fade + 150);
 +    }
 +
 +    function isInsideMenu(node) {
@@ -1101,6 +1130,28 @@
  
 +        installMenuGuard();
 +
++        // 【2026-10-08】点中菜单里的叶子项（如「复制链接 → Url」）：记一笔，并给这一项定格高亮。
++        //   * 记时刻 ⇒ closeMenus 会把这次淡出放慢（见 LEAF_CLOSE_FADE），眼睛跟得上"点的是哪一项"；
++        //   * 定格高亮（.context-pressed）⇒ 手指抬起后它继续亮着随菜单淡出，而不是瞬间就没了。
++        // 注意判据必须挂在 **li** 上、而不是 `li > a`：实测（CDP 捕获真实点击的 target）点「Url」时
++        // target 是那个 <li>（`<a>` 只占其中一部分高度，padding 区域点下去 target 就是 li）。
++        // 用 `li > a` 做委托选择器时 jQuery 会拿 target 及其祖先去 matches，li / ul / .dropdown-context
++        // 都不满足 ⇒ 处理器根本不执行（高亮永远加不上）。
++        // 这里挂在 li 上，再取它**直接的** a；父项（.dropdown-submenu，点它只是展开子菜单）与
++        // 标题行（.nav-header，没有可读文本）一律不算叶子项。
++        $(document).on('click', '.dropdown-context li', function () {
++            const $li = $(this);
++            if ($li.hasClass('dropdown-submenu') || $li.hasClass('nav-header')) {
++                return;
++            }
++            const $a = $li.children('a');
++            if (! $a.length || ! $.trim($a.text())) {
++                return;
++            }
++            lastLeafTapAt = Date.now();
++            $a.addClass(LEAF_PRESSED_CLASS);
++        });
++
          $(document).on('click', 'html', function () {
 -            $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
 -                $('.dropdown-context').css({display: ''}).find('.drop-left').removeClass('drop-left');
@@ -1112,7 +1163,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +936,8 @@
+@@ -30,13 +976,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -1128,7 +1179,7 @@
          });
  
      }
-@@ -130,12 +1031,15 @@
+@@ -130,12 +1071,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -1150,7 +1201,7 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -144,42 +1048,122 @@
+@@ -144,42 +1088,122 @@
              $('body').append($menu);
  
              $('.dropdown-context:not(.dropdown-context-sub)').hide();
@@ -1287,7 +1338,7 @@
 ---- src/public/js/context-js/context-js.js
 --- lsky-pro@38d52c46/public/js/context-js/context-js.js	（上游原文件）
 +++ src/public/js/context-js/context-js.js	（本 fork）
-@@ -1 +1,1169 @@
+@@ -1 +1,1209 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1334,6 +1385,14 @@
 +                                    // 而关掉之后元素还要淡出，屏幕上看着菜单还在 —— 那一瞬间的点击就会点穿。
 +    const MENU_FADE_GUARD = 50;     // 关菜单后，元素还要淡出 fadeSpeed 毫秒；这段时间它在屏幕上，
 +                                    // 点击必须照样被吞（否则就是“看得见菜单却点穿了”）。这里再加一点余量。
++    // 【2026-10-08】叶子项（如「复制链接 → Url」）点完菜单就关，默认 100ms 淡出太快 ——
++    // 两个平台都"只能凭一瞬间捕捉点到了什么"。这里给这次关闭放慢一拍：
++    //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
++    //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
++    //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
++    const LEAF_CLOSE_FADE = 280;    // 叶子项被点后关菜单用的淡出时长（默认是 options.fadeSpeed = 100）
++    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
++    const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
 +    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
 +
 +    let options = {
@@ -1515,6 +1574,7 @@
 +    let debugBuffer = [];           // 诊断环缓冲
 +    let debugToConsole = false;     // context.debug = true 时实时打控制台
 +    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
++    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
 +    let suppressClickUntil = 0;
 +    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
 +    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -1649,16 +1709,25 @@
 +        }
 +
 +        menuVisible = false;
++        // 【2026-10-08】刚点过叶子项（如「复制链接 → Url」）⇒ 这次淡出慢一点，让眼睛跟得上
++        // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
++        // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
++        const fade = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW ? LEAF_CLOSE_FADE : options.fadeSpeed;
 +        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
-+        menuClosingUntil = Date.now() + options.fadeSpeed + MENU_FADE_GUARD;
++        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 +
 +        exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
 +
-+        $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
++        $('.dropdown-context').fadeOut(fade, function () {
 +            $('.dropdown-context').css({ display: '' });
 +            $('.dropdown-context .drop-left').removeClass('drop-left');
 +            $('.dropdown-context .touch-open').removeClass('touch-open');
 +        });
++        // 定格高亮必须清干净（否则菜单是复用的 DOM，下次打开那一项还亮着）。
++        // 不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行，这里再兜一道。
++        setTimeout(function () {
++            $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
++        }, fade + 150);
 +    }
 +
 +    function isInsideMenu(node) {
@@ -2215,6 +2284,28 @@
 +
 +        installMenuGuard();
 +
++        // 【2026-10-08】点中菜单里的叶子项（如「复制链接 → Url」）：记一笔，并给这一项定格高亮。
++        //   * 记时刻 ⇒ closeMenus 会把这次淡出放慢（见 LEAF_CLOSE_FADE），眼睛跟得上"点的是哪一项"；
++        //   * 定格高亮（.context-pressed）⇒ 手指抬起后它继续亮着随菜单淡出，而不是瞬间就没了。
++        // 注意判据必须挂在 **li** 上、而不是 `li > a`：实测（CDP 捕获真实点击的 target）点「Url」时
++        // target 是那个 <li>（`<a>` 只占其中一部分高度，padding 区域点下去 target 就是 li）。
++        // 用 `li > a` 做委托选择器时 jQuery 会拿 target 及其祖先去 matches，li / ul / .dropdown-context
++        // 都不满足 ⇒ 处理器根本不执行（高亮永远加不上）。
++        // 这里挂在 li 上，再取它**直接的** a；父项（.dropdown-submenu，点它只是展开子菜单）与
++        // 标题行（.nav-header，没有可读文本）一律不算叶子项。
++        $(document).on('click', '.dropdown-context li', function () {
++            const $li = $(this);
++            if ($li.hasClass('dropdown-submenu') || $li.hasClass('nav-header')) {
++                return;
++            }
++            const $a = $li.children('a');
++            if (! $a.length || ! $.trim($a.text())) {
++                return;
++            }
++            lastLeafTapAt = Date.now();
++            $a.addClass(LEAF_PRESSED_CLASS);
++        });
++
 +        $(document).on('click', 'html', function () {
 +            // 菜单内部的点击照旧关闭菜单（菜单外的点击在守卫里处理，事件已经被吞掉、到不了这里）
 +            if (menuVisible) {
@@ -2576,9 +2667,18 @@
              border-style: solid;
              border-width: 5px 0 5px 5px;
              content: " ";
-@@ -153,6 +158,13 @@
+@@ -152,7 +157,22 @@
+ /**
   * 	Context Styles
   */
++/* 【2026-10-08】点中菜单里的叶子项后，给这一项「定格高亮」：手指抬起、菜单开始淡出的这段时间里
++   它继续亮着（配合 closeMenus 的 LEAF_CLOSE_FADE 慢速淡出），让用户看清刚才点的是哪一项。
++   类名由 context-js.js 在点击时加上、菜单关完后清掉（菜单是复用的 DOM，残留会让下次打开误亮）。 */
++.dropdown-context a.context-pressed {
++    background-color: var(--lsky-accent);
++    color: #ffffff;
++}
++
  .dropdown-context {
 +    /* 【2026-10-08】iOS 的「按下灰块」：早先只把图片卡片（#images-scroll .images-item）关掉了，
 +       但菜单是 $('body').append($menu) 生成的 —— 不在那个作用域里，所以菜单项一直吃的是浏览器
@@ -2590,7 +2690,7 @@
      .nav-header {
          cursor: default;
      }
-@@ -167,16 +179,34 @@
+@@ -167,16 +187,34 @@
          }
      }
  }
@@ -2627,7 +2727,7 @@
  }
  .dropdown-context:after, .dropdown-context-up:after {
      position: absolute;
-@@ -184,9 +214,9 @@
+@@ -184,9 +222,9 @@
      left: 10px;
      display: inline-block;
      border-right: 6px solid transparent;
@@ -2639,7 +2739,7 @@
  }
  .dropdown-context-up:before, .dropdown-context-up:after {
      top: auto;
-@@ -196,13 +226,13 @@
+@@ -196,13 +234,13 @@
  .dropdown-context-up {
      &:before {
          border-right: 7px solid transparent;
@@ -2655,7 +2755,7 @@
          border-left: 6px solid transparent;
          border-bottom: none;
      }
-@@ -215,7 +245,7 @@
+@@ -215,7 +253,7 @@
          padding-left: 14px;
          padding-top: 0;
          padding-bottom: 0;
@@ -2668,10 +2768,11 @@
 ---- src/public/css/context-js/context-js.css
 --- lsky-pro@38d52c46/public/css/context-js/context-js.css	（上游原文件）
 +++ src/public/css/context-js/context-js.css	（本 fork）
-@@ -1 +1,2 @@
+@@ -1 +1,3 @@
 -.nav-header{color:#999;display:block;font-size:11px;font-weight:700;line-height:20px;padding:3px 15px;text-shadow:0 1px 0 hsla(0,0%,100%,.5);text-transform:uppercase}.dropdown-menu{background-clip:padding-box;background-color:#fff;border:0;border-radius:6px;box-shadow:0 5px 10px hsla(0,0%,68%,.3);display:none;float:left;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;font-size:14px;left:0;list-style:none;margin:2px 0 0;min-width:160px;padding:5px 0;position:absolute;text-align:left;top:100%;z-index:1000}.dropdown-menu.pull-right{left:auto;right:0}.dropdown-menu .divider{background-color:#e5e5e5;border-bottom:1px solid #f5f5f5;height:1px;margin:9px 1px;overflow:hidden}.dropdown-menu a{clear:both;color:#333;display:block;font-weight:400;line-height:20px;padding:5px 20px;text-decoration:none;white-space:nowrap}.dropdown-menu .disabled>a:hover{background-color:transparent;cursor:default;text-decoration:none}.dropdown-menu .dropdown-submenu:hover>a,.dropdown-menu li>a:focus,.dropdown-menu li>a:hover{background-color:#627aff;background-image:-moz-linear-gradient(top,#08c,#0077b3);background-repeat:repeat-x;color:#fff;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover{background-color:#627aff;background-image:linear-gradient(180deg,#08c,#0077b3);background-repeat:repeat-x;color:#fff;outline:0;text-decoration:none}.dropdown-menu .disabled>a,.dropdown-menu .disabled>a:hover{color:#999}.dropdown-menu .open{*z-index:1000}.dropdown-menu .open>.dropdown-menu{display:block}.dropdown-menu .pull-right>.dropdown-menu{left:auto;right:0}.dropup .caret,.navbar-fixed-bottom .dropdown .caret{border-bottom:4px solid #000;border-top:0;content:"\2191"}.dropup .dropdown-menu,.navbar-fixed-bottom .dropdown .dropdown-menu{bottom:100%;margin-bottom:1px;top:auto}.dropdown-submenu{position:relative}.dropdown-submenu>.dropdown-menu{border-radius:0 6px 6px 6px;left:100%;margin-left:-1px;margin-top:-6px;top:0}.dropdown-submenu>.dropdown-menu.drop-left{left:-100%}.dropdown-submenu:hover .dropdown-menu{display:block}.dropdown-submenu:hover>a:after{border-left-color:#fff}.dropdown-submenu>a:after{border-color:transparent transparent transparent #ccc;border-style:solid;border-width:5px 0 5px 5px;content:" ";display:block;float:right;height:0;margin-right:-10px;margin-top:5px;width:0}.dropdown .dropdown-menu .nav-header{padding-left:20px;padding-right:20px}.dropdown-context .nav-header{cursor:default}.dropdown-context .dropdown-submenu:hover .dropdown-menu{display:none}.dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}.dropdown-context-up:before,.dropdown-context:before{border-bottom:7px solid rgba(0,0,0,.2);border-left:7px solid transparent;border-right:7px solid transparent;content:"";display:inline-block;left:9px;position:absolute;top:-7px}.dropdown-context-up:after,.dropdown-context:after{border-bottom:6px solid #fff;border-left:6px solid transparent;border-right:6px solid transparent;content:"";display:inline-block;left:10px;position:absolute;top:-6px}.dropdown-context-up:after,.dropdown-context-up:before{bottom:-7px;top:auto;z-index:9999}.dropdown-context-up:before{border:7px solid transparent;border-bottom:none;border-top-color:#ccc}.dropdown-context-up:after{border:6px solid transparent;border-bottom:none;border-top-color:#fff}.dropdown-context-sub:after,.dropdown-context-sub:before{display:none}.compressed-context a{font-size:13px;padding-bottom:0;padding-left:14px;padding-top:0}.compressed-context .divider{margin:5px 1px}.compressed-context .nav-header{padding:1px 13px}
 +.nav-header{color:var(--lsky-text-3);display:block;font-size:12.5px;font-weight:700;line-height:20px;padding:3px 15px;text-shadow:none;text-transform:uppercase}.dropdown-menu{background-clip:padding-box;background-color:var(--lsky-surface);border:0;border-radius:6px;box-shadow:var(--lsky-shadow-pop);display:none;float:left;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;font-size:14px;left:0;list-style:none;margin:2px 0 0;min-width:160px;padding:5px 0;position:absolute;text-align:left;top:100%;z-index:1000}.dropdown-menu.pull-right{left:auto;right:0}.dropdown-menu .divider{background-color:var(--lsky-surface-3);border-bottom:1px solid var(--lsky-border);height:1px;margin:9px 1px;overflow:hidden}.dropdown-menu a{clear:both;color:var(--lsky-text);display:block;font-weight:400;line-height:20px;padding:5px 20px;text-decoration:none;white-space:nowrap}.dropdown-menu .disabled>a:hover{background-color:transparent;cursor:default;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover,.dropdown-menu .dropdown-submenu:hover>a,.dropdown-menu .dropdown-submenu>a:active,.dropdown-menu li>a:active,.dropdown-menu li>a:focus,.dropdown-menu li>a:hover{background-color:var(--lsky-accent);background-image:none;background-repeat:repeat-x;color:#fff;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover{outline:0}.dropdown-menu .disabled>a,.dropdown-menu .disabled>a:hover{color:var(--lsky-text-3)}.dropdown-menu .open{*z-index:1000}.dropdown-menu .open>.dropdown-menu{display:block}.dropdown-menu .pull-right>.dropdown-menu{left:auto;right:0}.dropup .caret,.navbar-fixed-bottom .dropdown .caret{border-bottom:4px solid var(--lsky-border-2);border-top:0;content:"\2191"}.dropup .dropdown-menu,.navbar-fixed-bottom .dropdown .dropdown-menu{bottom:100%;margin-bottom:1px;top:auto}.dropdown-submenu{position:relative}.dropdown-submenu>.dropdown-menu{border-radius:0 6px 6px 6px;left:100%;margin-left:-1px;margin-top:-6px;top:0}.dropdown-submenu>.dropdown-menu.drop-left{left:-100%}.dropdown-submenu:hover .dropdown-menu{display:block}.dropdown-submenu:hover>a:after{border-left-color:var(--lsky-surface)}.dropdown-submenu>a:after{border-bottom:5px solid transparent;border-left:5px solid transparent;border-left-color:var(--lsky-border-2);border-right:0 solid transparent;border-top:5px solid transparent;content:" ";display:block;float:right;height:0;margin-right:-10px;margin-top:5px;width:0}.dropdown .dropdown-menu .nav-header{padding-left:20px;padding-right:20px}.dropdown-context .nav-header{cursor:default}.dropdown-context .dropdown-submenu:hover .dropdown-menu{display:none}.dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}.dropdown-context .submenu-back>a>i{margin-right:7px}.dropdown-context-up:before,.dropdown-context:before{border-bottom:7px solid rgba(0,0,0,.2);border-left:7px solid transparent;border-right:7px solid transparent;content:none;display:inline-block;left:9px;position:absolute;top:-7px}.dropdown-context-up:after,.dropdown-context:after{border-bottom:6px solid var(--lsky-surface);border-left:6px solid transparent;border-right:6px solid transparent;content:none;display:inline-block;left:10px;position:absolute;top:-6px}.dropdown-context-up:after,.dropdown-context-up:before{bottom:-7px;top:auto;z-index:9999}.dropdown-context-up:before{border-bottom:none;border-left:7px solid transparent;border-right:7px solid transparent;border-top:7px solid var(--lsky-border-2)}.dropdown-context-up:after{border-bottom:none;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid var(--lsky-surface)}.dropdown-context-sub:after,.dropdown-context-sub:before{display:none}.compressed-context a{font-size:13.5px;padding-bottom:0;padding-left:14px;padding-top:0}.compressed-context .divider{margin:5px 1px}.compressed-context .nav-header{padding:1px 13px}
 +.dropdown-context,.dropdown-context a{-webkit-tap-highlight-color:transparent}
++.dropdown-context a.context-pressed{background-color:var(--lsky-accent);color:#fff}
 
 ---- src/resources/views/user/images.blade.php
 --- lsky-pro@38d52c46/resources/views/user/images.blade.php	（上游原文件）

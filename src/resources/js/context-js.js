@@ -43,6 +43,14 @@ window.context = window.context || (function () {
                                     // 而关掉之后元素还要淡出，屏幕上看着菜单还在 —— 那一瞬间的点击就会点穿。
     const MENU_FADE_GUARD = 50;     // 关菜单后，元素还要淡出 fadeSpeed 毫秒；这段时间它在屏幕上，
                                     // 点击必须照样被吞（否则就是“看得见菜单却点穿了”）。这里再加一点余量。
+    // 【2026-10-08】叶子项（如「复制链接 → Url」）点完菜单就关，默认 100ms 淡出太快 ——
+    // 两个平台都"只能凭一瞬间捕捉点到了什么"。这里给这次关闭放慢一拍：
+    //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
+    //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
+    //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
+    const LEAF_CLOSE_FADE = 280;    // 叶子项被点后关菜单用的淡出时长（默认是 options.fadeSpeed = 100）
+    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
+    const LEAF_PRESSED_CLASS = 'context-pressed';  // 定格高亮：让那一刻"亮着慢慢消失"
     const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
 
     let options = {
@@ -224,6 +232,7 @@ window.context = window.context || (function () {
     let debugBuffer = [];           // 诊断环缓冲
     let debugToConsole = false;     // context.debug = true 时实时打控制台
     let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
+    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
     let suppressClickUntil = 0;
     let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
     let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -358,16 +367,25 @@ window.context = window.context || (function () {
         }
 
         menuVisible = false;
+        // 【2026-10-08】刚点过叶子项（如「复制链接 → Url」）⇒ 这次淡出慢一点，让眼睛跟得上
+        // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
+        // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
+        const fade = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW ? LEAF_CLOSE_FADE : options.fadeSpeed;
         // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
-        menuClosingUntil = Date.now() + options.fadeSpeed + MENU_FADE_GUARD;
+        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 
         exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
 
-        $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
+        $('.dropdown-context').fadeOut(fade, function () {
             $('.dropdown-context').css({ display: '' });
             $('.dropdown-context .drop-left').removeClass('drop-left');
             $('.dropdown-context .touch-open').removeClass('touch-open');
         });
+        // 定格高亮必须清干净（否则菜单是复用的 DOM，下次打开那一项还亮着）。
+        // 不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行，这里再兜一道。
+        setTimeout(function () {
+            $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
+        }, fade + 150);
     }
 
     function isInsideMenu(node) {
@@ -923,6 +941,28 @@ window.context = window.context || (function () {
         options = $.extend({}, options, opts);
 
         installMenuGuard();
+
+        // 【2026-10-08】点中菜单里的叶子项（如「复制链接 → Url」）：记一笔，并给这一项定格高亮。
+        //   * 记时刻 ⇒ closeMenus 会把这次淡出放慢（见 LEAF_CLOSE_FADE），眼睛跟得上"点的是哪一项"；
+        //   * 定格高亮（.context-pressed）⇒ 手指抬起后它继续亮着随菜单淡出，而不是瞬间就没了。
+        // 注意判据必须挂在 **li** 上、而不是 `li > a`：实测（CDP 捕获真实点击的 target）点「Url」时
+        // target 是那个 <li>（`<a>` 只占其中一部分高度，padding 区域点下去 target 就是 li）。
+        // 用 `li > a` 做委托选择器时 jQuery 会拿 target 及其祖先去 matches，li / ul / .dropdown-context
+        // 都不满足 ⇒ 处理器根本不执行（高亮永远加不上）。
+        // 这里挂在 li 上，再取它**直接的** a；父项（.dropdown-submenu，点它只是展开子菜单）与
+        // 标题行（.nav-header，没有可读文本）一律不算叶子项。
+        $(document).on('click', '.dropdown-context li', function () {
+            const $li = $(this);
+            if ($li.hasClass('dropdown-submenu') || $li.hasClass('nav-header')) {
+                return;
+            }
+            const $a = $li.children('a');
+            if (! $a.length || ! $.trim($a.text())) {
+                return;
+            }
+            lastLeafTapAt = Date.now();
+            $a.addClass(LEAF_PRESSED_CLASS);
+        });
 
         $(document).on('click', 'html', function () {
             // 菜单内部的点击照旧关闭菜单（菜单外的点击在守卫里处理，事件已经被吞掉、到不了这里）

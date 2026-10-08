@@ -324,6 +324,22 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         && /\.dropdown-context,\.dropdown-context a\{-webkit-tap-highlight-color:transparent\}/.test(ctxCss));
     check('CSS 也带版本串（原来是裸 link，iOS 会吃启发式缓存 ⇒ 改了看不到）',
         /asset\('css\/context-js\/context-js\.css'\)\s*\}\}\?v=\{\{\s*\\App\\Utils::assetVersion\('css\/context-js\/context-js\.css'\)/.test(imagesBlade));
+    const ctxJs = read('public', 'js', 'context-js', 'context-js.js');
+    check('叶子项点击后定格高亮：有 .context-pressed 样式（用强调色变量，不写死）',
+        /\.dropdown-context a\.context-pressed\{[^}]*var\(--lsky-accent\)/.test(ctxCss)
+        && /\.dropdown-context a\.context-pressed\s*\{[\s\S]{0,120}var\(--lsky-accent\)/.test(ctxLess));
+    check('本次关闭的淡出被放慢（叶子项 280ms，默认仍是 options.fadeSpeed）',
+        /const LEAF_CLOSE_FADE = (\d+);/.test(ctxJs)
+        && Number((ctxJs.match(/const LEAF_CLOSE_FADE = (\d+);/) || [])[1]) > 100
+        && /menuClosingUntil = Date\.now\(\) \+ fade \+ MENU_FADE_GUARD/.test(ctxJs));
+    check('叶子项判据挂在 li 上（挂 `li > a` 实测不触发 —— target 是 li）',
+        /\$\(document\)\.on\('click', '\.dropdown-context li', function \(\) \{/.test(ctxJs)
+        && ! /\$\(document\)\.on\('click', '\.dropdown-context li:not\(\.dropdown-submenu\) > a'/.test(ctxJs));
+    check('定格高亮一定会被清掉（菜单是复用 DOM，残留会让下次打开误亮）',
+        /removeClass\(LEAF_PRESSED_CLASS\)|removeClass\('context-pressed'\)|removeClass\('\.context-pressed'\)/.test(ctxJs)
+        && /\.removeClass\(LEAF_PRESSED_CLASS\)/.test(ctxJs));
+    check('两份 context-js.js 字节一致（浏览器加载的是 public 那份）',
+        ctxJs === read('resources', 'js', 'context-js.js'));
     const activeRuleLine = ctxCss.split('\n').find((l) => l.includes('li>a:active')) || '';
     check('按下态与 hover 用同一个强调色变量（不许写死颜色）',
         activeRuleLine.includes('var(--lsky-accent)'),
