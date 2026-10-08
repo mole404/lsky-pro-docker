@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   73d87bf991d0dc7eb67450390460d391  src/resources/views/user/images.blade.php
+#   c4042192cf8aba51594ec100ddf27d73  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -218,11 +218,22 @@
 #     close（leafClose/fade/默认 fadeSpeed/常量/useLong）。
 #  本机（CDP 模拟安卓 UA）实测：boot useLong=true subFade=420；tap tag=LI txt=Url inSub=true fade=420；
 #     close leaf=true fade=420 def=100；淡出曲线 330ms。
+# 2026-10-08 第十三轮（老师真机打点：420/200 确实生效，但「感觉跟没变一样」）：
+#  ㉒ 结论：「关闭延迟」必须是**先停住再收**，而不是「立刻开始慢慢淡出」—— 后者第一帧就在变淡，
+#     观感上仍然是「马上就关」。所以把时长拆成 hold（完全静止）+ fade（之后的淡出）：
+#       非 iOS · 二级：hold 320 + fade 140；非 iOS · 一级：hold 160 + fade 120（一级 < 二级）。
+#       iOS：hold 0 + fade 280（第七轮既定行为，一字未改）。
+#     menuClosingUntil 与清理 setTimeout 都改成 hold + fade + 余量，保证停住期间菜单看得见也照样吞点击。
+#  实测（页面内 rAF 采样，CDP 模拟非 iOS UA + hover:none 走就地展开路径）：
+#     安卓二级：点击后 **429ms 菜单完全不变** → 然后 101ms 淡出；
+#     安卓一级：点击后 **348ms 不变** → 45ms 淡出。（改前同口径是「点击后 0ms 就开始变淡」）
+#  真机打点（老师安卓 Edge 153 · Android 10）确认：useLong=true、二级 fade=420、一级 fade=200 都真的
+#     传进了 fadeOut —— 说明代码取值一直是对的，问题在口径（「淡化」≠「延迟」）。
 
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
 +++ src/resources/js/context-js.js	（本 fork）
-@@ -2,8 +2,90 @@
+@@ -2,8 +2,98 @@
   * Context.js
   * Copyright Jacob Kelley, Modified by WispX
   * MIT License
@@ -287,9 +298,17 @@
 +    const isIOSUA = /iPhone|iPad|iPod/i.test(UA_STR);
 +    const isAndroidUA = /Android/i.test(UA_STR);          // 仅供诊断对比用，不参与取值
 +    const useLongFade = ! isIOSUA;
-+    const SUB_FADE_ANDROID = 420;   // 非 iOS（安卓等）· 二级菜单项（子菜单里的项）
-+    const MAIN_FADE_ANDROID = 200;  // 非 iOS · 一级菜单项（主菜单直接项）—— 比二级短
-+    const SUB_FADE_IOS = 280;       // iOS · 二级菜单项（保持 2026-10-08 第七轮定下的值，别再动）
++    // 【2026-10-08 老师两轮反馈后的结论】"关闭延迟"必须做成**先保持原样一小段时间、再收**，
++    // 而不是"立刻开始慢慢淡出" —— 后者第一帧就在变淡，观感上仍然是"马上就关了"
++    //（真机打点显示 420/200 确实都传进 fadeOut 了，可老师感觉"跟没变一样"，就是这个原因）。
++    // 所以拆成 hold（完全静止、让人看清）+ fade（之后的淡出）：
++    const SUB_HOLD_ANDROID = 320;   // 非 iOS · 二级：停住 320ms（这一段菜单一点都不变）
++    const SUB_FADE_ANDROID = 140;   // 非 iOS · 二级：然后 140ms 淡出
++    const MAIN_HOLD_ANDROID = 160;  // 非 iOS · 一级：停住 160ms（比二级短）
++    const MAIN_FADE_ANDROID = 120;  // 非 iOS · 一级：然后 120ms 淡出
++    // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
++    const SUB_HOLD_IOS = 0;
++    const SUB_FADE_IOS = 280;
 +    const LEAF_CLOSE_FADE = useLongFade ? SUB_FADE_ANDROID : SUB_FADE_IOS;
 +    // 【临时诊断，拿到老师真机数据后删除】?dbg=1 时把平台判据打出去
 +    const DBG_ON = /[?&]dbg=1\b/.test(location.search);
@@ -313,7 +332,7 @@
  
      let options = {
          fadeSpeed: 100,
-@@ -15,14 +97,938 @@
+@@ -15,14 +105,950 @@
          compress: false
      };
  
@@ -488,6 +507,7 @@
 +    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
 +    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
 +    let lastLeafTapFade = LEAF_CLOSE_FADE;  // 那一次点击对应的淡出时长（一级/二级不一样，见上面常量）
++    let lastLeafTapHold = 0;                // 那一次点击对应的「先停住」时长（0 = 立即开始淡出）
 +    let suppressClickUntil = 0;
 +    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
 +    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -628,10 +648,12 @@
 +        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
 +        // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
 +        const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
-+        dbg('close', 'leaf=' + leafClose + '|fade=' + fade + '|def=' + options.fadeSpeed
++        // 「先停住」的时长：这一段菜单**完全不变化**，让人看清点在哪儿，然后才开始淡出。
++        const hold = leafClose ? (lastLeafTapHold || 0) : 0;
++        dbg('close', 'leaf=' + leafClose + '|hold=' + hold + '|fade=' + fade + '|def=' + options.fadeSpeed
 +            + '|subFadeConst=' + LEAF_CLOSE_FADE + '|useLong=' + useLongFade);
-+        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
-+        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
++        // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
++        menuClosingUntil = Date.now() + hold + fade + MENU_FADE_GUARD;
 +
 +        if (! leafClose) {
 +            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
@@ -641,11 +663,18 @@
 +        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
 +        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 +
-+        $('.dropdown-context').fadeOut(fade, function () {
-+            $('.dropdown-context').css({ display: '' });
-+            $('.dropdown-context .drop-left').removeClass('drop-left');
-+            $('.dropdown-context .touch-open').removeClass('touch-open');
-+        });
++        const doFadeOut = function () {
++            $('.dropdown-context').fadeOut(fade, function () {
++                $('.dropdown-context').css({ display: '' });
++                $('.dropdown-context .drop-left').removeClass('drop-left');
++                $('.dropdown-context .touch-open').removeClass('touch-open');
++            });
++        };
++        if (hold > 0) {
++            setTimeout(doFadeOut, hold);   // 先原样停住 hold 毫秒（菜单一动不动）再淡出
++        } else {
++            doFadeOut();
++        }
 +        // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
 +        //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
 +        //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
@@ -654,7 +683,7 @@
 +            if (leafClose) {
 +                exitSubmenuInplace(true);
 +            }
-+        }, fade + 150);
++        }, hold + fade + 150);
 +    }
 +
 +    function isInsideMenu(node) {
@@ -1234,8 +1263,10 @@
 +            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
 +            const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
 +            if (useLongFade) {
++                lastLeafTapHold = inSubmenu ? SUB_HOLD_ANDROID : MAIN_HOLD_ANDROID;
 +                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
 +            } else {
++                lastLeafTapHold = SUB_HOLD_IOS;                 // iOS：不停顿（原行为）
 +                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
 +            }
 +            dbg('tap', 'tag=' + (event && event.target ? event.target.tagName : '?')
@@ -1255,7 +1286,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +1036,8 @@
+@@ -30,13 +1056,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -1271,7 +1302,7 @@
          });
  
      }
-@@ -130,12 +1131,15 @@
+@@ -130,12 +1151,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
@@ -1293,7 +1324,7 @@
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -144,42 +1148,122 @@
+@@ -144,42 +1168,122 @@
              $('body').append($menu);
  
              $('.dropdown-context:not(.dropdown-context-sub)').hide();
@@ -1430,7 +1461,7 @@
 ---- src/public/js/context-js/context-js.js
 --- lsky-pro@38d52c46/public/js/context-js/context-js.js	（上游原文件）
 +++ src/public/js/context-js/context-js.js	（本 fork）
-@@ -1 +1,1269 @@
+@@ -1 +1,1289 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1497,9 +1528,17 @@
 +    const isIOSUA = /iPhone|iPad|iPod/i.test(UA_STR);
 +    const isAndroidUA = /Android/i.test(UA_STR);          // 仅供诊断对比用，不参与取值
 +    const useLongFade = ! isIOSUA;
-+    const SUB_FADE_ANDROID = 420;   // 非 iOS（安卓等）· 二级菜单项（子菜单里的项）
-+    const MAIN_FADE_ANDROID = 200;  // 非 iOS · 一级菜单项（主菜单直接项）—— 比二级短
-+    const SUB_FADE_IOS = 280;       // iOS · 二级菜单项（保持 2026-10-08 第七轮定下的值，别再动）
++    // 【2026-10-08 老师两轮反馈后的结论】"关闭延迟"必须做成**先保持原样一小段时间、再收**，
++    // 而不是"立刻开始慢慢淡出" —— 后者第一帧就在变淡，观感上仍然是"马上就关了"
++    //（真机打点显示 420/200 确实都传进 fadeOut 了，可老师感觉"跟没变一样"，就是这个原因）。
++    // 所以拆成 hold（完全静止、让人看清）+ fade（之后的淡出）：
++    const SUB_HOLD_ANDROID = 320;   // 非 iOS · 二级：停住 320ms（这一段菜单一点都不变）
++    const SUB_FADE_ANDROID = 140;   // 非 iOS · 二级：然后 140ms 淡出
++    const MAIN_HOLD_ANDROID = 160;  // 非 iOS · 一级：停住 160ms（比二级短）
++    const MAIN_FADE_ANDROID = 120;  // 非 iOS · 一级：然后 120ms 淡出
++    // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
++    const SUB_HOLD_IOS = 0;
++    const SUB_FADE_IOS = 280;
 +    const LEAF_CLOSE_FADE = useLongFade ? SUB_FADE_ANDROID : SUB_FADE_IOS;
 +    // 【临时诊断，拿到老师真机数据后删除】?dbg=1 时把平台判据打出去
 +    const DBG_ON = /[?&]dbg=1\b/.test(location.search);
@@ -1702,6 +1741,7 @@
 +    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
 +    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
 +    let lastLeafTapFade = LEAF_CLOSE_FADE;  // 那一次点击对应的淡出时长（一级/二级不一样，见上面常量）
++    let lastLeafTapHold = 0;                // 那一次点击对应的「先停住」时长（0 = 立即开始淡出）
 +    let suppressClickUntil = 0;
 +    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
 +    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -1842,10 +1882,12 @@
 +        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
 +        // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
 +        const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
-+        dbg('close', 'leaf=' + leafClose + '|fade=' + fade + '|def=' + options.fadeSpeed
++        // 「先停住」的时长：这一段菜单**完全不变化**，让人看清点在哪儿，然后才开始淡出。
++        const hold = leafClose ? (lastLeafTapHold || 0) : 0;
++        dbg('close', 'leaf=' + leafClose + '|hold=' + hold + '|fade=' + fade + '|def=' + options.fadeSpeed
 +            + '|subFadeConst=' + LEAF_CLOSE_FADE + '|useLong=' + useLongFade);
-+        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
-+        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
++        // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
++        menuClosingUntil = Date.now() + hold + fade + MENU_FADE_GUARD;
 +
 +        if (! leafClose) {
 +            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
@@ -1855,11 +1897,18 @@
 +        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
 +        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 +
-+        $('.dropdown-context').fadeOut(fade, function () {
-+            $('.dropdown-context').css({ display: '' });
-+            $('.dropdown-context .drop-left').removeClass('drop-left');
-+            $('.dropdown-context .touch-open').removeClass('touch-open');
-+        });
++        const doFadeOut = function () {
++            $('.dropdown-context').fadeOut(fade, function () {
++                $('.dropdown-context').css({ display: '' });
++                $('.dropdown-context .drop-left').removeClass('drop-left');
++                $('.dropdown-context .touch-open').removeClass('touch-open');
++            });
++        };
++        if (hold > 0) {
++            setTimeout(doFadeOut, hold);   // 先原样停住 hold 毫秒（菜单一动不动）再淡出
++        } else {
++            doFadeOut();
++        }
 +        // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
 +        //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
 +        //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
@@ -1868,7 +1917,7 @@
 +            if (leafClose) {
 +                exitSubmenuInplace(true);
 +            }
-+        }, fade + 150);
++        }, hold + fade + 150);
 +    }
 +
 +    function isInsideMenu(node) {
@@ -2448,8 +2497,10 @@
 +            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
 +            const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
 +            if (useLongFade) {
++                lastLeafTapHold = inSubmenu ? SUB_HOLD_ANDROID : MAIN_HOLD_ANDROID;
 +                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
 +            } else {
++                lastLeafTapHold = SUB_HOLD_IOS;                 // iOS：不停顿（原行为）
 +                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
 +            }
 +            dbg('tap', 'tag=' + (event && event.target ? event.target.tagName : '?')

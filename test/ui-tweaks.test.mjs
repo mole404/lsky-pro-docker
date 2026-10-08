@@ -326,18 +326,24 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         /asset\('css\/context-js\/context-js\.css'\)\s*\}\}\?v=\{\{\s*\\App\\Utils::assetVersion\('css\/context-js\/context-js\.css'\)/.test(imagesBlade));
     const ctxJs = read('public', 'js', 'context-js', 'context-js.js');
     // 2026-10-08 第十一轮：关闭淡出分级，且**只对安卓是新增行为**（老师明确：iOS 不要动）。
-    check('关闭淡出分级：安卓二级比 iOS 二级长，安卓一级短于安卓二级',
-        /const SUB_FADE_ANDROID = (\d+);/.test(ctxJs) && /const MAIN_FADE_ANDROID = (\d+);/.test(ctxJs)
-        && /const SUB_FADE_IOS = (\d+);/.test(ctxJs)
-        && Number(ctxJs.match(/const SUB_FADE_ANDROID = (\d+);/)[1]) > Number(ctxJs.match(/const SUB_FADE_IOS = (\d+);/)[1])
-        && Number(ctxJs.match(/const MAIN_FADE_ANDROID = (\d+);/)[1]) < Number(ctxJs.match(/const SUB_FADE_ANDROID = (\d+);/)[1]));
+    // 2026-10-08 口径修正：观感上的"关闭延迟"= hold（停住）+ fade（淡出）之和，
+    // 所以要比**总时长**，不能只看 fade（安卓现在是 320+140=460，iOS 是 0+280=280）。
+    const num = (re) => Number((ctxJs.match(re) || [])[1]);
+    const subTotalAndroid = num(/const SUB_HOLD_ANDROID = (\d+);/) + num(/const SUB_FADE_ANDROID = (\d+);/);
+    const mainTotalAndroid = num(/const MAIN_HOLD_ANDROID = (\d+);/) + num(/const MAIN_FADE_ANDROID = (\d+);/);
+    const subTotalIOS = num(/const SUB_HOLD_IOS = (\d+);/) + num(/const SUB_FADE_IOS = (\d+);/);
+    check('总关闭时长：非 iOS 二级 > iOS 二级，且非 iOS 一级 < 非 iOS 二级（老师要求的分级）',
+        [subTotalAndroid, mainTotalAndroid, subTotalIOS].every((n) => n > 0)
+        && subTotalAndroid > subTotalIOS
+        && mainTotalAndroid < subTotalAndroid,
+        `安卓二级 ${subTotalAndroid} / 安卓一级 ${mainTotalAndroid} / iOS 二级 ${subTotalIOS}`);
     check('iOS 完全不改：二级仍是第七轮定的 280，一级回落到 options.fadeSpeed（原行为）',
         Number(ctxJs.match(/const SUB_FADE_IOS = (\d+);/)[1]) === 280
         && /lastLeafTapFade = inSubmenu \? SUB_FADE_IOS : options\.fadeSpeed;/.test(ctxJs));
     check('平台判据是"反判"（只有 iOS 走原值），避免 UA 判不出 Android 时退化成没变',
         /const isIOSUA = \/iPhone\|iPad\|iPod\/i\.test\(UA_STR\);/.test(ctxJs)
         && /const useLongFade = ! isIOSUA;/.test(ctxJs)
-        && /if \(useLongFade\) \{[\s\S]{0,120}MAIN_FADE_ANDROID[\s\S]{0,200}\} else \{[\s\S]{0,200}options\.fadeSpeed/.test(ctxJs));
+        && /if \(useLongFade\) \{[\s\S]{0,200}MAIN_FADE_ANDROID[\s\S]{0,300}\} else \{[\s\S]{0,300}options\.fadeSpeed/.test(ctxJs));
     check('点二级项后不「先退回一级」：叶子项路径跳过即时 exitSubmenuInplace，改用延时收尾',
         /const leafClose = \(Date\.now\(\) - lastLeafTapAt\) < LEAF_FADE_WINDOW;/.test(ctxJs)
         && /if \(! leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs)
@@ -345,9 +351,9 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     check('叶子项点击后定格高亮：有 .context-pressed 样式（用强调色变量，不写死）',
         /\.dropdown-context a\.context-pressed\{[^}]*var\(--lsky-accent\)/.test(ctxCss)
         && /\.dropdown-context a\.context-pressed\s*\{[\s\S]{0,120}var\(--lsky-accent\)/.test(ctxLess));
-    check('本次关闭的淡出被放慢（非 iOS 二级 420 / iOS 二级 280，默认仍是 options.fadeSpeed）',
+    check('叶子项关闭走的仍是分平台/分级的时长（非 iOS 二级 140 + 停 320，iOS 二级 280 不停）',
         /const LEAF_CLOSE_FADE = useLongFade \? SUB_FADE_ANDROID : SUB_FADE_IOS;/.test(ctxJs)
-        && /menuClosingUntil = Date\.now\(\) \+ fade \+ MENU_FADE_GUARD/.test(ctxJs));
+        && /const SUB_FADE_IOS = 280;/.test(ctxJs));
     check('叶子项判据挂在 li 上（挂 `li > a` 实测不触发 —— target 是 li）',
         /\$\(document\)\.on\('click', '\.dropdown-context li', function \(\) \{/.test(ctxJs)
         && ! /\$\(document\)\.on\('click', '\.dropdown-context li:not\(\.dropdown-submenu\) > a'/.test(ctxJs));
@@ -356,6 +362,20 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         && /\.removeClass\(LEAF_PRESSED_CLASS\)/.test(ctxJs));
     check('两份 context-js.js 字节一致（浏览器加载的是 public 那份）',
         ctxJs === read('resources', 'js', 'context-js.js'));
+    // 2026-10-08 第十二轮：老师两轮反馈后的结论 —— "关闭延迟"必须是「先停住再收」，
+    // 不是「立刻开始慢慢淡出」（后者第一帧就在变，观感仍是"马上就关"）。
+    check('关闭是「先停住再淡出」：hold 与 fade 分开，且菜单在 hold 期间完全不变化',
+        /const SUB_HOLD_ANDROID = (\d+);/.test(ctxJs) && /const SUB_FADE_ANDROID = (\d+);/.test(ctxJs)
+        && Number(ctxJs.match(/const SUB_HOLD_ANDROID = (\d+);/)[1]) > 0
+        && /setTimeout\(doFadeOut, hold\);/.test(ctxJs)
+        && /menuClosingUntil = Date\.now\(\) \+ hold \+ fade \+ MENU_FADE_GUARD/.test(ctxJs));
+    check('一级的停顿时长短于二级（老师要求），且 iOS 不停顿（SUB_HOLD_IOS = 0）',
+        Number(ctxJs.match(/const MAIN_HOLD_ANDROID = (\d+);/)[1])
+            < Number(ctxJs.match(/const SUB_HOLD_ANDROID = (\d+);/)[1])
+        && /const SUB_HOLD_IOS = 0;/.test(ctxJs)
+        && /else \{\s*\n\s*lastLeafTapHold = SUB_HOLD_IOS;/.test(ctxJs));
+    check('清理与状态还原也一起延后到 hold + fade 之后（否则菜单还没淡完就被动）',
+        /\}, hold \+ fade \+ 150\);/.test(ctxJs));
     const activeRuleLine = ctxCss.split('\n').find((l) => l.includes('li>a:active')) || '';
     check('按下态与 hover 用同一个强调色变量（不许写死颜色）',
         activeRuleLine.includes('var(--lsky-accent)'),

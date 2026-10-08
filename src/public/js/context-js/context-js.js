@@ -63,9 +63,17 @@ window.context = window.context || (function () {
     const isIOSUA = /iPhone|iPad|iPod/i.test(UA_STR);
     const isAndroidUA = /Android/i.test(UA_STR);          // 仅供诊断对比用，不参与取值
     const useLongFade = ! isIOSUA;
-    const SUB_FADE_ANDROID = 420;   // 非 iOS（安卓等）· 二级菜单项（子菜单里的项）
-    const MAIN_FADE_ANDROID = 200;  // 非 iOS · 一级菜单项（主菜单直接项）—— 比二级短
-    const SUB_FADE_IOS = 280;       // iOS · 二级菜单项（保持 2026-10-08 第七轮定下的值，别再动）
+    // 【2026-10-08 老师两轮反馈后的结论】"关闭延迟"必须做成**先保持原样一小段时间、再收**，
+    // 而不是"立刻开始慢慢淡出" —— 后者第一帧就在变淡，观感上仍然是"马上就关了"
+    //（真机打点显示 420/200 确实都传进 fadeOut 了，可老师感觉"跟没变一样"，就是这个原因）。
+    // 所以拆成 hold（完全静止、让人看清）+ fade（之后的淡出）：
+    const SUB_HOLD_ANDROID = 320;   // 非 iOS · 二级：停住 320ms（这一段菜单一点都不变）
+    const SUB_FADE_ANDROID = 140;   // 非 iOS · 二级：然后 140ms 淡出
+    const MAIN_HOLD_ANDROID = 160;  // 非 iOS · 一级：停住 160ms（比二级短）
+    const MAIN_FADE_ANDROID = 120;  // 非 iOS · 一级：然后 120ms 淡出
+    // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
+    const SUB_HOLD_IOS = 0;
+    const SUB_FADE_IOS = 280;
     const LEAF_CLOSE_FADE = useLongFade ? SUB_FADE_ANDROID : SUB_FADE_IOS;
     // 【临时诊断，拿到老师真机数据后删除】?dbg=1 时把平台判据打出去
     const DBG_ON = /[?&]dbg=1\b/.test(location.search);
@@ -268,6 +276,7 @@ window.context = window.context || (function () {
     let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
     let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
     let lastLeafTapFade = LEAF_CLOSE_FADE;  // 那一次点击对应的淡出时长（一级/二级不一样，见上面常量）
+    let lastLeafTapHold = 0;                // 那一次点击对应的「先停住」时长（0 = 立即开始淡出）
     let suppressClickUntil = 0;
     let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
     let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -408,10 +417,12 @@ window.context = window.context || (function () {
         const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
         // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
         const fade = leafClose ? (lastLeafTapFade || LEAF_CLOSE_FADE) : options.fadeSpeed;
-        dbg('close', 'leaf=' + leafClose + '|fade=' + fade + '|def=' + options.fadeSpeed
+        // 「先停住」的时长：这一段菜单**完全不变化**，让人看清点在哪儿，然后才开始淡出。
+        const hold = leafClose ? (lastLeafTapHold || 0) : 0;
+        dbg('close', 'leaf=' + leafClose + '|hold=' + hold + '|fade=' + fade + '|def=' + options.fadeSpeed
             + '|subFadeConst=' + LEAF_CLOSE_FADE + '|useLong=' + useLongFade);
-        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
-        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
+        // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
+        menuClosingUntil = Date.now() + hold + fade + MENU_FADE_GUARD;
 
         if (! leafClose) {
             exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
@@ -421,11 +432,18 @@ window.context = window.context || (function () {
         // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
         // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 
-        $('.dropdown-context').fadeOut(fade, function () {
-            $('.dropdown-context').css({ display: '' });
-            $('.dropdown-context .drop-left').removeClass('drop-left');
-            $('.dropdown-context .touch-open').removeClass('touch-open');
-        });
+        const doFadeOut = function () {
+            $('.dropdown-context').fadeOut(fade, function () {
+                $('.dropdown-context').css({ display: '' });
+                $('.dropdown-context .drop-left').removeClass('drop-left');
+                $('.dropdown-context .touch-open').removeClass('touch-open');
+            });
+        };
+        if (hold > 0) {
+            setTimeout(doFadeOut, hold);   // 先原样停住 hold 毫秒（菜单一动不动）再淡出
+        } else {
+            doFadeOut();
+        }
         // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
         //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
         //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
@@ -434,7 +452,7 @@ window.context = window.context || (function () {
             if (leafClose) {
                 exitSubmenuInplace(true);
             }
-        }, fade + 150);
+        }, hold + fade + 150);
     }
 
     function isInsideMenu(node) {
@@ -1014,8 +1032,10 @@ window.context = window.context || (function () {
             // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
             const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
             if (useLongFade) {
+                lastLeafTapHold = inSubmenu ? SUB_HOLD_ANDROID : MAIN_HOLD_ANDROID;
                 lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
             } else {
+                lastLeafTapHold = SUB_HOLD_IOS;                 // iOS：不停顿（原行为）
                 lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
             }
             dbg('tap', 'tag=' + (event && event.target ? event.target.tagName : '?')
