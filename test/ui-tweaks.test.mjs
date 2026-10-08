@@ -330,25 +330,32 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     // 所以要比**总时长**，不能只看 fade（安卓现在是 320+140=460，iOS 是 0+280=280）。
     const num = (re) => Number((ctxJs.match(re) || [])[1]);
     const subTotalAndroid = num(/const SUB_HOLD_ANDROID = (\d+);/) + num(/const SUB_FADE_ANDROID = (\d+);/);
-    const mainTotalAndroid = num(/const MAIN_HOLD_ANDROID = (\d+);/) + num(/const MAIN_FADE_ANDROID = (\d+);/);
+    const mainTotalAndroid = num(/const MAIN_HOLD_ANDROID = (\d+);/) + num(/const MAIN_FADE = (\d+);/);
     const subTotalIOS = num(/const SUB_HOLD_IOS = (\d+);/) + num(/const SUB_FADE_IOS = (\d+);/);
     check('总关闭时长：非 iOS 二级 > iOS 二级，且非 iOS 一级 < 非 iOS 二级（老师要求的分级）',
         [subTotalAndroid, mainTotalAndroid, subTotalIOS].every((n) => n > 0)
         && subTotalAndroid > subTotalIOS
         && mainTotalAndroid < subTotalAndroid,
         `安卓二级 ${subTotalAndroid} / 安卓一级 ${mainTotalAndroid} / iOS 二级 ${subTotalIOS}`);
-    check('iOS 完全不改：二级仍是第七轮定的 280，一级回落到 options.fadeSpeed（原行为）',
+    // 2026-10-08 最终口径：iOS 的**二级**保持第七轮的 280 不变；**一级**按老师后来的要求
+    // 改用统一的 MAIN_FADE（"我发现 iOS 的一级菜单也没有淡出"——这条覆盖了早前"iOS 一律不动"的范围）。
+    check('iOS：二级仍是第七轮定的 280，一级改用统一的 MAIN_FADE（老师后来明确要求）',
         Number(ctxJs.match(/const SUB_FADE_IOS = (\d+);/)[1]) === 280
-        && /lastLeafTapFade = inSubmenu \? SUB_FADE_IOS : options\.fadeSpeed;/.test(ctxJs));
+        && /lastLeafTapFade = inSubmenu \? SUB_FADE_IOS : MAIN_FADE;/.test(ctxJs));
     check('三级判据：桌面用 UA 判定（不用 hover:none —— headless/无鼠标设备会误报），桌面走"完全原样"',
         /const isDesktopUA = ! \/Mobile\|Android\|iPhone\|iPad\|iPod\/i\.test\(UA_STR\);/.test(ctxJs)
         && /if \(isDesktopUA\) \{[\s\S]{0,200}lastLeafTapHold = 0;[\s\S]{0,200}options\.fadeSpeed/.test(ctxJs));
     check('诊断已全部撤除（没有 ?dbg 打点残留）',
         ! /dbg-ctx|DBG_ON|dbgSid/.test(ctxJs) && ! /\?dbg=1/.test(ctxJs));
-    check('一级的淡出加长到看得见（>= 160ms），且总时长仍短于二级',
-        Number(ctxJs.match(/const MAIN_FADE_ANDROID = (\d+);/)[1]) >= 160
-        && (Number(ctxJs.match(/const MAIN_HOLD_ANDROID = (\d+);/)[1]) + Number(ctxJs.match(/const MAIN_FADE_ANDROID = (\d+);/)[1]))
-           < (Number(ctxJs.match(/const SUB_HOLD_ANDROID = (\d+);/)[1]) + Number(ctxJs.match(/const SUB_FADE_ANDROID = (\d+);/)[1])));
+    check('一级的淡出**所有平台统一**且足够明显（>= 200ms，老师：iOS 一级也没有淡出）',
+        Number(ctxJs.match(/const MAIN_FADE = (\d+);/)[1]) >= 200
+        // 三个分支（电脑 / iOS / 其它触摸）的一级都必须指向 MAIN_FADE
+        && (ctxJs.match(/\? options\.fadeSpeed : MAIN_FADE/g) || []).length >= 1
+        && (ctxJs.match(/\? SUB_FADE_IOS : MAIN_FADE/g) || []).length >= 1
+        && (ctxJs.match(/\? SUB_FADE_ANDROID : MAIN_FADE/g) || []).length >= 1
+        && ! /MAIN_FADE_ANDROID|MAIN_FADE_DESKTOP/.test(ctxJs));
+    check('电脑仍然「不停顿」（hold 0），只有淡出被加长 —— 老师要求电脑不要延迟',
+        /if \(isDesktopUA\) \{[\s\S]{0,200}lastLeafTapHold = 0;/.test(ctxJs));
     check('点二级项后不「先退回一级」：叶子项路径跳过即时 exitSubmenuInplace，改用延时收尾',
         /const leafClose = \(Date\.now\(\) - lastLeafTapAt\) < LEAF_FADE_WINDOW;/.test(ctxJs)
         && /if \(! leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs)
@@ -379,7 +386,7 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         Number(ctxJs.match(/const MAIN_HOLD_ANDROID = (\d+);/)[1])
             < Number(ctxJs.match(/const SUB_HOLD_ANDROID = (\d+);/)[1])
         && /const SUB_HOLD_IOS = 0;/.test(ctxJs)
-        && /isIOSUA\) \{\s*\n\s*\/\/[^\n]*\n\s*lastLeafTapHold = SUB_HOLD_IOS;/.test(ctxJs));
+        && /isIOSUA\) \{[\s\S]{0,600}?lastLeafTapHold = SUB_HOLD_IOS;/.test(ctxJs));
     check('清理与状态还原也一起延后到 hold + fade 之后（否则菜单还没淡完就被动）',
         /\}, hold \+ fade \+ 150\);/.test(ctxJs));
     const activeRuleLine = ctxCss.split('\n').find((l) => l.includes('li>a:active')) || '';

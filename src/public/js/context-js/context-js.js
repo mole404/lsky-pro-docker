@@ -72,9 +72,12 @@ window.context = window.context || (function () {
     const SUB_HOLD_ANDROID = 320;   // 非 iOS · 二级：停住 320ms（这一段菜单一点都不变）
     const SUB_FADE_ANDROID = 140;   // 非 iOS · 二级：然后 140ms 淡出
     const MAIN_HOLD_ANDROID = 160;  // 触摸·非 iOS · 一级：停住 160ms（比二级短）
-    const MAIN_FADE_ANDROID = 180;  // 触摸·非 iOS · 一级：然后 180ms 淡出
-    // ↑ 老师反馈「一级是直接消失、没有淡出」：原来一级 fade 只有 120ms，实测到不可见仅 58ms，
-    //   观感就是"停一下然后没了"。加长到 180ms 让淡出这个过程看得见（总时长仍短于二级的 460）。
+    // 一级菜单项的**淡出时长：所有平台统一**（老师 2026-10-08 最终口径：
+    // "所有平台的一级菜单淡出我希望都更明显，因为我发现 iOS 的一级菜单也没有淡出"）。
+    // 原来一级 fade 只有 120ms（实测到不可见仅 58ms，看着像"直接消失"）⇒ 现在 260ms。
+    // 注意：这只影响"淡出过程"，不影响 hold（停顿）——
+    //   电脑 hold 仍是 0（老师要求"电脑上不要延迟"），安卓 hold 仍是 160。
+    const MAIN_FADE = 260;
     // iOS 保持 2026-10-08 第七轮的既定行为：不停顿、直接淡出 280ms（老师：iOS 已经很好了，不要动）
     const SUB_HOLD_IOS = 0;
     const SUB_FADE_IOS = 280;
@@ -1018,18 +1021,19 @@ window.context = window.context || (function () {
             // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
             const inSubmenu = $li.closest('.dropdown-context-sub').length > 0;
             if (isDesktopUA) {
-                // 电脑：**完全保持原样** —— 老师明确要求"电脑上不要延迟"。
-                //（上一轮只排除 iOS，把桌面也算进了"要延迟"，是判据缺陷。）
+                // 电脑：**不停顿**（老师明确要求"电脑上不要延迟"），二级淡出保持原样；
+                // 但一级项的**淡出**按老师要求加长（停顿与淡出是两件事）。
                 lastLeafTapHold = 0;
-                lastLeafTapFade = options.fadeSpeed;
+                lastLeafTapFade = inSubmenu ? options.fadeSpeed : MAIN_FADE;
             } else if (isIOSUA) {
-                // iOS：第七轮定下的既定行为，一字不动（老师：iOS 已经很好了）
+                // iOS：二级保持第七轮的 280 不变；一级按老师 2026-10-08 的要求加长淡出
+                //（"我发现 iOS 的一级菜单也没有淡出"）—— 这条覆盖了此前"iOS 一律不要动"的范围。
                 lastLeafTapHold = SUB_HOLD_IOS;
-                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : options.fadeSpeed;
+                lastLeafTapFade = inSubmenu ? SUB_FADE_IOS : MAIN_FADE;
             } else {
                 // 手机/平板（安卓等）：停住 + 淡出，两级不同时长
                 lastLeafTapHold = inSubmenu ? SUB_HOLD_ANDROID : MAIN_HOLD_ANDROID;
-                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE_ANDROID;
+                lastLeafTapFade = inSubmenu ? SUB_FADE_ANDROID : MAIN_FADE;
             }
             $a.addClass(LEAF_PRESSED_CLASS);
         });
