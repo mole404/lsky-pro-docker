@@ -2278,6 +2278,17 @@
             };
 
             const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0, selfSelect: false};
+            /* 最近一次触摸手势的时刻（2026-10-08）。判「这是不是触摸操作」不靠设备/UA：
+             * 老师实测「手机端滑动页面还是会触发框选」——因为 utils.isMobile() 是
+             * 「移动 UA **且 screen.width < 768**」，iPad 这类宽屏 iOS 设备上它直接返回 false，
+             * 只按它判断的守卫等于没有。改成「本页最近发生过触摸」：与设备无关，
+             * 桌面鼠标用户永远不会命中（他们根本不会有 touchstart）。 */
+            const TOUCH_GRACE_MS = 1500;      // 覆盖 touchend 之后浏览器补发的那串合成 mouse 事件
+            let lastTouchAt = 0;
+            const touchJustNow = () => (Date.now() - lastTouchAt) < TOUCH_GRACE_MS;
+            document.addEventListener('touchstart', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
+            document.addEventListener('touchmove', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
+            document.addEventListener('touchend', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
             let dsRaf = 0;
             const dsBoxRect = () => {
                 const l = Math.min(dsBox.x0, dsBox.x1), t = Math.min(dsBox.y0, dsBox.y1);
@@ -2350,7 +2361,7 @@
                  * 手指在图片墙上滑动应当是滚页面，不该顺带把沿途的图都框上、和滚动手势打架。
                  * ★ 只让框「不再长大」，不取消 mousedown 那一发：库的**点选**正是靠按下时的
                  *   点状框与卡片相交来落选的（见上面 Selector.rect 的说明）⇒ 点图片/点圆勾照常。 */
-                if (utils.isMobile()) {
+                if (utils.isMobile() || touchJustNow()) {
                     return;
                 }
                 dsBox.x1 = e.clientX;
@@ -2361,7 +2372,7 @@
                  * 只认"真的是拖动"（框任一边 > 4px）—— 侧栏上单击导航仍然是单击。
                  * 用库的对外 API 落选，这样 elementselect / elementunselect 事件照常发，
                  * 顶部的「已选择 N 张」操作栏也照常更新（bindOperates 再兜一次）。 */
-                if (dsBox.on && dsBox.selfSelect && ! utils.isMobile()) {
+                if (dsBox.on && dsBox.selfSelect && ! utils.isMobile() && ! touchJustNow()) {
                     const r = dsBoxRect();
                     if (r.width > 4 || r.height > 4) {
                         try {

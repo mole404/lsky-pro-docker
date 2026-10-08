@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   ef040c294081908063078975eeb3b4f9  src/resources/views/user/images.blade.php
+#   cb131d9b9e2599a82a316b255013efd1  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -121,6 +121,13 @@
 #      实测：手机 UA 拖动 → 框宽 0、不多选（仍可点选）；桌面拖动 → 框宽 274、选中 9 张。
 #   ⑧ iOS 点图片闪灰：改动后不再 preventDefault，iOS 把默认的 -webkit-tap-highlight-color 放回来了；
 #      在图片墙范围内关掉它（#images-scroll .images-item）。它是继承属性，卡片内的 img 与小圆勾一并覆盖。
+# 2026-10-08 第四轮（老师实测反馈：手机端滑动仍会触发框选）：
+#   ⑨ 框选守卫从「只有 utils.isMobile()」补成两道 —— utils.isMobile() 的实现是
+#      「移动 UA **且 screen.width < 768**」，iPad 这类宽屏 iOS 设备上直接返回 false，只按它判等于没判。
+#      新增与设备无关的第二道闸：本页最近发生过触摸（TOUCH_GRACE_MS=1500，覆盖 touchend 之后浏览器
+#      补发的那串合成 mouse 事件）⇒ 触摸操作一律不扩框；桌面鼠标用户不会有 touchstart，框选照常。
+#      三个 touch 事件都用 {capture:true, passive:true} 刷新 lastTouchAt（非 passive 的 document touchmove
+#      会让 Chrome 失去滚动快路径）。实测：触摸+紧接合成拖动 → 框宽 0、不多选；纯鼠标拖动 → 框宽 274、选 9 张。
 
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
@@ -4622,7 +4629,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,10 +2155,263 @@
+@@ -468,10 +2155,274 @@
              });
          </script>
          <script>
@@ -4749,6 +4756,17 @@
 +            };
 +
 +            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0, selfSelect: false};
++            /* 最近一次触摸手势的时刻（2026-10-08）。判「这是不是触摸操作」不靠设备/UA：
++             * 老师实测「手机端滑动页面还是会触发框选」——因为 utils.isMobile() 是
++             * 「移动 UA **且 screen.width < 768**」，iPad 这类宽屏 iOS 设备上它直接返回 false，
++             * 只按它判断的守卫等于没有。改成「本页最近发生过触摸」：与设备无关，
++             * 桌面鼠标用户永远不会命中（他们根本不会有 touchstart）。 */
++            const TOUCH_GRACE_MS = 1500;      // 覆盖 touchend 之后浏览器补发的那串合成 mouse 事件
++            let lastTouchAt = 0;
++            const touchJustNow = () => (Date.now() - lastTouchAt) < TOUCH_GRACE_MS;
++            document.addEventListener('touchstart', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
++            document.addEventListener('touchmove', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
++            document.addEventListener('touchend', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
 +            let dsRaf = 0;
 +            const dsBoxRect = () => {
 +                const l = Math.min(dsBox.x0, dsBox.x1), t = Math.min(dsBox.y0, dsBox.y1);
@@ -4821,7 +4839,7 @@
 +                 * 手指在图片墙上滑动应当是滚页面，不该顺带把沿途的图都框上、和滚动手势打架。
 +                 * ★ 只让框「不再长大」，不取消 mousedown 那一发：库的**点选**正是靠按下时的
 +                 *   点状框与卡片相交来落选的（见上面 Selector.rect 的说明）⇒ 点图片/点圆勾照常。 */
-+                if (utils.isMobile()) {
++                if (utils.isMobile() || touchJustNow()) {
 +                    return;
 +                }
 +                dsBox.x1 = e.clientX;
@@ -4832,7 +4850,7 @@
 +                 * 只认"真的是拖动"（框任一边 > 4px）—— 侧栏上单击导航仍然是单击。
 +                 * 用库的对外 API 落选，这样 elementselect / elementunselect 事件照常发，
 +                 * 顶部的「已选择 N 张」操作栏也照常更新（bindOperates 再兜一次）。 */
-+                if (dsBox.on && dsBox.selfSelect && ! utils.isMobile()) {
++                if (dsBox.on && dsBox.selfSelect && ! utils.isMobile() && ! touchJustNow()) {
 +                    const r = dsBoxRect();
 +                    if (r.width > 4 || r.height > 4) {
 +                        try {
@@ -4886,7 +4904,7 @@
  
              const bindOperates = () => {
                  let selected = ds.getSelection();
-@@ -486,10 +2426,14 @@
+@@ -486,10 +2437,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4903,7 +4921,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -498,21 +2442,73 @@
+@@ -498,21 +2453,73 @@
              };
  
              ds.subscribe('predragstart', ({ event }) => {
@@ -4982,7 +5000,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2529,250 @@
+@@ -533,27 +2540,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -5250,7 +5268,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2783,9 @@
+@@ -564,7 +2794,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -5261,7 +5279,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2793,19 @@
+@@ -572,47 +2804,19 @@
                          }
                      });
                  },
@@ -5318,7 +5336,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2842,10 @@
+@@ -649,6 +2853,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -5329,7 +5347,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2859,23 @@
+@@ -662,13 +2870,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -5355,7 +5373,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2890,11 @@
+@@ -683,7 +2901,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -5367,7 +5385,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2905,13 @@
+@@ -694,10 +2916,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -5383,7 +5401,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +2933,11 @@
+@@ -719,6 +2944,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -5395,7 +5413,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +3002,9 @@
+@@ -783,9 +3013,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -5408,7 +5426,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +3022,10 @@
+@@ -803,9 +3033,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -5420,7 +5438,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -844,17 +3064,27 @@
+@@ -844,17 +3075,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;

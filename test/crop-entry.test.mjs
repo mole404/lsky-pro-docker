@@ -281,8 +281,18 @@ console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失
     // 2026-10-08：老师定「框选只在电脑端生效」（手机上拖框会和滚页面手势打架）。
     // 契约：mousemove 里必须先判 utils.isMobile() 再更新框 —— 只让框不再长大，不动 mousedown 那一发
     //（库的点选正是靠按下时的点状框），否则手机端连点选都没了。
-    check('⑨ 手机端不拖框：mousemove 更新框之前有 utils.isMobile() 守卫',
-        /addEventListener\('mousemove',[\s\S]{0,600}utils\.isMobile\(\)[\s\S]{0,80}return;[\s\S]{0,200}dsBox\.x1 = e\.clientX/.test(code));
+    // 2026-10-08 追加：只按 utils.isMobile()（= 移动 UA **且 screen.width < 768**）判断会漏 ——
+    // iPad 这类宽屏 iOS 设备上它直接返回 false（老师实测「手机端滑动页面仍会触发框选」）。
+    // 所以必须同时有第二道与设备无关的闸：本页最近发生过触摸（touchJustNow）。
+    check('⑨ 手机端不拖框：mousemove 里同时有 utils.isMobile() 与「最近发生过触摸」两道守卫',
+        /addEventListener\('mousemove',[\s\S]{0,900}utils\.isMobile\(\) \|\| touchJustNow\(\)[\s\S]{0,120}return;[\s\S]{0,200}dsBox\.x1 = e\.clientX/.test(code));
+    check('⑨ 触摸时间窗已实现：三个 touch 事件都刷新 lastTouchAt，且监听是 passive（不能让 Chrome 失去滚动快路径）',
+        /touchstart', \(\) => \{ lastTouchAt = Date\.now\(\); \}, \{capture: true, passive: true\}/.test(code)
+        && /touchmove', \(\) => \{ lastTouchAt = Date\.now\(\); \}, \{capture: true, passive: true\}/.test(code)
+        && /touchend', \(\) => \{ lastTouchAt = Date\.now\(\); \}, \{capture: true, passive: true\}/.test(code)
+        && /const touchJustNow = \(\) => \(Date\.now\(\) - lastTouchAt\) < TOUCH_GRACE_MS/.test(code));
+    check('⑨ 鼠标松手后的「区域外自选」也带同样两道守卫',
+        /dsBox\.selfSelect && ! utils\.isMobile\(\) && ! touchJustNow\(\)/.test(code));
     check('⑨ 手机端不靠拖动落选：mouseup 的自选分支也带 utils.isMobile() 守卫',
         /dsBox\.selfSelect && ! utils\.isMobile\(\)/.test(code));
     check('④ 区域外的单击不算框选（框任一边 > 4px 才算拖动）',
