@@ -394,9 +394,12 @@ jobs:
             echo "== 长按阈值 =="
             grep -n "LONG_PRESS_DELAY = " /var/www/lsky/public/js/context-js/context-js.js
             echo "== 菜单交互补丁（标记行）=="
+            # head 的上限要留富余：下面的校验是对这整段 dump 做 grep，一旦被截断，
+            # 排在后面的标记（如 isMenuOpen）就会"看起来不存在"而误报。
+            # 曾经踩过：匹配行 22 → 23，只多一行就把 isMenuOpen 从第 20 位顶到第 21 位。
             grep -n -e "MENU_OPEN_GRACE = " -e "installMenuGuard()" -e "touch-open" -e "isMenuOpen" \
                     -e "MENU_OPEN_IGNORE_INPUT" -e "function menuOnScreen" -e "debugDump" \
-                    /var/www/lsky/public/js/context-js/context-js.js | head -20
+                    /var/www/lsky/public/js/context-js/context-js.js | head -60
             echo "== 补丁文件 md5 =="
             md5sum /var/www/lsky/public/js/context-js/context-js.js
             md5sum /var/www/lsky/resources/js/context-js.js

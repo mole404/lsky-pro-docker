@@ -640,9 +640,38 @@ class ImageService
             '{md5-16}' => substr(md5(microtime().Str::random()), 0, 16),
             '{str-random-16}' => Str::random(),
             '{str-random-10}' => Str::random(10),
-            '{filename}' => Str::replaceLast('.'.$file->getClientOriginalExtension(), '', $file->getClientOriginalName()),
+            '{filename}' => $this->sanitizeFilename(Str::replaceLast('.'.$file->getClientOriginalExtension(), '', $file->getClientOriginalName())),
             '{uid}' => Auth::check() ? Auth::id() : 0,
         ];
         return str_replace(array_keys($array), array_values($array), $pathname);
+    }
+
+    /**
+     * 清掉「出现在 URL 里有特殊含义、或会污染文件系统/HTTP 头」的字符。
+     *
+     * 背景：命名规则替换出来的结果会被直接拼成存储路径，再由 Image::url() 原样拼成直链
+     * —— 全程没有 rawurlencode。文件名里带 ? 时，这个 ? 会被浏览器和服务端当作**查询串
+     * 起点**，服务端拿到的文件名只剩 ? 之前的部分（实测：请求 /a?b.jpg，服务端去找文件
+     * "a"，而磁盘上的文件叫 "a?b.jpg"）⇒ 直链 404、图片永远打不开。# 更彻底：浏览器把
+     * 它当锚点，请求根本不会发出去。% 会被当作百分号编码解析。
+     *
+     * 这些字符在正常文件名里不会出现（Windows/macOS 的文件系统本身就禁止 ? # % 等），
+     * 所以对正常文件名这是**恒等变换** —— 只有通过 API/脚本构造出来的畸形名字会被替换掉，
+     * 不改变任何现有图片的命名结果与链接形态。
+     *
+     * 注意：这里只替换危险字符，不做全量转义/编码。转义会把老图与新图的路径规则分开
+     * （新图 URL 变成 %3F 这类形态），而现有行为必须保持原样。
+     */
+    protected function sanitizeFilename(string $name): string
+    {
+        // URL 特殊字符 + 文件系统/HTTP 头里有风险的字符 → 下划线
+        $name = str_replace(
+            ['?', '#', '%', '+', '/', '\\', '"', "'", '<', '>', '|', '*', ':', ' '],
+            '_',
+            $name
+        );
+
+        // 控制字符（\n \r \t \0 等）→ 下划线，避免污染 HTTP 头与日志
+        return preg_replace('/[\x00-\x1F\x7F]/', '_', $name);
     }
 }

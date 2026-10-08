@@ -144,6 +144,10 @@ src/resources/views/common/api.blade.php
 #         的居中组合；尺寸由组件定，调用方只传文字类）
 src/resources/views/components/application-logo.blade.php
 #   src/resources/views/components/auth-card.blade.php
+#       （2026-10-08：登录页居中修复 —— 原来 LOGO 与卡片同处一个 justify-center 的列里，
+#         居中基准变成「LOGO + 卡片」整体 ⇒ 卡片必然偏下（线上实测 390×844 偏下 35.5px、
+#         1280×720 偏下 38.9px）；改成 LOGO 悬在卡片正上方的绝对定位元素，
+#         居中基准只剩卡片本身。定位用 inline style，避开未生成的 Tailwind 类。）
 src/resources/views/components/auth-card.blade.php
 #   src/resources/views/components/auth-validation-errors.blade.php
 src/resources/views/components/auth-validation-errors.blade.php

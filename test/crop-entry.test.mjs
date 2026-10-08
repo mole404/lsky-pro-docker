@@ -212,8 +212,11 @@ console.log('\n[5] 看图器原有选项与钉住的产物没被改动');
         && /body\.viewer-open \{ overflow: visible; \}/.test(blade));
     check('「飞入」CSS 兜底还在', blade.includes('.viewer-canvas > img:not([style])'));
     const dockerfile = fs.readFileSync(path.join(here, '..', 'Dockerfile'), 'utf8');
-    check('Dockerfile 里 context-js 的两个 md5 未被改动（本轮不该碰它）',
-        (dockerfile.match(/c0e513ec8e93fd81b34b3c6de5cf5eb8/g) || []).length === 3);
+    // 2026-10-08：这条原先钉死「context-js 的 md5 不许变」（那时改裁剪不该碰它）。长按健壮性修复
+    // 确实改了 context-js ⇒ 换成「与当前文件实算值一致」，免得又变成一份会漂移的副本。
+    const ctxJsSrc = read('public', 'js', 'context-js', 'context-js.js');
+    check('Dockerfile 里 context-js 的 md5 与当前文件一致（实算，出现 3 处）',
+        (dockerfile.match(new RegExp(require_md5(ctxJsSrc), 'g')) || []).length === 3);
     check('Dockerfile 里 images.blade.php 的 md5 与当前文件一致（实算）',
         dockerfile.includes(blade && require_md5(blade)));
 }
@@ -273,8 +276,33 @@ console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失
     check('④ 允许"区域外（侧栏上）"起框，并在松手时自己落选中',
         /const outOfAreaOk = !! ar && e\.clientX <= ar\.right && e\.clientY >= ar\.top/.test(code)
         && /dsBox\.selfSelect = ! inArea/.test(code)
-        && /dsBox\.selfSelect\)[\s\S]{0,600}ds\.clearSelection\(\)[\s\S]{0,200}ds\.addSelection\(el\)/.test(code)
-        && /bindOperates\(\)/.test(code.slice(code.indexOf('dsBox.selfSelect)'), code.indexOf('dsBox.selfSelect)') + 900)));
+        && /dsBox\.selfSelect[\s\S]{0,800}ds\.clearSelection\(\)[\s\S]{0,200}ds\.addSelection\(el\)/.test(code)
+        && /bindOperates\(\)/.test(code.slice(code.indexOf('dsBox.selfSelect &&'), code.indexOf('dsBox.selfSelect &&') + 900)));
+    // 2026-10-08：老师定「框选只在电脑端生效」（手机上拖框会和滚页面手势打架）。
+    // 契约：mousemove 里必须先判 utils.isMobile() 再更新框 —— 只让框不再长大，不动 mousedown 那一发
+    //（库的点选正是靠按下时的点状框），否则手机端连点选都没了。
+    // 2026-10-08 追加：只按 utils.isMobile()（= 移动 UA **且 screen.width < 768**）判断会漏 ——
+    // iPad 这类宽屏 iOS 设备上它直接返回 false（老师实测「手机端滑动页面仍会触发框选」）。
+    // 所以必须同时有第二道与设备无关的闸：本页最近发生过触摸（touchJustNow）。
+    check('⑨ 手机端不拖框：mousemove 里同时有 utils.isMobile() 与「最近发生过触摸」两道守卫',
+        /addEventListener\('mousemove',[\s\S]{0,900}utils\.isMobile\(\) \|\| touchJustNow\(\)[\s\S]{0,120}return;[\s\S]{0,200}dsBox\.x1 = e\.clientX/.test(code));
+    check('⑨ 触摸时间窗已实现：三个 touch 事件都刷新 lastTouchAt，且监听是 passive（不能让 Chrome 失去滚动快路径）',
+        /touchstart', \(\) => \{ lastTouchAt = Date\.now\(\); \}, \{capture: true, passive: true\}/.test(code)
+        && /touchmove', \(\) => \{ lastTouchAt = Date\.now\(\); \}, \{capture: true, passive: true\}/.test(code)
+        && /touchend', \(\) => \{ lastTouchAt = Date\.now\(\); \}, \{capture: true, passive: true\}/.test(code)
+        && /const touchJustNow = \(\) => \(Date\.now\(\) - lastTouchAt\) < TOUCH_GRACE_MS/.test(code));
+    // 2026-10-08 追加（真机根因）：光挡住「我们自己扩框」不够 —— 真机上库会被 touchstart 启动、自己画蓝框
+    //（老师截图：蓝框出现但图选不上）。所以必须从库的判据下手。read ds.min.js: start(e) 里
+    // `_canInteract(e) && (isInteracting = !0, ..., publish("Interaction:start"))` —— 状态在 publish 之前
+    // 就置上，回调里 break 来不及；且这条路径发 "Interaction:start"，订阅名 predragstart 收不到。
+    check('⑩ 手机端不让库启动触摸交互：包装 _canInteract，touch 来源一律返回 false 且保留原函数',
+        /_canInteract = \(e\) => \{[\s\S]{0,400}'touchstart'[\s\S]{0,300}return false;[\s\S]{0,400}origCanInteract\(e\)/.test(code));
+    check('⑩ 拦截对「没有真实库」的环境（单元测试的桩）要静默跳过，不能抛错',
+        /const interaction = ds\.Interaction;[\s\S]{0,200}typeof interaction\._canInteract !== 'function'[\s\S]{0,120}return;/.test(code));
+    check('⑨ 鼠标松手后的「区域外自选」也带同样两道守卫',
+        /dsBox\.selfSelect && ! utils\.isMobile\(\) && ! touchJustNow\(\)/.test(code));
+    check('⑨ 手机端不靠拖动落选：mouseup 的自选分支也带 utils.isMobile() 守卫',
+        /dsBox\.selfSelect && ! utils\.isMobile\(\)/.test(code));
     check('④ 区域外的单击不算框选（框任一边 > 4px 才算拖动）',
         /if \(r\.width > 4 \|\| r\.height > 4\)/.test(code));
     check('④ 网格内部起始的拖动仍走库原路径（selfSelect 只在区域外为 true）',

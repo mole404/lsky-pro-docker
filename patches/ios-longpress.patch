@@ -5,6 +5,10 @@
 #   └ 构建用的就是仓库里 src/ 下这三个文件本身（改它们 = 改产品）。
 #      随时可用 `bash tools/diff-vs-upstream.sh` 重新生成/核对这份 diff。
 #
+# 注意：这份 diff 是**阶段性存档**。此后仓库里又做了几处改动（菜单关闭时的委托/定时器收口、
+#       相册列表渲染转义、{filename} 的 URL 危险字符清洗），它们**没有**重新并进下面这几段 diff。
+#       需要最新全貌时，按上面那行命令（tools/diff-vs-upstream.sh）重新生成，或直接看 git 历史。
+#
 # 上游基线：lsky-org/lsky-pro @ 38d52c4609eb85236b45ac75acac2ced55174953
 #           （2025-11-24 的 master；上游随后再无提交，且 README 已声明"开源版本已停止维护"）
 #
@@ -50,10 +54,15 @@
 #   「显示图片标签」开关（存 localStorage）与（2）原「图片权限」界面临口全部下线
 #   （原「设置权限」按钮与筛选下拉换成标签）。diff 因此大得多。
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
-#   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/resources/js/context-js.js
-#   c0e513ec8e93fd81b34b3c6de5cf5eb8  src/public/js/context-js/context-js.js
-#   4e5d5a4d805632acb2ea5364517e4020  src/resources/views/user/images.blade.php
-#   （2026-10-05 第八批：该文件又改了「工具栏断点 lg→xl + 文字永不折行」，md5 由 fe0852b7b6f4e71d1569ef08db16d480 更新为现值）
+#   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
+#   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
+#   5ddf0eed1c5aeacc547ff38ad72156aa  src/resources/views/user/images.blade.php
+#   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
+#   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
+#     的已知偏离清单里，此处只作存档对照。）
+#   （2026-10-05 第八批：该文件又改了「工具栏断点 lg→xl + 文字永不折行」，md5 由 fe0852b7b6f4e71d1569ef08db16d480
+#     更新；2026-10-07 3.6.0 发版后为 e0c706b2d511e18abff7b8d6213fbe24；
+#     2026-10-08 现值见上。历史值只作对照，一律以 Dockerfile「自证 2」为准）
 #
 # 上游原文件 md5（改动前，供比对）：
 #   c8e57f6232848ca8277341ddf1a3a7a6  resources/js/context-js.js
@@ -85,11 +94,201 @@
 #   属于 fork 新增文件、不进已知偏离清单）。导出格式跟随原图：png→PNG 无损、jpg/jpeg→JPEG q0.95；
 #   不设长边上限（按原图尺寸、绝不放大）；结果作为**一张新图** POST /upload，不改原图。
 #   images.blade.php 新 md5：d1a8122e999c0fd6298492c6baf05b12
+# 2026-10-08（手机端点选对齐桌面 + iPhone 不渲染全屏键 + 裁剪文案；改动全在 images.blade.php）：
+#   ① 触摸端在 document 捕获阶段把落在 #images-scroll 内的 touchstart 的 preventDefault 换成空函数：
+#      DragSelect 对区域内 touchstart 会无条件 preventDefault，Chromium 因此不合成 mousedown/click，
+#      而库的「点选」发生在 mousedown（Interaction:start → Selection 按页面覆盖的 Selector.rect 落选）
+#      ⇒ 手机端「点图片」既不勾选也打不开大图。屏蔽之后触摸走与桌面完全相同的路径：
+#      点图片 = 勾选这张 + 打开大图；点右上角圆勾 = 单选/多选（保留圆勾，手机端多选靠它）。
+#      ⚠ 不要用 stopPropagation 拦事件：那样卡片元素上的 touchstart 也收不到，长按菜单会失灵（踩过）。
+#   ② 删掉 predragstart 里的 `if (utils.isMobile()) ds.stop()`（库收不到触摸后这句已无意义，
+#      它正是「手机端不勾选」的直接原因）。
+#   ③ 看图器工具栏的「全屏」键改成能力探测后渲染：iPhone 上 document.fullscreenEnabled === false
+#      （元素全屏 API 在 iOS 只给了 iPad），原先点了必然静默无反应 ⇒ 不支持的浏览器干脆不渲染该键。
+#   ④ 裁剪面板文案「裁剪并上传」→「保存并上传」（按钮 + toastr 保持一致）。
+# 2026-10-08 第二轮（老师拍板「可以一起修」）：
+#   ⑤ context-js.js（两份）：修「长按菜单偶发不弹」。主线程卡顿（首屏 40 张图重排）会把 touchstart
+#      的**投递**推迟到卡顿结束，触屏处理器"看到"的按下与抬手只差十几毫秒（真实按压 1.5s+），
+#      250ms 定时器还没到点就被 touchend 清掉 ⇒ 菜单偶发不弹（卡顿场景实测 0/3；改动前同样如此，
+#      属既有缺陷，只是那时失败表现为"什么都没发生"）。修法：touchstart 记 e.timeStamp，
+#      touchend 时若定时器仍活着且真实时长 ≥ LONG_PRESS_DELAY，就地补开一次菜单（并吞掉随后那发 click）。
+#      守卫不变：已弹过不重弹、手指移动过（touchmove 已 cancel）不补、阈值沿用常量。实测卡顿 0/3 → 4/4，
+#      正常长按 5/5 不受影响；两份文件必须字节一致。
+# 2026-10-08 第三轮（老师试完测试版的反馈）：
+#   ⑥ 登录页居中：components/auth-card.blade.php 里 LOGO 与卡片原来同处一个 justify-center 列，
+#      居中基准是「LOGO + 卡片」整体 ⇒ 卡片必然偏下（线上实测 390×844 偏下 35.5px、1280×720 偏下 38.9px）。
+#      改成 LOGO 悬在卡片正上方的绝对定位元素（inline style；避开未生成的 Tailwind 类），
+#      居中基准只剩卡片本身 —— 三个视口实测偏移全为 0。
+#   ⑦ 手机端不再支持拖框选择（老师定：框选只在电脑端生效，否则和滚页面手势打架）：
+#      images.blade.php 的 mousemove 守卫里加 `if (utils.isMobile()) return;` —— 只让框「不再长大」，
+#      不取消 mousedown 那一发（库的点选正是靠按下时的点状框相交），所以点图片/点圆勾照常。
+#      实测：手机 UA 拖动 → 框宽 0、不多选（仍可点选）；桌面拖动 → 框宽 274、选中 9 张。
+#   ⑧ iOS 点图片闪灰：改动后不再 preventDefault，iOS 把默认的 -webkit-tap-highlight-color 放回来了；
+#      在图片墙范围内关掉它（#images-scroll .images-item）。它是继承属性，卡片内的 img 与小圆勾一并覆盖。
+# 2026-10-08 第四轮（老师实测反馈：手机端滑动仍会触发框选）：
+#   ⑨ 框选守卫从「只有 utils.isMobile()」补成两道 —— utils.isMobile() 的实现是
+#      「移动 UA **且 screen.width < 768**」，iPad 这类宽屏 iOS 设备上直接返回 false，只按它判等于没判。
+#      新增与设备无关的第二道闸：本页最近发生过触摸（TOUCH_GRACE_MS=1500，覆盖 touchend 之后浏览器
+#      补发的那串合成 mouse 事件）⇒ 触摸操作一律不扩框；桌面鼠标用户不会有 touchstart，框选照常。
+#      三个 touch 事件都用 {capture:true, passive:true} 刷新 lastTouchAt（非 passive 的 document touchmove
+#      会让 Chrome 失去滚动快路径）。实测：触摸+紧接合成拖动 → 框宽 0、不多选；纯鼠标拖动 → 框宽 274、选 9 张。
+# 2026-10-08 第五轮【临时诊断，用完必删】：
+#   ⑩ images.blade.php 末尾加了一段只在 `?dbg=1` 时启用的只读打点（事件流 + 框尺寸 + 选中数，
+#      fetch 到 /dbg-<sid>/<seq>/… ⇒ 落进容器访问日志，我在远程 docker logs 读）。
+#      原因：老师实测「手机端滑动仍会触发框选」（iOS/安卓都有），本机 CDP 复现不出 ⇒ 必须拿真机数据。
+# 2026-10-08 第六轮（真机根因确认 + 修复）：
+#   ⑪ 【修复】predragstart 里加：`if (event && event.type === 'touchstart') { ds.break(); return; }`
+#      —— 手机端不让库启动「触摸交互」。老师截图证实：真机上库被 touchstart 启动成功后自己画出
+#      蓝色选择框（DS 默认 rgba(0,0,255,.45) 细边），而落选判定用我们的零尺寸框 ⇒ 框出来但选不上。
+#      本机 CDP 复现不出（桌面 Chrome 的合成触摸序列过不了库的 _canInteract）。
+#      触摸之后浏览器补发的合成 mousedown/mouseup/click 会重新启动一次交互（鼠标路径）⇒
+#      点图片（勾选+开图）、点小圆勾（多选）、长按菜单一律照常（本机实测 sel=1 / sel=2 / 菜单弹出）。
+#   ⑫ 探针补量「库画的框」(.ds-selector 的 rect+display) 与 ds.Interaction.isInteracting/isDragging
+#      —— 上一版只量了我们自己的框，才会出现「我们这边全 0、用户却看得见」的分歧。
+#   ⑪ 最终修法（上一版 predragstart + ds.break() 无效，已删）：直接改库的判据 ——
+#      `ds.Interaction._canInteract` 对 touchstart/touchmove/touchend（及 pointerType==='touch'）返回 false，
+#      库压根进不了交互状态 ⇒ 不再自己画蓝框。读 ds.min.js 可知 start() 是
+#      `_canInteract(e) && (this.isInteracting = !0, ..., publish("Interaction:start"))`，
+#      状态在 publish 之前就置上了，所以回调里 break 来不及；且该路径发的是 "Interaction:start"，
+#      订阅名 `predragstart`(= "Interaction:start:pre") 根本收不到。
+#      合成 mouse 事件（type 'mousedown'）不受影响 ⇒ 点图片勾选+开图、点小圆勾多选、长按菜单照常。
+#      本机实测：触摸滑动全程 libhid0x0/int00（修复前 libVIS2x2/int10）；桌面拖动 libVIS273x497、选中 9 张。
+# 2026-10-08 第六轮（真机根因确认 + 最终修法；上一版 predragstart+break 无效已删）：
+#  ⑪ 【修复】包装 `ds.Interaction._canInteract`：touchstart/touchmove/touchend（及
+#      pointerType==='touch'）一律返回 false ⇒ 库压根进不了交互状态，不再自己画蓝框。
+#      为什么不能在 predragstart 里 break —— 读 ds.min.js：`start(e){ this._canInteract(e) &&
+#      (this.isInteracting=!0, ..., this.DS.publish("Interaction:start", ...)) }`，状态在 publish
+#      之前就置上了；而且这条路径发的是 "Interaction:start"（订阅名 dragstart），订阅
+#      `predragstart`(= "Interaction:start:pre") 根本收不到 ⇒ 上一版是空转。
+#      合成 mouse 事件（type 'mousedown'）不受影响 ⇒ 点图片（勾选+开图）、点小圆勾（多选）、
+#      长按菜单一律照常（本机实测 sel=1 / sel=2 多选 / 菜单弹出）。
+#      防御式写法：环境里没有真实库（单元测试的桩）时静默跳过。
+#  ⑫ 探针补量「库画的框」(.ds-selector rect+display) 与 isInteracting/isDragging ——
+#      上一版只量我们自己的框，才会出现「我们这边全 0、用户却看得见蓝框」的分歧。
+#      2026-10-08 第七轮：真机复验「所有行为达到预期、手机端不再出框」⇒ 探针整段删除。
+#  实测证据：触摸滑动全程 `libhid0x0|int00`（修复前 `libVIS2x2|int10`）；桌面 `libVIS273x497`、选中 9 张。
+# 2026-10-08 第八轮（手机端菜单项的按下反馈）：
+#  ⑬ context-js.less / context-js.css：菜单项原来只有 `li>a:hover`/`:focus` 一处高亮来源，
+#     全仓没有 `:active`。iOS 触摸会补发合成 hover ⇒ 还能亮；安卓没有 hover 阶段 ⇒ 按下去
+#     完全没有强调色，且点完菜单即关 ⇒「看不清选中了哪一项」。加 `li>a:active` 与
+#     `.dropdown-submenu>a:active`（touchstart 即成立，早于 click）。
+#  ⑭ 同两个文件：`.dropdown-context, .dropdown-context a { -webkit-tap-highlight-color: transparent }`
+#     —— iOS 那层「按下灰块」。早先只关了图片卡片（#images-scroll .images-item），而菜单是
+#     $('body').append 生成的、不在那个作用域里 ⇒ iOS 表现为「灰一下 + 蓝一下」两闪，现变一闪。
+#  ⑮ images.blade.php：`css/context-js/context-js.css` 的 <link> 补上 ?v=assetVersion(...)
+#     —— 与 JS 那侧一致；原来 CSS 没版本串，iOS/Safari 启发式缓存会让改了的样式不生效。
+#  实测证据（CDP 强制伪状态 CSS.forcePseudoState）：未按下背景 rgba(0,0,0,0) → 强制 :active 后
+#     rgb(37,99,235)（= --lsky-accent #2563eb）+ 文字白；容器 -webkit-tap-highlight-color 读到透明。
+# 2026-10-08 第九轮（老师反馈：点二级菜单项还是消失太快，希望加一点延迟）：
+#  ⑯ context-js.js：点中叶子项后，**这一次**关闭的淡出从 100ms 放到 LEAF_CLOSE_FADE=280ms；
+#     同时给该项加 .context-pressed 定格高亮（手指抬起后它继续亮着随菜单淡出）。
+#     逻辑关闭依旧立即（menuVisible 立刻 false），menuClosingUntil 与淡出时长一起延长，
+#     menuOnScreen() 的 DOM 兜底仍在 ⇒ 这段时间的点击照样被吞，不会把「点穿」放回来。
+#  ⑰ 关键踩坑：叶子项的点击委托**必须挂在 li 上**，不能写 `li > a` —— CDP 捕获真实点击的
+#     target 显示，点「Url」时 target 是那个 <li>（a 只占部分高度，padding 区点下去就是 li），
+#     jQuery 拿 target 与祖先去 matches `li > a` 全不满足 ⇒ 处理器根本不执行（高亮永远加不上）。
+#     现在挂 li，再取它直接的 a；父项 .dropdown-submenu 与标题行 .nav-header 不算叶子项。
+#  实测（真实鼠标事件，CDP）：点 Url 当帧 bg = rgb(37,99,235)（= --lsky-accent）、pressed=true，
+#     菜单到不可见 418ms（原先约 100~150ms），关完后 .context-pressed 残留 0。
+# 2026-10-08 第十轮（老师：点二级菜单项后不要看到「先返回一级菜单再消失」）：
+#  ⑱ closeMenus 里那句 `exitSubmenuInplace(true)` 原先是**即时**执行的 —— 它会把菜单从
+#     「子菜单就地展开」切回一级，于是用户看到「先返回一级、再整个消失」。
+#     改：**叶子项关闭路径**（leafClose）跳过即时调用，与 .context-pressed 的清理一起放到
+#     `setTimeout(fade + 150)` 里执行 —— 那时元素已不可见，用户看不到那次状态还原。
+#     非叶子路径（桌面、点菜单外等）保持原样即时执行，现有行为不变。
+#     幂等性已确认：`exitSubmenuInplace` 首行 `$('.dropdown-context.submenu-inplace')` 取不到
+#     就直接 return，重复调用无害。
+#  实测（CDP 模拟 hover:none 让点「复制链接」走就地展开那条真实手机路径）：
+#     点击当帧 pressed=true、bg=rgb(37,99,235)、**inplace 仍为 true**（没退回一级）、Url 仍可见；
+#     120ms 后高亮保持；菜单 395ms 到不可见；随后 inplace=false、返回行=0、高亮残留=0。
+# 2026-10-08 第十一轮（老师：安卓端二级延迟再长一点 + 一级也加一点但短于二级；**只动安卓**）：
+#  ⑲ context-js.js 的关闭淡出按时长分级，且**只有安卓是新增行为**：
+#     iOS：二级保持 SUB_FADE_IOS=280（第七轮定的值），一级保持 options.fadeSpeed（原行为）—— 与改动前完全一致。
+#     安卓：二级 SUB_FADE_ANDROID=420、一级 MAIN_FADE_ANDROID=200（一级 < 二级）。
+#     判据 isAndroidUA = /Android/i.test(navigator.userAgent)（模块初始化时算一次）。
+#     点菜单外/Esc/滚动等路径仍走 options.fadeSpeed 不变。
+#  口径与实测（页面内 requestAnimationFrame 采样 opacity 曲线，测「从开始淡出到几乎不可见」）：
+#     iOS 二级 195ms / 安卓二级 333ms（安卓更长）；iOS 一级 77ms（原样）/ 安卓一级 150ms（短于安卓二级）。
+#     注：别用 context.isMenuOnScreen() 计时 —— 它含「DOM 高度>0」兜底，fadeOut 回调把 display 改回 ''
+#     后高度又非 0，读数会虚高且不线性；也别用 CDP 轮询 opacity（往返几十毫秒抓不住短窗口）。
+# 2026-10-08 第十二轮（老师实测：安卓端两级延迟「几乎没变」）：
+#  ⑳ 判据由「正向认 Android」改成**反判**：`isIOSUA = /iPhone|iPad|iPod/i`、`useLongFade = ! isIOSUA`。
+#     原因：原判据 /Android/i 一旦认不出来（桌面模式 UA、WebView 精简 UA、UA-CH 冻结 UA），
+#     就会静默退化成 iOS 那条 280/100 的路径 —— 表现正好是老师看到的「几乎没变」。
+#     反判的保底方向正确：只有 iOS 保持原值，其余一律吃长延迟。
+#  ㉑【临时诊断，拿到数据后删】?dbg=1 时打三笔到访问日志（/dbg-ctx…）：
+#     boot（UA/platform/userAgentData.platform/isIOS/isAndroid/useLong/实际常量）、
+#     tap（target 标签/文本/是否在子菜单容器/fade 取值）、
+#     close（leafClose/fade/默认 fadeSpeed/常量/useLong）。
+#  本机（CDP 模拟安卓 UA）实测：boot useLong=true subFade=420；tap tag=LI txt=Url inSub=true fade=420；
+#     close leaf=true fade=420 def=100；淡出曲线 330ms。
+# 2026-10-08 第十三轮（老师真机打点：420/200 确实生效，但「感觉跟没变一样」）：
+#  ㉒ 结论：「关闭延迟」必须是**先停住再收**，而不是「立刻开始慢慢淡出」—— 后者第一帧就在变淡，
+#     观感上仍然是「马上就关」。所以把时长拆成 hold（完全静止）+ fade（之后的淡出）：
+#       非 iOS · 二级：hold 320 + fade 140；非 iOS · 一级：hold 160 + fade 120（一级 < 二级）。
+#       iOS：hold 0 + fade 280（第七轮既定行为，一字未改）。
+#     menuClosingUntil 与清理 setTimeout 都改成 hold + fade + 余量，保证停住期间菜单看得见也照样吞点击。
+#  实测（页面内 rAF 采样，CDP 模拟非 iOS UA + hover:none 走就地展开路径）：
+#     安卓二级：点击后 **429ms 菜单完全不变** → 然后 101ms 淡出；
+#     安卓一级：点击后 **348ms 不变** → 45ms 淡出。（改前同口径是「点击后 0ms 就开始变淡」）
+#  真机打点（老师安卓 Edge 153 · Android 10）确认：useLong=true、二级 fade=420、一级 fade=200 都真的
+#     传进了 fadeOut —— 说明代码取值一直是对的，问题在口径（「淡化」≠「延迟」）。
+# 2026-10-08 第十四轮（老师：①诊断全撤 ②一级菜单没有淡出、电脑上也有 ③电脑不该有延迟）：
+#  ㉓ 三级判据（关键修正）：
+#       电脑（isDesktopUA）→ hold 0 + fade options.fadeSpeed —— **完全原样**；
+#       iOS  → hold 0 + 二级 280 / 一级 options.fadeSpeed —— 第七轮既定行为，未动；
+#       其它（安卓等）→ 二级 hold 320 + fade 140；一级 hold 160 + fade **180**
+#         （一级原来 120，实测到不可见只有 58ms ⇒ 老师看着像「直接消失」，现改为 180 ⇒ 实测 134ms）。
+#     桌面判定改用 UA 而不是 matchMedia('(hover: none)')：实测 headless Chrome 在无真实鼠标设备时
+#     该 media query 返回 true，桌面会被误判成触摸设备。
+#  ㉔ 诊断全部撤除（dbg 函数 + 三处调用，grep 残留 0）。
+#  实测（页面内 rAF 采样）：桌面二级「延迟 90ms / 淡出 83ms」(≈立即)；安卓一级「延迟 317ms / 淡出 134ms」。
+# 2026-10-08 第十五轮（老师最终口径：**所有平台**的一级菜单淡出都要更明显，iOS 也一样）：
+#  ㉕ 一级菜单的淡出时长统一成 MAIN_FADE = 260（三个分支的一级都指向它）：
+#       电脑一级：hold 0（**不停顿**，老师要求电脑不要延迟）+ fade 260；
+#       iOS 一级：hold 0 + fade 260（老师：「我发现 iOS 的一级菜单也没有淡出」—— 这条覆盖了
+#                 此前「iOS 一律不要动」的范围；iOS **二级**仍保持第七轮的 280 不变）；
+#       安卓等一级：hold 160 + fade 260（总 420，仍短于二级的 320+140=460）。
+#  实测（页面内 rAF 采样，纯淡出时长）：iOS 一级 198ms / 电脑一级 200ms / 安卓一级 201ms（改前约 58~80ms）；
+#     电脑一级仍是「无停顿」（起淡延迟 114ms ≈ 点击往返），iOS 二级仍 217ms（= 280 不变）。
+# 2026-10-08 第十六轮（老师真机 DevTools 定位：淡出改用 CSS transition）：
+#  ㉖ 根因（老师三组对照实验）：同一台电脑上手动 `$('.dropdown-context').fadeOut(500)` 与
+#     `fadeOut(500, 回调)` **都能看到淡出**，而代码里 `fadeOut(260)` 被调用后元素状态一个都没变 ——
+#     jQuery 的动画靠它自己的计时器推进，时长太短（260ms ≈ 15 帧）叠上主线程忙时会被整段跳过，
+#     表现就是「啪」一下没了。所以**不再用 jQuery 的 fadeOut**，改用 CSS transition：
+#       - CSS：`.dropdown-context.context-fading { opacity: 0 !important; transition: opacity 300ms ease-out }`
+#         （!important 用来压过打开时 jQuery fadeIn 留下的 inline opacity:1）；
+#       - JS：关菜单时加类 + `$menu.css('transition-duration', fade + 'ms')`，
+#         `setTimeout(fade + 60)` 后再移除类并恢复 display/opacity —— 动画交给浏览器合成器，时长不再敏感。
+#  ㉗ MAIN_FADE 由 260 提到 500（老师实验证明 500ms 在该环境下能看见淡出）。
+#     注：这使一级的总时长（安卓 160+500）长于二级（320+140）—— 老师最早「一级比二级短」是针对**停顿**，
+#     最新「一级淡出要更明显」优先，测试断言相应改为只钉住停顿部分的层级。
+#  实测（rAF 采样，CDP 三平台）：iOS 一级 延迟 168ms + 淡出 306ms；安卓 301 + 400ms；电脑 75 + 401ms；
+#     三者都确认 `context-fading` 类加上、inline transition-duration = 500ms。
+# 2026-10-08 第十七轮（老师：一级淡出太长了，和二级一致就好）：
+#  ㉘ 关闭时的**淡出时长不再按层级区分** —— 一级直接用各平台二级那一档：
+#       电脑 options.fadeSpeed(100) / iOS SUB_FADE_IOS(280) / 安卓 SUB_FADE_ANDROID(140)。
+#     MAIN_FADE（一级专属 fade）删除。hold（停顿）仍分层级：电脑 0 / iOS 0 / 安卓 一级 160、二级 320。
+#     注：因为已换成 CSS transition（不受 jQuery 跳帧影响），100~280ms 这种短时长也能看见淡出。
+#  实测（rAF 采样，CDP）：电脑 一级 64ms / 二级 67ms；安卓 一级 100ms / 二级 100ms；
+#     iOS 一级 210ms / 二级 216ms —— 三平台的一级与二级**淡出时长一致**。
+# 2026-10-08 第十八轮·终稿（老师定稿参数 + 要求无任何诊断）：
+#  ㉙ 关闭菜单**一律不停住**，只按设备给淡出时长：
+#       电脑 DESKTOP_FADE = 120；手机/平板（iOS + 安卓统一）TOUCH_FADE = 320。
+#     中间版本按「层级（一级/二级）× 平台（电脑/iOS/安卓）」分的多档常量
+#     （SUB_HOLD_ANDROID / SUB_FADE_ANDROID / MAIN_HOLD_ANDROID / SUB_HOLD_IOS / SUB_FADE_IOS /
+#      MAIN_FADE / LEAF_CLOSE_FADE / lastLeafTapHold / lastLeafTapFade / isIOSUA / inSubmenu）全部删除，
+#      closeMenus 里收敛成一句 `const fade = isDesktopUA ? DESKTOP_FADE : TOUCH_FADE;`。
+#  ㉚ 桌面上判定仍用 UA（不用 matchMedia('(hover: none)')）；UA_STR 定义同时补齐。
+#  ㉛ 诊断彻底清零：仓库 src/ 与线上卷里都搜不到任何可执行诊断（dbg/DBG_ON/__trace/__go…）；
+#     images.blade.php 注释里“探针”措辞改为“DevTools 实测”，避免误解。
+#  实测（rAF 采样）：电脑「不停住 + 81ms 淡出」；安卓「不停住 + 227ms」；iOS「不停住 + 249ms」（均 inlineDur 正确）。
+#  测试：longpress 的 TEST_FADE_SPEED 改为从源码读 TOUCH_FADE（不再写死 100），重钉 md5 后 11 个文件全绿。
 
 ---- src/resources/js/context-js.js
---- /root/.hermes/cache/scratch/tmp.BQ92ALlEpf/up/resources/js/context-js.js	2026-10-02 14:31:26.703747972 +0800
-+++ src/resources/js/context-js.js	2026-10-01 15:40:13.406864745 +0800
-@@ -2,9 +2,49 @@
+--- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
++++ src/resources/js/context-js.js	（本 fork）
+@@ -2,8 +2,67 @@
   * Context.js
   * Copyright Jacob Kelley, Modified by WispX
   * MIT License
@@ -116,7 +315,7 @@
 + * 只在没有鼠标/触摸板的设备上生效，桌面端交互与上游一致。
   */
  window.context = window.context || (function () {
- 
++
 +    const LONG_PRESS_DELAY = 250;   // 长按判定阈值（毫秒）。iOS 原生 callout 约 500ms，这里减半更快响应；
 +                                    // 手指移动超过 LONG_PRESS_MOVE 即取消，用来抵消阈值变短带来的误触风险
 +    const LONG_PRESS_MOVE = 10;     // 手指移动超过这个像素数就取消长按，让位给滚动/框选
@@ -134,12 +333,30 @@
 +                                    // 而关掉之后元素还要淡出，屏幕上看着菜单还在 —— 那一瞬间的点击就会点穿。
 +    const MENU_FADE_GUARD = 50;     // 关菜单后，元素还要淡出 fadeSpeed 毫秒；这段时间它在屏幕上，
 +                                    // 点击必须照样被吞（否则就是“看得见菜单却点穿了”）。这里再加一点余量。
++    // 【2026-10-08】叶子项（如「复制链接 → Url」）点完菜单就关，默认 100ms 淡出太快 ——
++    // 两个平台都"只能凭一瞬间捕捉点到了什么"。这里给这次关闭放慢一拍：
++    //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
++    //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
++    //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
++    // 【2026-10-08 终稿·老师定】关闭菜单：**一律不停住**，只按设备给一个淡出时长 ——
++    //   电脑：120ms；手机/平板（iOS + 安卓统一）：320ms。
++    // 历史包袱说明：中间版本按「层级（一级/二级）×平台（电脑/iOS/安卓）」分了多档 hold+fade，
++    // 老师最终定为"不分层级、不分 iOS/安卓，只分电脑和手机"⇒ 这里收敛成两个常量。
++    // 淡出由 CSS transition 驱动（见 .context-fading），不受 jQuery 跳帧影响，所以时长可以放心用。
++    const DESKTOP_FADE = 120;       // 电脑：不停地直接淡出 120ms
++    const TOUCH_FADE = 320;         // 手机/平板：不停地直接淡出 320ms
++    // 桌面判定用 **UA**，不用 matchMedia('(hover: none)')：实测 headless Chrome 在没有真实鼠标设备时
++    // 该 media query 会返回 true，桌面会被误判成触摸设备。UA 判定稳得多。
++    const UA_STR = navigator.userAgent || '';
++    const isDesktopUA = ! /Mobile|Android|iPhone|iPad|iPod/i.test(UA_STR);
++    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
++    const LEAF_PRESSED_CLASS = 'context-pressed';
++    const MENU_FADING_CLASS = 'context-fading';   // 关闭时的 CSS transition 淡出类（见 closeMenus）
 +    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
-+
+ 
      let options = {
          fadeSpeed: 100,
-         filter: function ($obj) {
-@@ -15,14 +55,859 @@
+@@ -15,14 +74,941 @@
          compress: false
      };
  
@@ -214,6 +431,7 @@
 +        let timer = null,
 +            startX = 0,
 +            startY = 0,
++            startTs = 0,        // 手指按下那一刻的**事件时间戳**（e.timeStamp），不是处理时刻
 +            triggered = false;
 +
 +        function cancel() {
@@ -245,6 +463,7 @@
 +
 +            startX = touch.clientX;
 +            startY = touch.clientY;
++            startTs = nativeEvent.timeStamp;
 +
 +            let item = this;
 +            timer = setTimeout(function () {
@@ -269,6 +488,25 @@
 +        });
 +
 +        $(document).on('touchend touchcancel', selector, function (e) {
++            /* 【2026-10-08 修】主线程卡顿时（首屏排版 / 40 张图重排），浏览器会把 touchstart 的**投递**
++             * 推迟到卡顿结束，于是触屏处理器"看到"的按下与抬手只差十几毫秒，而手指其实按了 1.5s 以上 ——
++             * 250ms 的定时器还没到点就被这一发 touchend 清掉，长按菜单于是偶发不弹（实测卡顿场景 0/3）。
++             * 事件的 e.timeStamp 记的是浏览器**生成**该事件的真实时刻，不受投递延迟影响 ⇒ 用它补一次判定：
++             * 定时器还活着（= 手指没移动过，touchmove 里的 cancel 没跑）且真实时长够 ⇒ 现在补开菜单。
++             * 守卫：!triggered（已正常弹过不重复弹）、timer !== null（拖动/滚动一律不补）、阈值沿用常量。 */
++            let nativeEnd = e.originalEvent;
++
++            if (! triggered && timer !== null && nativeEnd && startTs > 0
++                && (nativeEnd.timeStamp - startTs) >= LONG_PRESS_DELAY) {
++                cancel();
++                triggered = true;
++                lastOpenAt = Date.now();
++                openMenu(this, startX, startY);
++                swipeClickUntil = Date.now() + NEXT_CLICK_WINDOW;
++                e.preventDefault();
++                return;
++            }
++
 +            cancel();
 +
 +            if (triggered) {
@@ -291,6 +529,7 @@
 +    let debugBuffer = [];           // 诊断环缓冲
 +    let debugToConsole = false;     // context.debug = true 时实时打控制台
 +    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
++    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
 +    let suppressClickUntil = 0;
 +    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
 +    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -425,16 +664,52 @@
 +        }
 +
 +        menuVisible = false;
-+        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
-+        menuClosingUntil = Date.now() + options.fadeSpeed + MENU_FADE_GUARD;
++        // 【2026-10-08】刚点过叶子项（如「复制链接 → Url」）⇒ 这次淡出慢一点，让眼睛跟得上
++        // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
++        // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
++        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
++        // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
++        // 【终稿】一律不停住；只按设备给淡出时长（电脑 120 / 手机 320）。所有关闭路径统一 ——
++        // 点菜单项、点菜单外、Esc 都一样，不再区分"是不是刚点过叶子项"。
++        const fade = isDesktopUA ? DESKTOP_FADE : TOUCH_FADE;
++        // 「先停住」的时长：这一段菜单**完全不变化**，让人看清点在哪儿，然后才开始淡出。
++        // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
++        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 +
-+        exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
++        if (! leafClose) {
++            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
++        }
++        // 【2026-10-08】点中二级菜单里的叶子项时**不能**在这里即时收子菜单 ——
++        // 那会让用户看到"先返回一级菜单、再整个消失"（老师报的观感）。改成延到淡出之后
++        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
++        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 +
-+        $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
-+            $('.dropdown-context').css({ display: '' });
-+            $('.dropdown-context .drop-left').removeClass('drop-left');
-+            $('.dropdown-context .touch-open').removeClass('touch-open');
-+        });
++        // 【2026-10-08 老师真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
++        // 证据：老师在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
++        // 而代码里 `fadeOut(260)` 被调用后元素状态**一个都没变** —— jQuery 的动画依赖它自己的计时器推进，
++        // 时长短（260ms ≈ 15 帧）+ 主线程忙时会被整段跳过，表现就是"啪"一下没了。
++        // 改成 CSS transition：浏览器合成器驱动，主线程再忙也能看到渐变；时长也不再敏感。
++        const $menu = $('.dropdown-context:not(.dropdown-context-sub)');
++        const doFadeOut = function () {
++            $menu.addClass(MENU_FADING_CLASS);          // CSS：opacity → 0，带 transition: opacity <fade>ms
++            $menu.css('transition-duration', fade + 'ms');
++            setTimeout(function () {
++                $menu.removeClass(MENU_FADING_CLASS)
++                    .css({ display: '', opacity: '', transitionDuration: '' });
++                $('.dropdown-context .drop-left').removeClass('drop-left');
++                $('.dropdown-context .touch-open').removeClass('touch-open');
++            }, fade + 60);
++        };
++        doFadeOut();
++        // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
++        //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
++        //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
++        setTimeout(function () {
++            $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
++            if (leafClose) {
++                exitSubmenuInplace(true);
++            }
++        }, fade + 150);
 +    }
 +
 +    function isInsideMenu(node) {
@@ -991,6 +1266,30 @@
  
 +        installMenuGuard();
 +
++        // 【2026-10-08】点中菜单里的叶子项（如「复制链接 → Url」）：记一笔，并给这一项定格高亮。
++        //   * 记时刻 ⇒ closeMenus 据此跳过"先退回一级菜单"那一步（老师 2026-10-08 的要求）；
++        //   * 定格高亮（.context-pressed）⇒ 手指抬起后它继续亮着随菜单淡出，而不是瞬间就没了。
++        // 注意判据必须挂在 **li** 上、而不是 `li > a`：实测（CDP 捕获真实点击的 target）点「Url」时
++        // target 是那个 <li>（`<a>` 只占其中一部分高度，padding 区域点下去 target 就是 li）。
++        // 用 `li > a` 做委托选择器时 jQuery 会拿 target 及其祖先去 matches，li / ul / .dropdown-context
++        // 都不满足 ⇒ 处理器根本不执行（高亮永远加不上）。
++        // 这里挂在 li 上，再取它**直接的** a；父项（.dropdown-submenu，点它只是展开子菜单）与
++        // 标题行（.nav-header，没有可读文本）一律不算叶子项。
++        $(document).on('click', '.dropdown-context li', function () {
++            const $li = $(this);
++            if ($li.hasClass('dropdown-submenu') || $li.hasClass('nav-header')) {
++                return;
++            }
++            const $a = $li.children('a');
++            if (! $a.length || ! $.trim($a.text())) {
++                return;
++            }
++            lastLeafTapAt = Date.now();
++            // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
++            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
++            $a.addClass(LEAF_PRESSED_CLASS);
++        });
++
          $(document).on('click', 'html', function () {
 -            $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
 -                $('.dropdown-context').css({display: ''}).find('.drop-left').removeClass('drop-left');
@@ -1002,7 +1301,7 @@
          });
          if (options.preventDoubleContext) {
              $(document).on('contextmenu', '.dropdown-context', function (e) {
-@@ -30,13 +915,8 @@
+@@ -30,13 +1016,8 @@
              });
          }
          $(document).on('mouseenter', '.dropdown-submenu', function () {
@@ -1018,13 +1317,16 @@
          });
  
      }
-@@ -130,12 +1010,15 @@
+@@ -130,12 +1111,15 @@
          let data = opts.data || {};
          let id = new Date().getTime();
  
 -        $(document).on('contextmenu', selector, function (e) {
 -            e.preventDefault();
 -            e.stopPropagation();
+-
+-            let item = e.target.closest(selector);
+-            typeof opts.beforeOpen === 'function' && opts.beforeOpen.call(e, item);
 +        // fork 补丁：把"打开菜单"从 contextmenu 回调里抽出来，
 +        // 让桌面/安卓的 contextmenu 与 iOS 的长按共用同一段逻辑。
 +        // item 为匹配到的元素，pageX/pageY 为菜单定位坐标，evt 用于回调里的 this（长按时为 null）。
@@ -1032,26 +1334,24 @@
 +            if (! item) {
 +                return;
 +            }
- 
--            let item = e.target.closest(selector);
--            typeof opts.beforeOpen === 'function' && opts.beforeOpen.call(e, item);
++
 +            typeof opts.beforeOpen === 'function' && opts.beforeOpen.call(evt || item, item);
  
              let $menu = buildMenu(item, data, id);
              // clear dropdowns
-@@ -144,42 +1027,122 @@
+@@ -144,42 +1128,122 @@
              $('body').append($menu);
  
              $('.dropdown-context:not(.dropdown-context-sub)').hide();
 +            exitSubmenuInplace(true);   // 兜底：别把上一次的就地替换状态带进新菜单
  
              let $dd = $("#dropdown-" + id);
- 
++
 +            // fork 补丁：菜单是 <body> 下的绝对定位元素，left/top 是**元素本地长度**，会被
 +            // html{zoom} 再乘一次；而 pageX/pageY 是视口物理 px。写 style 前除以实际生效的
 +            // zoom（zoomFactor，取不到则 1）→ 菜单左上角与鼠标点对齐。（<768px 无 zoom，退化为原值。）
 +            const z = zoomFactor();
-+
+ 
              if (typeof options.above == 'boolean' && options.above) {
                  $dd.addClass('dropdown-context-up').css({
 -                    top: e.pageY - 20 - $('#dropdown-' + id).height(),
@@ -1172,10 +1472,11 @@
 +
 +    return api;
  })();
+
 ---- src/public/js/context-js/context-js.js
---- /root/.hermes/cache/scratch/tmp.BQ92ALlEpf/up/public/js/context-js/context-js.js	2026-10-02 14:31:26.695747977 +0800
-+++ src/public/js/context-js/context-js.js	2026-10-02 12:22:32.584186106 +0800
-@@ -1 +1,1148 @@
+--- lsky-pro@38d52c46/public/js/context-js/context-js.js	（上游原文件）
++++ src/public/js/context-js/context-js.js	（本 fork）
+@@ -1 +1,1249 @@
 -window.context=window.context||function(){let e={fadeSpeed:100,filter:function(e){},above:"auto",preventDoubleContext:!0,compress:!1};function t(o,n,d,i){let a=i?" dropdown-context-sub":"",s=e.compress?" compressed-context":"",f=$('<ul class="dropdown-menu dropdown-context'+a+s+'" id="dropdown-'+d+'"></ul>'),l=0,r="";for(;l<n.length;l++){if(void 0!==n[l].divider)f.append('<li class="divider"></li>');else if(void 0!==n[l].header)f.append('<li class="nav-header">'+n[l].header+"</li>");else{let e;void 0===n[l].href&&(n[l].href="javascript:void(0)"),void 0!==n[l].target&&(r=' target="'+n[l].target+'"'),e=void 0!==n[l].subMenu?$('<li class="dropdown-submenu"><a tabindex="-1" href="'+n[l].href+'">'+n[l].text+"</a></li>"):$('<li><a tabindex="-1" href="'+n[l].href+'"'+r+">"+n[l].text+"</a></li>"),"function"==typeof n[l].visible&&(n[l].visible(o)||e.hide());let i=e.find("a");if(void 0!==n[l].classes)for(const e in n[l].classes)i.addClass(n[l].classes[e]);if(void 0!==n[l].attributes)for(const e in n[l].attributes)i.attr(e,n[l].attributes[e]);if(void 0!==n[l].action){let e="event-"+(new Date).getTime()*Math.floor(1e5*Math.random()),t=n[l].action;i.attr("id",e),$("#"+e).addClass("context-event"),$(document).on("click","#"+e,(function(){t.call(this,o)}))}if(f.append(e),void 0!==n[l].subMenu){let e=t(o,n[l].subMenu,d,!0);f.find("li:last").append(e)}}"function"==typeof e.filter&&e.filter(f.find("li:last"))}return f}return{init:function(t){e=$.extend({},e,t),$(document).on("click","html",(function(){$(".dropdown-context").fadeOut(e.fadeSpeed,(function(){$(".dropdown-context").css({display:""}).find(".drop-left").removeClass("drop-left")}))})),e.preventDoubleContext&&$(document).on("contextmenu",".dropdown-context",(function(e){e.preventDefault()})),$(document).on("mouseenter",".dropdown-submenu",(function(){let e=$(this).find(".dropdown-context-sub:first");e.width()+e.offset().left>window.innerWidth&&e.addClass("drop-left")}))},settings:function(t){e=$.extend({},e,t)},attach:function(o,n){let d=(n=n||{}).data||{},i=(new Date).getTime();$(document).on("contextmenu",o,(function(a){a.preventDefault(),a.stopPropagation();let s=a.target.closest(o);"function"==typeof n.beforeOpen&&n.beforeOpen.call(a,s);let f=t(s,d,i);$("body .dropdown-menu.dropdown-context").remove(),$("body").append(f),$(".dropdown-context:not(.dropdown-context-sub)").hide();let l=$("#dropdown-"+i);if("boolean"==typeof e.above&&e.above)l.addClass("dropdown-context-up").css({top:a.pageY-20-$("#dropdown-"+i).height(),left:a.pageX-13}).fadeIn(e.fadeSpeed);else if("string"==typeof e.above&&"auto"===e.above){l.removeClass("dropdown-context-up");let t=l.height()+12;a.pageY+t>$("html").height()?l.addClass("dropdown-context-up").css({top:a.pageY-20-t,left:a.pageX-13}).fadeIn(e.fadeSpeed):l.css({top:a.pageY+10,left:a.pageX-13}).fadeIn(e.fadeSpeed)}"function"==typeof n.afterOpen&&n.afterOpen.call(a,s,l.get(0))}))},destroy:function(e){$(document).off("contextmenu",e).off("click",".context-event")}}}();
 +/*
 + * Context.js
@@ -1222,6 +1523,25 @@
 +                                    // 而关掉之后元素还要淡出，屏幕上看着菜单还在 —— 那一瞬间的点击就会点穿。
 +    const MENU_FADE_GUARD = 50;     // 关菜单后，元素还要淡出 fadeSpeed 毫秒；这段时间它在屏幕上，
 +                                    // 点击必须照样被吞（否则就是“看得见菜单却点穿了”）。这里再加一点余量。
++    // 【2026-10-08】叶子项（如「复制链接 → Url」）点完菜单就关，默认 100ms 淡出太快 ——
++    // 两个平台都"只能凭一瞬间捕捉点到了什么"。这里给这次关闭放慢一拍：
++    //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
++    //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
++    //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
++    // 【2026-10-08 终稿·老师定】关闭菜单：**一律不停住**，只按设备给一个淡出时长 ——
++    //   电脑：120ms；手机/平板（iOS + 安卓统一）：320ms。
++    // 历史包袱说明：中间版本按「层级（一级/二级）×平台（电脑/iOS/安卓）」分了多档 hold+fade，
++    // 老师最终定为"不分层级、不分 iOS/安卓，只分电脑和手机"⇒ 这里收敛成两个常量。
++    // 淡出由 CSS transition 驱动（见 .context-fading），不受 jQuery 跳帧影响，所以时长可以放心用。
++    const DESKTOP_FADE = 120;       // 电脑：不停地直接淡出 120ms
++    const TOUCH_FADE = 320;         // 手机/平板：不停地直接淡出 320ms
++    // 桌面判定用 **UA**，不用 matchMedia('(hover: none)')：实测 headless Chrome 在没有真实鼠标设备时
++    // 该 media query 会返回 true，桌面会被误判成触摸设备。UA 判定稳得多。
++    const UA_STR = navigator.userAgent || '';
++    const isDesktopUA = ! /Mobile|Android|iPhone|iPad|iPod/i.test(UA_STR);
++    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
++    const LEAF_PRESSED_CLASS = 'context-pressed';
++    const MENU_FADING_CLASS = 'context-fading';   // 关闭时的 CSS transition 淡出类（见 closeMenus）
 +    const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
 +
 +    let options = {
@@ -1305,6 +1625,7 @@
 +        let timer = null,
 +            startX = 0,
 +            startY = 0,
++            startTs = 0,        // 手指按下那一刻的**事件时间戳**（e.timeStamp），不是处理时刻
 +            triggered = false;
 +
 +        function cancel() {
@@ -1336,6 +1657,7 @@
 +
 +            startX = touch.clientX;
 +            startY = touch.clientY;
++            startTs = nativeEvent.timeStamp;
 +
 +            let item = this;
 +            timer = setTimeout(function () {
@@ -1360,6 +1682,25 @@
 +        });
 +
 +        $(document).on('touchend touchcancel', selector, function (e) {
++            /* 【2026-10-08 修】主线程卡顿时（首屏排版 / 40 张图重排），浏览器会把 touchstart 的**投递**
++             * 推迟到卡顿结束，于是触屏处理器"看到"的按下与抬手只差十几毫秒，而手指其实按了 1.5s 以上 ——
++             * 250ms 的定时器还没到点就被这一发 touchend 清掉，长按菜单于是偶发不弹（实测卡顿场景 0/3）。
++             * 事件的 e.timeStamp 记的是浏览器**生成**该事件的真实时刻，不受投递延迟影响 ⇒ 用它补一次判定：
++             * 定时器还活着（= 手指没移动过，touchmove 里的 cancel 没跑）且真实时长够 ⇒ 现在补开菜单。
++             * 守卫：!triggered（已正常弹过不重复弹）、timer !== null（拖动/滚动一律不补）、阈值沿用常量。 */
++            let nativeEnd = e.originalEvent;
++
++            if (! triggered && timer !== null && nativeEnd && startTs > 0
++                && (nativeEnd.timeStamp - startTs) >= LONG_PRESS_DELAY) {
++                cancel();
++                triggered = true;
++                lastOpenAt = Date.now();
++                openMenu(this, startX, startY);
++                swipeClickUntil = Date.now() + NEXT_CLICK_WINDOW;
++                e.preventDefault();
++                return;
++            }
++
 +            cancel();
 +
 +            if (triggered) {
@@ -1382,6 +1723,7 @@
 +    let debugBuffer = [];           // 诊断环缓冲
 +    let debugToConsole = false;     // context.debug = true 时实时打控制台
 +    let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
++    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
 +    let suppressClickUntil = 0;
 +    let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
 +    let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -1516,16 +1858,52 @@
 +        }
 +
 +        menuVisible = false;
-+        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
-+        menuClosingUntil = Date.now() + options.fadeSpeed + MENU_FADE_GUARD;
++        // 【2026-10-08】刚点过叶子项（如「复制链接 → Url」）⇒ 这次淡出慢一点，让眼睛跟得上
++        // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
++        // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
++        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
++        // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
++        // 【终稿】一律不停住；只按设备给淡出时长（电脑 120 / 手机 320）。所有关闭路径统一 ——
++        // 点菜单项、点菜单外、Esc 都一样，不再区分"是不是刚点过叶子项"。
++        const fade = isDesktopUA ? DESKTOP_FADE : TOUCH_FADE;
++        // 「先停住」的时长：这一段菜单**完全不变化**，让人看清点在哪儿，然后才开始淡出。
++        // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
++        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 +
-+        exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
++        if (! leafClose) {
++            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
++        }
++        // 【2026-10-08】点中二级菜单里的叶子项时**不能**在这里即时收子菜单 ——
++        // 那会让用户看到"先返回一级菜单、再整个消失"（老师报的观感）。改成延到淡出之后
++        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
++        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 +
-+        $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
-+            $('.dropdown-context').css({ display: '' });
-+            $('.dropdown-context .drop-left').removeClass('drop-left');
-+            $('.dropdown-context .touch-open').removeClass('touch-open');
-+        });
++        // 【2026-10-08 老师真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
++        // 证据：老师在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
++        // 而代码里 `fadeOut(260)` 被调用后元素状态**一个都没变** —— jQuery 的动画依赖它自己的计时器推进，
++        // 时长短（260ms ≈ 15 帧）+ 主线程忙时会被整段跳过，表现就是"啪"一下没了。
++        // 改成 CSS transition：浏览器合成器驱动，主线程再忙也能看到渐变；时长也不再敏感。
++        const $menu = $('.dropdown-context:not(.dropdown-context-sub)');
++        const doFadeOut = function () {
++            $menu.addClass(MENU_FADING_CLASS);          // CSS：opacity → 0，带 transition: opacity <fade>ms
++            $menu.css('transition-duration', fade + 'ms');
++            setTimeout(function () {
++                $menu.removeClass(MENU_FADING_CLASS)
++                    .css({ display: '', opacity: '', transitionDuration: '' });
++                $('.dropdown-context .drop-left').removeClass('drop-left');
++                $('.dropdown-context .touch-open').removeClass('touch-open');
++            }, fade + 60);
++        };
++        doFadeOut();
++        // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
++        //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
++        //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
++        setTimeout(function () {
++            $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
++            if (leafClose) {
++                exitSubmenuInplace(true);
++            }
++        }, fade + 150);
 +    }
 +
 +    function isInsideMenu(node) {
@@ -2082,6 +2460,30 @@
 +
 +        installMenuGuard();
 +
++        // 【2026-10-08】点中菜单里的叶子项（如「复制链接 → Url」）：记一笔，并给这一项定格高亮。
++        //   * 记时刻 ⇒ closeMenus 据此跳过"先退回一级菜单"那一步（老师 2026-10-08 的要求）；
++        //   * 定格高亮（.context-pressed）⇒ 手指抬起后它继续亮着随菜单淡出，而不是瞬间就没了。
++        // 注意判据必须挂在 **li** 上、而不是 `li > a`：实测（CDP 捕获真实点击的 target）点「Url」时
++        // target 是那个 <li>（`<a>` 只占其中一部分高度，padding 区域点下去 target 就是 li）。
++        // 用 `li > a` 做委托选择器时 jQuery 会拿 target 及其祖先去 matches，li / ul / .dropdown-context
++        // 都不满足 ⇒ 处理器根本不执行（高亮永远加不上）。
++        // 这里挂在 li 上，再取它**直接的** a；父项（.dropdown-submenu，点它只是展开子菜单）与
++        // 标题行（.nav-header，没有可读文本）一律不算叶子项。
++        $(document).on('click', '.dropdown-context li', function () {
++            const $li = $(this);
++            if ($li.hasClass('dropdown-submenu') || $li.hasClass('nav-header')) {
++                return;
++            }
++            const $a = $li.children('a');
++            if (! $a.length || ! $.trim($a.text())) {
++                return;
++            }
++            lastLeafTapAt = Date.now();
++            // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
++            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
++            $a.addClass(LEAF_PRESSED_CLASS);
++        });
++
 +        $(document).on('click', 'html', function () {
 +            // 菜单内部的点击照旧关闭菜单（菜单外的点击在守卫里处理，事件已经被吞掉、到不了这里）
 +            if (menuVisible) {
@@ -2325,13 +2727,255 @@
 +
 +    return api;
 +})();
+
+---- src/resources/css/context-js.less
+--- lsky-pro@38d52c46/resources/css/context-js.less	（上游原文件）
++++ src/resources/css/context-js.less	（本 fork）
+@@ -1,11 +1,11 @@
+ .nav-header {
+     display: block;
+     padding: 3px 15px;
+-    font-size: 11px;
++    font-size: 12.5px;
+     font-weight: bold;
+     line-height: 20px;
+-    color: #999;
+-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
++    color: var(--lsky-text-3);
++    text-shadow: none;
+     text-transform: uppercase;
+ }
+ .dropdown-menu {
+@@ -19,12 +19,12 @@
+     padding: 5px 0;
+     margin: 2px 0 0;
+     list-style: none;
+-    background-color: #ffffff;
++    background-color: var(--lsky-surface);
+     border: 0;
+     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+     font-size: 14px;
+     border-radius: 6px;
+-    box-shadow: 0 5px 10px rgba(173, 173, 173, 30%);
++    box-shadow: var(--lsky-shadow-pop);
+     background-clip: padding-box;
+     text-align: left;
+     &.pull-right {
+@@ -35,8 +35,8 @@
+         height: 1px;
+         margin: 9px 1px;
+         overflow: hidden;
+-        background-color: #e5e5e5;
+-        border-bottom: 1px solid #f5f5f5;
++        background-color: var(--lsky-surface-3);
++        border-bottom: 1px solid var(--lsky-border);
+     }
+     a {
+         display: block;
+@@ -44,7 +44,7 @@
+         clear: both;
+         font-weight: normal;
+         line-height: 20px;
+-        color: #333333;
++        color: var(--lsky-text);
+         white-space: nowrap;
+         text-decoration: none;
+     }
+@@ -58,25 +58,30 @@
+         }
+     }
+ 
+-    li > a:hover, li > a:focus, .dropdown-submenu:hover > a {
++    /* 【2026-10-08】补按下态。菜单项原来只有 :hover/:focus 一处高亮来源：
++        - iOS 触摸会补发合成 mouseover ⇒ 还能亮（另叠一层浏览器默认的 tap 灰块，见下面 .dropdown-context 那条），
++        - 安卓触摸**没有 hover 阶段** ⇒ 全程没有任何强调色，点完菜单就关，用户看不清选中了哪一项。
++       :active 在 touchstart 即成立（早于 click），两个平台都能在按下的一瞬间给出反馈。 */
++    li > a:hover, li > a:focus, li > a:active,
++    .dropdown-submenu:hover > a, .dropdown-submenu > a:active {
+         color: #ffffff;
+         text-decoration: none;
+-        background-color: #627aff;
+-        background-image: -moz-linear-gradient(top, #0088cc, #0077b3);
++        background-color: var(--lsky-accent);
++        background-image: none;
+         background-repeat: repeat-x;
+     }
+ 
+     .active > a, .active > a:hover {
+         color: #ffffff;
+         text-decoration: none;
+-        background-color: #627aff;
+-        background-image: linear-gradient(to bottom, #0088cc, #0077b3);
++        background-color: var(--lsky-accent);
++        background-image: none;
+         background-repeat: repeat-x;
+         outline: 0;
+     }
+ 
+     .disabled > a, .disabled > a:hover {
+-        color: #999999;
++        color: var(--lsky-text-3);
+     }
+ 
+     .open {
+@@ -95,7 +100,7 @@
+ 
+ .dropup .caret, .navbar-fixed-bottom .dropdown .caret {
+     border-top: 0;
+-    border-bottom: 4px solid #000000;
++    border-bottom: 4px solid var(--lsky-border-2);
+     content: "\2191";
+ }
+ .dropup .dropdown-menu, .navbar-fixed-bottom .dropdown .dropdown-menu {
+@@ -121,7 +126,7 @@
+         }
+         & > a {
+             &:after {
+-                border-left-color: #ffffff;
++                border-left-color: var(--lsky-surface);
+             }
+         }
+     }
+@@ -134,7 +139,7 @@
+             margin-top: 5px;
+             margin-right: -10px;
+             border-color: transparent;
+-            border-left-color: #cccccc;
++            border-left-color: var(--lsky-border-2);
+             border-style: solid;
+             border-width: 5px 0 5px 5px;
+             content: " ";
+@@ -152,7 +157,33 @@
+ /**
+  * 	Context Styles
+  */
++/* 【2026-10-08】点中菜单里的叶子项后，给这一项「定格高亮」：手指抬起、菜单开始淡出的这段时间里
++   它继续亮着（配合 closeMenus 的 LEAF_CLOSE_FADE 慢速淡出），让用户看清刚才点的是哪一项。
++   类名由 context-js.js 在点击时加上、菜单关完后清掉（菜单是复用的 DOM，残留会让下次打开误亮）。 */
++.dropdown-context a.context-pressed {
++    background-color: var(--lsky-accent);
++    color: #ffffff;
++}
++
++/* 【2026-10-08 老师真机定位后的最终写法】关闭菜单的淡出改用 **CSS transition**，
++   而不是 jQuery 的 fadeOut。证据：同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`
++   （含带回调版本）都能看到淡出，而代码里的 `fadeOut(260)` 调用后元素状态一个都没变 ——
++   jQuery 的动画靠自己的计时器推进，时长太短（260ms ≈ 15 帧）叠上主线程忙时会被整段跳过，
++   表现就是"啪"一下没了。交给浏览器合成器的 transition 就稳定了，时长也不再敏感。
++   时长由 JS 动态写 inline 的 transition-duration（一级 500ms / 二级各档）。 */
++.dropdown-context.context-fading {
++    opacity: 0 !important;          /* !important 用于压过打开时 jQuery fadeIn 留下的 inline opacity:1 */
++    transition: opacity 300ms ease-out;
++}
++
+ .dropdown-context {
++    /* 【2026-10-08】iOS 的「按下灰块」：早先只把图片卡片（#images-scroll .images-item）关掉了，
++       但菜单是 $('body').append($menu) 生成的 —— 不在那个作用域里，所以菜单项一直吃的是浏览器
++       默认的灰色 tap 高亮。iOS 上「灰一下 + 蓝一下」两闪里那第一下就是它。这里按类名收口，
++       .dropdown-context 只由 context-js.js 生成（顶层下拉走 Alpine 的 .ls-menu），不会误伤别处。 */
++    &, a {
++        -webkit-tap-highlight-color: transparent;
++    }
+     .nav-header {
+         cursor: default;
+     }
+@@ -167,16 +198,34 @@
+         }
+     }
+ }
++
++/* 手机端二级菜单「就地展开」时，顶部那行「＜ 返回」里的箭头与文字贴在一起很难看：
++   箭头是图标（fas fa-chevron-left），标记里虽然写了 mr-1，但那个工具类**根本没被 Tailwind 生成**
++   （tailwind.config.js 的 content 只扫 resources/views 下的 blade，扫不到 resources/js 里的类名字符串），
++   所以图标的实际 margin-right 是 0px —— 这才是「紧挨着」的真正原因。
++   这里按真实 DOM（li.submenu-back > a > i，由 context-js.js 生成）补 7px；
++   权重（3 个类 + 2 个元素 = 0,3,2）高于工具类 .mr-1（0,1,0），不依赖 CSS 打包顺序。
++   ⚠ 同一条规则在 common.less 里还有一份兜底，原因见那边的注释（本文件编译出的
++   public/css/context-js/context-js.css 在 images.blade.php 里没有版本串 → 会被浏览器缓存喂旧的）。 */
++.dropdown-context .submenu-back > a > i {
++    margin-right: 7px;
++}
++/* fork：去掉右键 / 长按菜单左上角的气泡尖角（老师要求，电脑端 + 手机端一致）。
++   尖角就是这两条伪元素画出来的（上面一条深色描边 + 下面一条面板色叠出「箭头」）。
++   用 content: none 让伪元素根本不生成 —— 只少这一个装饰；菜单的尺寸 / 圆角 / 阴影 /
++   定位 / 滚动关闭行为一个字都没动。
++   ⚠ 范围：.dropdown-context 只由 context-js.js 生成（顶栏下拉走 Alpine 组件的 .ls-menu，
++   不用这个类 —— 全仓 grep 只有 context-js.js 会产出它），所以这里是全局去掉、不会误伤别的浮层。 */
+ .dropdown-context:before, .dropdown-context-up:before {
+     position: absolute;
+     top: -7px;
+     left: 9px;
+     display: inline-block;
+     border-right: 7px solid transparent;
+-    border-bottom: 7px solid #ccc;
++    border-bottom: 7px solid var(--lsky-border-2);
+     border-left: 7px solid transparent;
+     border-bottom-color: rgba(0, 0, 0, 0.2);
+-    content: '';
++    content: none;
+ }
+ .dropdown-context:after, .dropdown-context-up:after {
+     position: absolute;
+@@ -184,9 +233,9 @@
+     left: 10px;
+     display: inline-block;
+     border-right: 6px solid transparent;
+-    border-bottom: 6px solid #ffffff;
++    border-bottom: 6px solid var(--lsky-surface);
+     border-left: 6px solid transparent;
+-    content: '';
++    content: none;
+ }
+ .dropdown-context-up:before, .dropdown-context-up:after {
+     top: auto;
+@@ -196,13 +245,13 @@
+ .dropdown-context-up {
+     &:before {
+         border-right: 7px solid transparent;
+-        border-top: 7px solid #ccc;
++        border-top: 7px solid var(--lsky-border-2);
+         border-bottom: none;
+         border-left: 7px solid transparent;
+     }
+     &:after {
+         border-right: 6px solid transparent;
+-        border-top: 6px solid #ffffff;
++        border-top: 6px solid var(--lsky-surface);
+         border-left: 6px solid transparent;
+         border-bottom: none;
+     }
+@@ -215,7 +264,7 @@
+         padding-left: 14px;
+         padding-top: 0;
+         padding-bottom: 0;
+-        font-size: 13px;
++        font-size: 13.5px;
+     }
+     .divider {
+         margin: 5px 1px;
+
+---- src/public/css/context-js/context-js.css
+--- lsky-pro@38d52c46/public/css/context-js/context-js.css	（上游原文件）
++++ src/public/css/context-js/context-js.css	（本 fork）
+@@ -1 +1,4 @@
+-.nav-header{color:#999;display:block;font-size:11px;font-weight:700;line-height:20px;padding:3px 15px;text-shadow:0 1px 0 hsla(0,0%,100%,.5);text-transform:uppercase}.dropdown-menu{background-clip:padding-box;background-color:#fff;border:0;border-radius:6px;box-shadow:0 5px 10px hsla(0,0%,68%,.3);display:none;float:left;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;font-size:14px;left:0;list-style:none;margin:2px 0 0;min-width:160px;padding:5px 0;position:absolute;text-align:left;top:100%;z-index:1000}.dropdown-menu.pull-right{left:auto;right:0}.dropdown-menu .divider{background-color:#e5e5e5;border-bottom:1px solid #f5f5f5;height:1px;margin:9px 1px;overflow:hidden}.dropdown-menu a{clear:both;color:#333;display:block;font-weight:400;line-height:20px;padding:5px 20px;text-decoration:none;white-space:nowrap}.dropdown-menu .disabled>a:hover{background-color:transparent;cursor:default;text-decoration:none}.dropdown-menu .dropdown-submenu:hover>a,.dropdown-menu li>a:focus,.dropdown-menu li>a:hover{background-color:#627aff;background-image:-moz-linear-gradient(top,#08c,#0077b3);background-repeat:repeat-x;color:#fff;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover{background-color:#627aff;background-image:linear-gradient(180deg,#08c,#0077b3);background-repeat:repeat-x;color:#fff;outline:0;text-decoration:none}.dropdown-menu .disabled>a,.dropdown-menu .disabled>a:hover{color:#999}.dropdown-menu .open{*z-index:1000}.dropdown-menu .open>.dropdown-menu{display:block}.dropdown-menu .pull-right>.dropdown-menu{left:auto;right:0}.dropup .caret,.navbar-fixed-bottom .dropdown .caret{border-bottom:4px solid #000;border-top:0;content:"\2191"}.dropup .dropdown-menu,.navbar-fixed-bottom .dropdown .dropdown-menu{bottom:100%;margin-bottom:1px;top:auto}.dropdown-submenu{position:relative}.dropdown-submenu>.dropdown-menu{border-radius:0 6px 6px 6px;left:100%;margin-left:-1px;margin-top:-6px;top:0}.dropdown-submenu>.dropdown-menu.drop-left{left:-100%}.dropdown-submenu:hover .dropdown-menu{display:block}.dropdown-submenu:hover>a:after{border-left-color:#fff}.dropdown-submenu>a:after{border-color:transparent transparent transparent #ccc;border-style:solid;border-width:5px 0 5px 5px;content:" ";display:block;float:right;height:0;margin-right:-10px;margin-top:5px;width:0}.dropdown .dropdown-menu .nav-header{padding-left:20px;padding-right:20px}.dropdown-context .nav-header{cursor:default}.dropdown-context .dropdown-submenu:hover .dropdown-menu{display:none}.dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}.dropdown-context-up:before,.dropdown-context:before{border-bottom:7px solid rgba(0,0,0,.2);border-left:7px solid transparent;border-right:7px solid transparent;content:"";display:inline-block;left:9px;position:absolute;top:-7px}.dropdown-context-up:after,.dropdown-context:after{border-bottom:6px solid #fff;border-left:6px solid transparent;border-right:6px solid transparent;content:"";display:inline-block;left:10px;position:absolute;top:-6px}.dropdown-context-up:after,.dropdown-context-up:before{bottom:-7px;top:auto;z-index:9999}.dropdown-context-up:before{border:7px solid transparent;border-bottom:none;border-top-color:#ccc}.dropdown-context-up:after{border:6px solid transparent;border-bottom:none;border-top-color:#fff}.dropdown-context-sub:after,.dropdown-context-sub:before{display:none}.compressed-context a{font-size:13px;padding-bottom:0;padding-left:14px;padding-top:0}.compressed-context .divider{margin:5px 1px}.compressed-context .nav-header{padding:1px 13px}
++.nav-header{color:var(--lsky-text-3);display:block;font-size:12.5px;font-weight:700;line-height:20px;padding:3px 15px;text-shadow:none;text-transform:uppercase}.dropdown-menu{background-clip:padding-box;background-color:var(--lsky-surface);border:0;border-radius:6px;box-shadow:var(--lsky-shadow-pop);display:none;float:left;font-family:Helvetica Neue,Helvetica,Arial,sans-serif;font-size:14px;left:0;list-style:none;margin:2px 0 0;min-width:160px;padding:5px 0;position:absolute;text-align:left;top:100%;z-index:1000}.dropdown-menu.pull-right{left:auto;right:0}.dropdown-menu .divider{background-color:var(--lsky-surface-3);border-bottom:1px solid var(--lsky-border);height:1px;margin:9px 1px;overflow:hidden}.dropdown-menu a{clear:both;color:var(--lsky-text);display:block;font-weight:400;line-height:20px;padding:5px 20px;text-decoration:none;white-space:nowrap}.dropdown-menu .disabled>a:hover{background-color:transparent;cursor:default;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover,.dropdown-menu .dropdown-submenu:hover>a,.dropdown-menu .dropdown-submenu>a:active,.dropdown-menu li>a:active,.dropdown-menu li>a:focus,.dropdown-menu li>a:hover{background-color:var(--lsky-accent);background-image:none;background-repeat:repeat-x;color:#fff;text-decoration:none}.dropdown-menu .active>a,.dropdown-menu .active>a:hover{outline:0}.dropdown-menu .disabled>a,.dropdown-menu .disabled>a:hover{color:var(--lsky-text-3)}.dropdown-menu .open{*z-index:1000}.dropdown-menu .open>.dropdown-menu{display:block}.dropdown-menu .pull-right>.dropdown-menu{left:auto;right:0}.dropup .caret,.navbar-fixed-bottom .dropdown .caret{border-bottom:4px solid var(--lsky-border-2);border-top:0;content:"\2191"}.dropup .dropdown-menu,.navbar-fixed-bottom .dropdown .dropdown-menu{bottom:100%;margin-bottom:1px;top:auto}.dropdown-submenu{position:relative}.dropdown-submenu>.dropdown-menu{border-radius:0 6px 6px 6px;left:100%;margin-left:-1px;margin-top:-6px;top:0}.dropdown-submenu>.dropdown-menu.drop-left{left:-100%}.dropdown-submenu:hover .dropdown-menu{display:block}.dropdown-submenu:hover>a:after{border-left-color:var(--lsky-surface)}.dropdown-submenu>a:after{border-bottom:5px solid transparent;border-left:5px solid transparent;border-left-color:var(--lsky-border-2);border-right:0 solid transparent;border-top:5px solid transparent;content:" ";display:block;float:right;height:0;margin-right:-10px;margin-top:5px;width:0}.dropdown .dropdown-menu .nav-header{padding-left:20px;padding-right:20px}.dropdown-context .nav-header{cursor:default}.dropdown-context .dropdown-submenu:hover .dropdown-menu{display:none}.dropdown-context .dropdown-submenu:hover>.dropdown-menu{display:block}.dropdown-context .submenu-back>a>i{margin-right:7px}.dropdown-context-up:before,.dropdown-context:before{border-bottom:7px solid rgba(0,0,0,.2);border-left:7px solid transparent;border-right:7px solid transparent;content:none;display:inline-block;left:9px;position:absolute;top:-7px}.dropdown-context-up:after,.dropdown-context:after{border-bottom:6px solid var(--lsky-surface);border-left:6px solid transparent;border-right:6px solid transparent;content:none;display:inline-block;left:10px;position:absolute;top:-6px}.dropdown-context-up:after,.dropdown-context-up:before{bottom:-7px;top:auto;z-index:9999}.dropdown-context-up:before{border-bottom:none;border-left:7px solid transparent;border-right:7px solid transparent;border-top:7px solid var(--lsky-border-2)}.dropdown-context-up:after{border-bottom:none;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid var(--lsky-surface)}.dropdown-context-sub:after,.dropdown-context-sub:before{display:none}.compressed-context a{font-size:13.5px;padding-bottom:0;padding-left:14px;padding-top:0}.compressed-context .divider{margin:5px 1px}.compressed-context .nav-header{padding:1px 13px}
++.dropdown-context,.dropdown-context a{-webkit-tap-highlight-color:transparent}
++.dropdown-context a.context-pressed{background-color:var(--lsky-accent);color:#fff}
++.dropdown-context.context-fading{opacity:0 !important;transition:opacity .3s ease-out}
+
 ---- src/resources/views/user/images.blade.php
---- /root/.hermes/cache/scratch/up/resources/views/user/images.blade.php	2026-10-08 01:00:13.029200 +0800
-+++ src/resources/views/user/images.blade.php	2026-10-08 01:00:13.029200 +0800
-@@ -4,45 +4,289 @@
+--- lsky-pro@38d52c46/resources/views/user/images.blade.php	（上游原文件）
++++ src/resources/views/user/images.blade.php	（本 fork）
+@@ -3,46 +3,293 @@
+ @push('styles')
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
-     <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
+-    <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
++    {{-- fork 补丁：CSS 也加版本串。JS 那侧早就加了 ?v=（见下面 script 行），CSS 一直没加 ——
++         iOS/Safari 的启发式缓存会拿旧样式继续喂老用户，改了 CSS 也"看不到变化"。
++         用同一个 assetVersion()（= 文件 mtime），文件一改串就变。 --}}
++    <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}?v={{ \App\Utils::assetVersion('css/context-js/context-js.css') }}">
 +    <link rel="stylesheet" href="{{ asset('css/cropper-js/cropper.min.css') }}?v={{ \App\Utils::assetVersion('css/cropper-js/cropper.min.css') }}">
 +    {{-- fork：相册弹窗（#album-switch-modal）自己的样式。本仓库这个补丁只改这一个文件
 +         （common.less 不动，所以写在页面里）：
@@ -2634,7 +3278,7 @@
                      </a>
                  </x-slot>
  
-@@ -57,38 +301,122 @@
+@@ -57,38 +304,122 @@
                      </x-dropdown-link>
                  </x-slot>
              </x-dropdown>
@@ -2759,7 +3403,8 @@
 +                <a href="javascript:void(0)" data-crop-action="rotate-right">右转 90°</a>
 +                <a href="javascript:void(0)" data-crop-action="flip-x">左右翻转</a>
 +                <a href="javascript:void(0)" data-crop-action="flip-y">上下翻转</a>
-+            </div>
+             </div>
+-            <div id="drawer-content" class="overflow-y-auto"></div>
 +            <div class="crop-group" id="crop-ratios">
 +                <a href="javascript:void(0)" data-crop-ratio="free" class="active">自由</a>
 +                <a href="javascript:void(0)" data-crop-ratio="1:1">1:1</a>
@@ -2769,13 +3414,12 @@
 +          </div>
 +            <div class="crop-group crop-actions">
 +                <a href="javascript:void(0)" data-crop-action="cancel">取消</a>
-+                <a href="javascript:void(0)" data-crop-action="crop" class="crop-primary">裁剪并上传</a>
-             </div>
--            <div id="drawer-content" class="overflow-y-auto"></div>
++                <a href="javascript:void(0)" data-crop-action="crop" class="crop-primary">保存并上传</a>
++            </div>
          </div>
      </div>
  
-@@ -96,112 +424,301 @@
+@@ -96,112 +427,309 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -2919,7 +3563,11 @@
 -            <div>
 -                <span class="text-sm font-semibold">相册名称</span>
 -                <p class="my-2 break-words text-gray-700">__album_name__</p>
--            </div>
++        <div class="mx-auto w-full max-w-2xl">
++            <div class="mb-4 flex items-center gap-3">
++                <img src="__thumb_url__" alt="__filename__" class="h-16 w-16 shrink-0 rounded-lg border border-line bg-surface-2 object-cover">
++                <p class="min-w-0 truncate text-[16px] font-semibold leading-6 text-ink">图片详细信息</p>
+             </div>
 -            <div>
 -                <div class="text-sm font-semibold">使用策略</div>
 -                <p class="my-2 break-words text-gray-600">__strategy_name__</p>
@@ -2963,11 +3611,6 @@
 -            <div>
 -                <div class="text-sm font-semibold">上传时间</div>
 -                <p class="my-2 break-words text-gray-600">__created_at__</p>
-+        <div class="mx-auto w-full max-w-2xl">
-+            <div class="mb-4 flex items-center gap-3">
-+                <img src="__thumb_url__" alt="__filename__" class="h-16 w-16 shrink-0 rounded-lg border border-line bg-surface-2 object-cover">
-+                <p class="min-w-0 truncate text-[16px] font-semibold leading-6 text-ink">图片详细信息</p>
-+            </div>
 +            <dl class="divide-y divide-line rounded-lg border border-line bg-surface-2 px-4">
 +                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
 +                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">上传时间</dt>
@@ -3049,10 +3692,10 @@
 +            <div class="mt-4 flex justify-end gap-2">
 +                <button type="button" id="movements-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
 +                <button type="button" id="movements-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>移动</button>
-+            </div>
-+        </div>
-+    </script>
-+
+             </div>
+         </div>
+     </script>
+ 
 +    {{-- 相册列表行：整行是一个点击区（min-h-[44px]），**行内一个 span 都不用** —— 名称是 <div>、
 +         「当前」徽标（JS 拼的 .ls-badge）也是 <div>，免得被无限加载「点 span 加载更多」的委托命中
 +         （点一下相册名就多拉一页相册）。列表末尾那条哨兵是 utils.infiniteScroll 插的
@@ -3084,10 +3727,10 @@
 +            <div class="mt-4 flex justify-end gap-2">
 +                <button type="button" id="image-tags-cancel" class="ls-btn h-11 px-4 sm:h-9">取消</button>
 +                <button type="button" id="image-tags-confirm" class="ls-btn ls-btn-primary h-11 px-4 sm:h-9" disabled>确定</button>
-             </div>
-         </div>
-     </script>
- 
++            </div>
++        </div>
++    </script>
++
 +    {{-- 标签重命名的行内表单（在那一行下方就地展开，再点一次收起）。
 +         名称不写进模板 —— 由 JS 用 .val() 填，避免标签名里的引号/尖括号破坏属性。 --}}
 +    <script type="text/html" id="image-tags-edit-tpl">
@@ -3124,6 +3767,14 @@
 +               框选的选择框不跟随、松手也不会结束互动（实测「锁定不释放」）。Chromium/Safari 用
 +               -webkit-user-drag 关掉原生拖拽（Firefox 不看这条，由脚本里的 dragstart 兜底）。 */
 +            /* 注意卡片本身也要：<a href> 默认就是可拖拽元素，只禁 img 没用（实测 dragstart 照样发） */
++            /* iOS 的「点一下灰闪」（-webkit-tap-highlight-color）：fork 2026-10-08 ——
++               触摸端不再让 DragSelect preventDefault 之后，iOS 恢复了这个默认高亮，
++               点图片会闪一下灰。这里只在**图片墙范围内**关掉它（页面其它地方没被本次改动影响，
++               不动它们）。它是继承属性，写在卡片上即可覆盖卡片里的 img 与右上角小圆勾。 */
++            #images-scroll .images-item {
++                -webkit-tap-highlight-color: transparent;
++            }
++
 +            #images-grid .images-item,
 +            #images-grid .images-item img {
 +                -webkit-user-drag: none;
@@ -3142,7 +3793,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +734,750 @@
+@@ -217,44 +745,770 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -3152,6 +3803,22 @@
              const IMAGES_GRID = '#images-grid';
              const IMAGES_ITEM = '.images-item';
 -            const ALBUM_ITEM = '.albums-item';
++
++            /* iPhone 的 Safari 没有元素全屏 API（Fullscreen API 在 iOS 上只给了 iPad），
++               看图器工具栏的「全屏」键在那里点了必然**静默无反应**：库内部那句
++                 documentElement.requestFullscreen ? … : webkitRequestFullscreen ? … : moz ? … : ms …
++               会整条落空，既不报错也不生效。所以按能力探测决定**渲不渲染这个键**
++               （老师 2026-10-08 拍板：不支持就不显示，免得留一个点了没反应的按钮）。
++               判据优先看 document.fullscreenEnabled（iPhone Safari 上是 false）；
++               没有该属性的老浏览器再退回按元素上那几个 API 是否存在来判断。 */
++            const canViewerFullscreen = () => {
++                if (typeof document.fullscreenEnabled === 'boolean') {
++                    return document.fullscreenEnabled;
++                }
++                const de = document.documentElement;
++                return !!(de.requestFullscreen || de.webkitRequestFullscreen
++                    || de.mozRequestFullScreen || de.msRequestFullscreen);
++            };
 +            // 相册行容器（承载 data-id / data-json + 当前相册高亮）。
 +            // 行不再是「整行一个 <a>」，而是 .albums-row 里「左边切换链接 + 右边常显按钮」，
 +            // 所以按钮往上找 id 要 closest 到这一层，不能再用 .albums-item（那是 <a> 自己）。
@@ -3168,12 +3835,6 @@
 -                    $drawer.css('right', 0);
 -                    $drawer.find('#drawer-title').html(title);
 -                    $drawer.find('#drawer-content').html(content);
--                    callback && callback();
--                },
--                close(callback) {
--                    $drawerMask.fadeOut();
--                    $drawer.css('right', '-1000px');
--                    albumsInfinite && albumsInfinite.destroy();
 -                    callback && callback();
 +            // 居中卡片弹窗（复用 components/modal.blade.php 的 Alpine store，用法同 admin 页）
 +            const modal = Alpine.store('modal');
@@ -3225,8 +3886,12 @@
 +                toolbar: {
 +                    // 放最左（库按这里的键顺序渲染）。
 +                    crop: { show: true, click: () => cropEditor.openFromViewer() },
-+                    // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()
-+                    fullscreen: { show: true, click: () => toggleViewerFullscreen() },
++                    // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()。
++                    // 按能力探测决定要不要渲染这个键：不支持元素全屏的浏览器（iPhone Safari）
++                    // 干脆不显示，免得更成一个点了没反应的死按钮。
++                    ...(canViewerFullscreen()
++                        ? { fullscreen: { show: true, click: () => toggleViewerFullscreen() } }
++                        : {}),
 +                    'one-to-one': true,
 +                    reset: true,
 +                    prev: true,
@@ -3237,6 +3902,12 @@
 +                    'flip-horizontal': true,
 +                    'flip-vertical': true,
                  },
+-                close(callback) {
+-                    $drawerMask.fadeOut();
+-                    $drawer.css('right', '-1000px');
+-                    albumsInfinite && albumsInfinite.destroy();
+-                    callback && callback();
+-                },
 -                toggle(title, content, callback) {
 -                    if ($drawerMask.is(':hidden')) {
 -                        this.open(title, content, callback);
@@ -3328,7 +3999,7 @@
 +                 * 这个函数会被库的每次切图/重绘带着跑一遍（viewer.view → syncViewerButton → 它），
 +                 * 早先写成 `if (on) remove(...)` ⇒ 点 toolbar 的 next/prev、或在缩略图条上滚轮切图时，
 +                 * 库一重绘就把刚淡出来的 ls-fs-ui 摘掉，看着就是"一操作 UI 立刻消失"。
-+                 * 探针实测的调用栈钉死了这条路径。 */
++                 * 真机 DevTools 实测的调用栈钉死了这条路径。 */
 +                const wasFs = document.documentElement.classList.contains('ls-viewer-fs');
 +                document.documentElement.classList.toggle('ls-viewer-fs', on);
 +                if (on && ! wasFs) {
@@ -3604,7 +4275,7 @@
 +                            return;
 +                        }
 +                        close();
-+                        toastr.success('已裁剪并上传');
++                        toastr.success('已保存并上传');
 +                        try { if (typeof resetImages === 'function') { resetImages(); } } catch (e) {}
 +                    }).fail((xhr) => {
 +                        const data = xhr && xhr.responseJSON;
@@ -3637,12 +4308,15 @@
 +                        canvas.toBlob(done, mime, isPng ? undefined : 0.95);
                      } else {
 -                        this.close(callback);
+-                    }
+-                }
+-            }
 +                        const dataUrl = canvas.toDataURL(mime, isPng ? undefined : 0.95);
 +                        const bin = atob(dataUrl.split(',')[1]);
 +                        const arr = new Uint8Array(bin.length);
 +                        for (let i = 0; i < bin.length; i++) { arr[i] = bin.charCodeAt(i); }
 +                        done(new Blob([arr], { type: mime }));
-                     }
++                    }
 +                };
 +
 +                if ($('#crop-layer').length) {
@@ -3668,8 +4342,7 @@
 +                        else { cropper.setAspectRatio(NaN); }
 +                        refreshHint();
 +                    });
-                 }
--            }
++                }
 +
 +                return { open: open, openFromViewer: openFromViewer, supported: supported, close: close };
 +            })();
@@ -3915,7 +4588,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -276,7 +1499,11 @@
+@@ -276,7 +1530,11 @@
                              .replace(/__thumb_url__/g, images[i].thumb_url)
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
@@ -3928,7 +4601,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +1527,73 @@
+@@ -300,22 +1558,73 @@
                  }
              });
  
@@ -4006,7 +4679,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +1606,40 @@
+@@ -328,29 +1637,40 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -4032,7 +4705,7 @@
                              }
  
                              $albums.append(html);
- 
++
 +                            // 当前相册高亮：与「移动到相册」弹窗同一套令牌切换。
 +                            // 打在行容器（.albums-row）上 —— 高亮边框要包住右边的两个按钮；
 +                            // 基础态就是模板里的 border-line bg-surface，on 时一起摘掉换成品牌色。
@@ -4045,7 +4718,7 @@
 +
 +                            // 新追加的页也要跟上当前的搜索词
 +                            applyFilter();
-+
+ 
                              callback && callback.call(this, $albums.get(0));
                          }
                      });
@@ -4057,7 +4730,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +1647,13 @@
+@@ -358,12 +1678,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -4073,7 +4746,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +1662,14 @@
+@@ -372,13 +1693,14 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -4091,7 +4764,7 @@
                              );
                          }
                      });
-@@ -386,6 +1677,12 @@
+@@ -386,6 +1708,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -4104,7 +4777,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +1692,14 @@
+@@ -395,12 +1723,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -4121,7 +4794,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +1731,18 @@
+@@ -432,15 +1762,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -4143,7 +4816,7 @@
                  });
              }
  
-@@ -449,9 +1751,366 @@
+@@ -449,9 +1782,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -4513,7 +5186,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +2127,223 @@
+@@ -468,10 +2158,274 @@
              });
          </script>
          <script>
@@ -4541,7 +5214,41 @@
                  area: $(IMAGES_SCROLL).get(0),
                  keyboardDrag: false,
 +                zoom: dsPageZoom(),
-+            });
+             });
++
++            /* ---------------- 触摸端不让 DragSelect 取消默认行为（2026-10-08 老师拍板） ----------------
++             * 为什么必须处理：库的 Interaction._start 第一句就是**无条件**的
++             *     if (e.type === 'touchstart') e.preventDefault();
++             * 而且它排在「能不能开始拖动」的判断**之前** ⇒ 图片区域内（#images-scroll 里）的触摸
++             * 默认行为一律被否掉，Chromium 因此**不合成 mousedown/mouseup/click**。两个后果：
++             *   ① 库的「点选」发生在 **mousedown**（Interaction:start → Selection 拿页面覆盖的
++             *      Selector.rect 与卡片矩形相交 → SelectedSet.add）⇒ 手机端「点图片」不勾选，
++             *      和桌面端不一致（老师报的正是这条）；
++             *   ② Viewer 的 click 也收不到（安卓上「点图片打不开大图」的隐患）。
++             * 做法：在 document 的**捕获阶段**（早于一切监听器）把落在区域内**那一发** touchstart 的
++             * preventDefault 换成空函数 —— 事件照常往下传（卡片自己的长按菜单、页面其它触摸逻辑
++             * 一个字都不动），但谁也别想取消这次触摸的默认行为。
++             * ⚠ 别改成 stopPropagation 拦事件：那样卡片元素上的 touchstart 也收不到，长按菜单直接失灵
++             *   （实测「长按不弹菜单、反而打开看图器」）。
++             * 屏蔽之后，触摸走的是**与桌面完全相同**的一条路：浏览器正常合成 mousedown/mouseup/click
++             * → 库的点选 + Viewer 打开 + 我们自己那套框选判定 ⇒ 两端行为一致。
++             * 实测（真站点副本 + CDP 真触摸 + iPhone UA）：点图片 → 勾选 + 打开大图；点右上角小圆勾 →
++             * 单选/多选（连点两张 = 2 张）；桌面鼠标逐项不变。
++             * ----------------------------------------------------------------------------------------- */
++            document.addEventListener('touchstart', (e) => {
++                const t = e.target;
++                if (! t || typeof t.closest !== 'function') {
++                    return;
++                }
++                if (t.closest(IMAGES_SCROLL)) {
++                    /* 把这一发事件上的 preventDefault 暂时换成空函数：事件照常往下传（卡片自己的
++                     * 长按菜单、页面其它触摸逻辑一个字不动），但**谁也别想取消这次触摸的默认行为**
++                     * ⇒ 浏览器正常合成 mousedown/mouseup/click。
++                     * ⚠ 别改成 stopPropagation：那样卡片元素上的 touchstart 也收不到，长按菜单直接失灵
++                     *   （实测「长按不弹菜单、反而打开看图器」）。 */
++                    try { e.preventDefault = function () {}; } catch (err) { /* 覆盖失败就退回原行为 */ }
++                }
++            }, true);
 +
 +            /* ---------------- 框选失效的真因与修法（fork 修复） ----------------
 +             * 现象：图片墙上按住左键拖动，怎么拖都框不出选择框（按在图片上、按在缝隙上都不行）。
@@ -4606,6 +5313,17 @@
 +            };
 +
 +            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0, selfSelect: false};
++            /* 最近一次触摸手势的时刻（2026-10-08）。判「这是不是触摸操作」不靠设备/UA：
++             * 老师实测「手机端滑动页面还是会触发框选」——因为 utils.isMobile() 是
++             * 「移动 UA **且 screen.width < 768**」，iPad 这类宽屏 iOS 设备上它直接返回 false，
++             * 只按它判断的守卫等于没有。改成「本页最近发生过触摸」：与设备无关，
++             * 桌面鼠标用户永远不会命中（他们根本不会有 touchstart）。 */
++            const TOUCH_GRACE_MS = 1500;      // 覆盖 touchend 之后浏览器补发的那串合成 mouse 事件
++            let lastTouchAt = 0;
++            const touchJustNow = () => (Date.now() - lastTouchAt) < TOUCH_GRACE_MS;
++            document.addEventListener('touchstart', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
++            document.addEventListener('touchmove', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
++            document.addEventListener('touchend', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
 +            let dsRaf = 0;
 +            const dsBoxRect = () => {
 +                const l = Math.min(dsBox.x0, dsBox.x1), t = Math.min(dsBox.y0, dsBox.y1);
@@ -4674,6 +5392,13 @@
 +                if (! dsBox.on) {
 +                    return;
 +                }
++                /* 手机端不跟手扩框（老师 2026-10-08 定：**框选只在电脑端生效**）——
++                 * 手指在图片墙上滑动应当是滚页面，不该顺带把沿途的图都框上、和滚动手势打架。
++                 * ★ 只让框「不再长大」，不取消 mousedown 那一发：库的**点选**正是靠按下时的
++                 *   点状框与卡片相交来落选的（见上面 Selector.rect 的说明）⇒ 点图片/点圆勾照常。 */
++                if (utils.isMobile() || touchJustNow()) {
++                    return;
++                }
 +                dsBox.x1 = e.clientX;
 +                dsBox.y1 = e.clientY;
 +            }, true);
@@ -4682,7 +5407,7 @@
 +                 * 只认"真的是拖动"（框任一边 > 4px）—— 侧栏上单击导航仍然是单击。
 +                 * 用库的对外 API 落选，这样 elementselect / elementunselect 事件照常发，
 +                 * 顶部的「已选择 N 张」操作栏也照常更新（bindOperates 再兜一次）。 */
-+                if (dsBox.on && dsBox.selfSelect) {
++                if (dsBox.on && dsBox.selfSelect && ! utils.isMobile() && ! touchJustNow()) {
 +                    const r = dsBoxRect();
 +                    if (r.width > 4 || r.height > 4) {
 +                        try {
@@ -4723,8 +5448,8 @@
 +                if ($(e.target).closest(IMAGES_ITEM).length) {
 +                    e.preventDefault();
 +                }
-             });
- 
++            });
++
 +            // 单击（没拖动）不改变勾选 —— 见上面 ②
 +            // 兜底：万一库没收到 mouseup（拖到窗口外等），松手也要解锁，别让界面卡在拖动状态
 +            document.addEventListener('mouseup', () => {
@@ -4733,11 +5458,10 @@
 +                }
 +            });
 +
-+
+ 
              const bindOperates = () => {
                  let selected = ds.getSelection();
-                 if (selected.length) {
-@@ -486,10 +2357,14 @@
+@@ -486,10 +2440,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -4754,11 +5478,59 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -502,17 +2377,68 @@
-                     ds.stop();
-                 }
+@@ -497,22 +2455,112 @@
+                 $(operates.map(item => `[data-operate=${item}]`).toString()).css('display', 'block');
+             };
  
++            /* 【2026-10-08 第六轮·修正】手机端不让库启动「触摸交互」（真机实测：不拦的话库会自己画出蓝框，
++             * 而落选判定用我们的零尺寸框 ⇒ 看着像"框选被触发但框不上"，与老师截图一致）。
++             * 上一版在 `predragstart` 里 `ds.break()` **无效** —— 读 ds.min.js 源码可见：
++             *     start(e) { this._canInteract(e) && (this.isInteracting = true, ..., this.DS.publish("Interaction:start", ...)) }
++             * `isInteracting` 在 publish 之前就置上了，回调里再 break 已经来不及；
++             * 而且这条路径 publish 的是 "Interaction:start"（对应订阅名 dragstart），我们订阅的
++             * `predragstart`（= "Interaction:start:pre"）压根不会被触发。
++             * 所以直接改判据：**触摸来源的交互一律不允许启动**（库压根进不了交互状态 ⇒ 画不出框）。
++             * 触摸之后浏览器补发的合成 mouse 事件（mousedown 的 type 就是 'mousedown'、pointerType 为
++             * 'mouse'）不受影响 ⇒ 点图片（勾选+开大图）、点小圆勾（多选）、长按菜单全部照常。 */
++            (function () {
++                const interaction = ds.Interaction;
++                if (! interaction || typeof interaction._canInteract !== 'function') {
++                    return;   // 环境里没有真实的库（如单元测试的桩）时静默跳过
++                }
++                const origCanInteract = interaction._canInteract.bind(interaction);
++                interaction._canInteract = (e) => {
++                    if (e) {
++                        if (e.type === 'touchstart' || e.type === 'touchmove' || e.type === 'touchend') {
++                            return false;
++                        }
++                        if ((e.type === 'pointerdown' || e.type === 'pointermove')
++                            && e.pointerType === 'touch') {
++                            return false;
++                        }
++                    }
++                    return origCanInteract(e);
++                };
++            })();
++
+             ds.subscribe('predragstart', ({ event }) => {
+-                if (utils.isMobile()) {
+-                    ds.stop();
+-                }
+-
 -                if (! $(event.target).hasClass('dragselect')) {
++                /* 【2026-10-08 第六轮】手机端**不让库启动「触摸交互」** —— 真机实测（DevTools 采样 + 老师描述）：
++                 * 屏幕上会出现一个**蓝色选择框**，但图片选不上（框是库自己画的，而落选判定用的是我们
++                 * 那个零尺寸框）⇒ 看着像"框选被触发"。本机 CDP 复现不出（桌面 Chrome 的合成触摸序列
++                 * 没能让库的 `_canInteract` 通过），只有真机走这条路径。
++                 * 挡在源头：这一发交互若由 `touchstart` 触发，直接 break 掉它 —— 库不进入交互状态，
++                 * 自然既画不出框、也不会有后续 update。触摸之后浏览器**合成的那串 mouse 事件**
++                 * （mousedown/mouseup/click）会重新启动一次交互，走的是鼠标路径 ⇒
++                 * 点图片（勾选 + 打开大图）、点小圆勾（单选/多选）一律照常。 */
++                /* 【2026-10-08】这里原来有一句 `if (utils.isMobile()) ds.stop();`（手机端不拖框），
++                 * 它把库的整个交互停掉 ⇒ 手机端「点图片」只剩打开大图、不勾选，与桌面端不一致
++                 *（这正是老师报的那条的直接原因）。现在触摸端由上面那段「不让库取消默认行为」
++                 * 统一成与桌面相同的路径，这句已删。 */
++
 +                // 能起拖动的目标：网格/空白（带 dragselect 类）、卡片 <a> 本身、卡片里的 <img>。
 +                // 别的（右上角小圆勾等控件）一律 break()，保持它们原来的点选行为 ——
 +                // 不这么做的话，点小圆勾会被 DragSelect 当成一次拉框，顺带把旁边那张也选上。
@@ -4774,7 +5546,7 @@
              });
              ds.subscribe('elementselect', _ => bindOperates());
              ds.subscribe('elementunselect', _ => bindOperates());
- 
++
 +            // 侧栏折叠/展开会改变图片墙的可用宽度：justifiedGallery 是按容器宽度算布局的，
 +            // 不重排就会挤成一团或留一大块空白。等 300ms 的宽度动画结束再重排，期间不动它，
 +            // 免得按"动画中间"的宽度算。viewer（看图器）与框选目标也要跟着更新。
@@ -4794,7 +5566,7 @@
 +                    }
 +                }, 320);
 +            });
-+
+ 
              $photos.on('click', '.image-selector', function () {
                  ds.toggleSelection($(this).closest('a'));
                  bindOperates();
@@ -4824,7 +5596,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2459,250 @@
+@@ -533,27 +2581,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -5092,7 +5864,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2713,9 @@
+@@ -564,7 +2835,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -5103,7 +5875,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2723,19 @@
+@@ -572,47 +2845,19 @@
                          }
                      });
                  },
@@ -5160,7 +5932,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2772,10 @@
+@@ -649,6 +2894,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -5171,7 +5943,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2789,23 @@
+@@ -662,13 +2911,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -5197,7 +5969,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +2820,11 @@
+@@ -683,7 +2942,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -5209,7 +5981,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +2835,13 @@
+@@ -694,10 +2957,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -5225,7 +5997,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +2863,11 @@
+@@ -719,6 +2985,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -5237,7 +6009,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +2932,9 @@
+@@ -783,9 +3054,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -5250,7 +6022,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +2952,10 @@
+@@ -803,9 +3074,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -5262,7 +6034,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -844,17 +2994,27 @@
+@@ -844,17 +3116,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;
@@ -5292,3 +6064,33 @@
          </script>
      @endpush
  </x-app-layout>
+
+---- src/resources/views/components/auth-card.blade.php
+--- lsky-pro@38d52c46/resources/views/components/auth-card.blade.php	（上游原文件）
++++ src/resources/views/components/auth-card.blade.php	（本 fork）
+@@ -1,9 +1,18 @@
+-<div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-gray-100 px-4">
+-    <div>
+-        {{ $logo }}
+-    </div>
++{{-- 老师 2026-10-08：登录框要**自己**几何居中。
++     原来 LOGO 与卡片同处一个 justify-center 的列里 ⇒ 居中基准是「LOGO + 卡片」这个整体，
++     卡片必然被压到中线以下（线上实测：390×844 偏下 35.5px、1280×720 偏下 38.9px）。
++     注意这与右上角的「外观切换」无关 —— 它是 absolute，不占布局（实测只在 16→56 那条带里）。
++     现在把 LOGO 改成悬在卡片正上方的绝对定位元素，居中基准只剩卡片本身。
++     ★ 定位用 inline style，不用 bottom-full / inset-x-0 这类 Tailwind 类：产物里可能还没生成，
++       新类不重建 CSS 就不生效（本机预览时因此当场露馅一次）。 --}}
++<div class="min-h-screen ls-zoom-minh-screen flex flex-col justify-center items-center py-6 bg-bg px-4">
++    <div class="relative w-full flex flex-col items-center">
++        <div class="absolute flex justify-center" style="left: 0; right: 0; bottom: 100%; margin-bottom: 1.5rem;">
++            {{ $logo }}
++        </div>
+ 
+-    <div class="w-full sm:max-w-md mt-6 px-6 py-4 bg-white overflow-hidden sm:rounded-lg shadow-custom">
+-        {{ $slot }}
++        <div class="ls-card w-full sm:max-w-md px-6 py-5 overflow-hidden sm:rounded-xl2">
++            {{ $slot }}
++        </div>
+     </div>
+ </div>
+

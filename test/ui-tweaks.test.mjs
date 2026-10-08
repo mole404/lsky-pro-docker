@@ -306,6 +306,58 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         ! nav.includes('scale-150') && ! nav.includes('-top-2 -left-2'));
 }
 
+// ---------------------------------------------------------------- 2026-10-08 手机端菜单项的按下反馈
+{
+    // 背景：菜单项原来只有 :hover/:focus 一处高亮来源，全仓没有 :active。
+    //   iOS 触摸会补发合成 mouseover ⇒ 还能亮（另叠一层浏览器默认的 tap 灰块，于是「闪两下」）；
+    //   安卓触摸没有 hover 阶段 ⇒ 按下去完全没有强调色，且点完菜单即关 ⇒ 看不清选中了哪一项。
+    // 修法：补 :active + 把菜单容器纳入 tap-highlight 透明 + 给 CSS 加版本串（否则 iOS 缓存旧样式）。
+    const ctxLess = read('resources', 'css', 'context-js.less');
+    const ctxCss = read('public', 'css', 'context-js', 'context-js.css');
+    const imagesBlade = read('resources', 'views', 'user', 'images.blade.php');
+    check('菜单项有按下态：less 与编译产物都含 li>a:active',
+        /li > a:active/.test(ctxLess) && /li>a:active/.test(ctxCss));
+    check('子菜单父项也有按下态：less 与编译产物都含 .dropdown-submenu>a:active',
+        /\.dropdown-submenu > a:active/.test(ctxLess) && /\.dropdown-submenu>a:active/.test(ctxCss));
+    check('iOS tap 灰块收口：.dropdown-context 及其内 a 都设 -webkit-tap-highlight-color: transparent',
+        /-webkit-tap-highlight-color:\s*transparent/.test(ctxLess)
+        && /\.dropdown-context,\.dropdown-context a\{-webkit-tap-highlight-color:transparent\}/.test(ctxCss));
+    check('CSS 也带版本串（原来是裸 link，iOS 会吃启发式缓存 ⇒ 改了看不到）',
+        /asset\('css\/context-js\/context-js\.css'\)\s*\}\}\?v=\{\{\s*\\App\\Utils::assetVersion\('css\/context-js\/context-js\.css'\)/.test(imagesBlade));
+    const ctxJs = read('public', 'js', 'context-js', 'context-js.js');
+    // 2026-10-08 终稿（老师定的最终参数）：关闭**一律不停住**，只按设备给淡出时长 ——
+    //   电脑 120ms；手机/平板（iOS + 安卓统一）320ms。不再分层级、不再分 iOS/安卓。
+    check('关闭参数：电脑 DESKTOP_FADE=120、手机 TOUCH_FADE=320，且**不停住**（代码里不应有 hold）',
+        Number(ctxJs.match(/const DESKTOP_FADE = (\d+);/)[1]) === 120
+        && Number(ctxJs.match(/const TOUCH_FADE = (\d+);/)[1]) === 320
+        && /const fade = isDesktopUA \? DESKTOP_FADE : TOUCH_FADE;/.test(ctxJs)
+        && ! /lastLeafTapHold|const hold =|MAIN_HOLD|SUB_HOLD/.test(ctxJs));
+    check('淡出按设备分档：桌面判定用 UA（不用 hover:none —— headless/无鼠标设备会误报）',
+        /const isDesktopUA = ! \/Mobile\|Android\|iPhone\|iPad\|iPod\/i\.test\(UA_STR\);/.test(ctxJs)
+        && /const UA_STR = navigator\.userAgent \|\| '';/.test(ctxJs));
+    check('旧的「层级 × 平台」多档常量已清理干净',
+        ! /SUB_FADE_ANDROID|SUB_FADE_IOS|MAIN_FADE|LEAF_CLOSE_FADE|lastLeafTapFade|isIOSUA|inSubmenu/.test(ctxJs));
+    check('诊断已全部撤除（没有 ?dbg 打点残留）',
+        ! /dbg-ctx|DBG_ON|dbgSid/.test(ctxJs) && ! /\?dbg=1/.test(ctxJs));
+    // 2026-10-08 终稿：一级的**淡出时长与二级一致**（老师：一级太长，和二级一致就好）；
+    // 只有 hold（停顿）继续分层级。所以代码里不应再有 MAIN_FADE 这类"一级专属 fade"常量。
+    check('点二级项后不「先退回一级」：叶子项路径跳过即时 exitSubmenuInplace，改用延时收尾',
+        /const leafClose = \(Date\.now\(\) - lastLeafTapAt\) < LEAF_FADE_WINDOW;/.test(ctxJs)
+        && /if \(! leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs)
+        && /if \(leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs));
+    check('叶子项点击后定格高亮：有 .context-pressed 样式（用强调色变量，不写死）',
+        /\.dropdown-context a\.context-pressed\{[^}]*var\(--lsky-accent\)/.test(ctxCss)
+        && /\.dropdown-context a\.context-pressed\s*\{[\s\S]{0,120}var\(--lsky-accent\)/.test(ctxLess));
+    check('叶子项判据挂在 li 上（挂 `li > a` 实测不触发 —— target 是 li）',
+        /\$\(document\)\.on\('click', '\.dropdown-context li', function \(\) \{/.test(ctxJs)
+        && ! /\$\(document\)\.on\('click', '\.dropdown-context li:not\(\.dropdown-submenu\) > a'/.test(ctxJs));
+    check('定格高亮一定会被清掉（菜单是复用 DOM，残留会让下次打开误亮）',
+        /removeClass\(LEAF_PRESSED_CLASS\)|removeClass\('context-pressed'\)|removeClass\('\.context-pressed'\)/.test(ctxJs)
+        && /\.removeClass\(LEAF_PRESSED_CLASS\)/.test(ctxJs));
+    check('两份 context-js.js 字节一致（浏览器加载的是 public 那份）',
+        ctxJs === read('resources', 'js', 'context-js.js'));
+}
+
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);

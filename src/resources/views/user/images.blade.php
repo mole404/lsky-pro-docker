@@ -3,7 +3,10 @@
 @push('styles')
     <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
+    {{-- fork 补丁：CSS 也加版本串。JS 那侧早就加了 ?v=（见下面 script 行），CSS 一直没加 ——
+         iOS/Safari 的启发式缓存会拿旧样式继续喂老用户，改了 CSS 也"看不到变化"。
+         用同一个 assetVersion()（= 文件 mtime），文件一改串就变。 --}}
+    <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}?v={{ \App\Utils::assetVersion('css/context-js/context-js.css') }}">
     <link rel="stylesheet" href="{{ asset('css/cropper-js/cropper.min.css') }}?v={{ \App\Utils::assetVersion('css/cropper-js/cropper.min.css') }}">
     {{-- fork：相册弹窗（#album-switch-modal）自己的样式。本仓库这个补丁只改这一个文件
          （common.less 不动，所以写在页面里）：
@@ -415,7 +418,7 @@
           </div>
             <div class="crop-group crop-actions">
                 <a href="javascript:void(0)" data-crop-action="cancel">取消</a>
-                <a href="javascript:void(0)" data-crop-action="crop" class="crop-primary">裁剪并上传</a>
+                <a href="javascript:void(0)" data-crop-action="crop" class="crop-primary">保存并上传</a>
             </div>
         </div>
     </div>
@@ -705,6 +708,14 @@
                框选的选择框不跟随、松手也不会结束互动（实测「锁定不释放」）。Chromium/Safari 用
                -webkit-user-drag 关掉原生拖拽（Firefox 不看这条，由脚本里的 dragstart 兜底）。 */
             /* 注意卡片本身也要：<a href> 默认就是可拖拽元素，只禁 img 没用（实测 dragstart 照样发） */
+            /* iOS 的「点一下灰闪」（-webkit-tap-highlight-color）：fork 2026-10-08 ——
+               触摸端不再让 DragSelect preventDefault 之后，iOS 恢复了这个默认高亮，
+               点图片会闪一下灰。这里只在**图片墙范围内**关掉它（页面其它地方没被本次改动影响，
+               不动它们）。它是继承属性，写在卡片上即可覆盖卡片里的 img 与右上角小圆勾。 */
+            #images-scroll .images-item {
+                -webkit-tap-highlight-color: transparent;
+            }
+
             #images-grid .images-item,
             #images-grid .images-item img {
                 -webkit-user-drag: none;
@@ -739,6 +750,22 @@
             try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) {}
             const IMAGES_GRID = '#images-grid';
             const IMAGES_ITEM = '.images-item';
+
+            /* iPhone 的 Safari 没有元素全屏 API（Fullscreen API 在 iOS 上只给了 iPad），
+               看图器工具栏的「全屏」键在那里点了必然**静默无反应**：库内部那句
+                 documentElement.requestFullscreen ? … : webkitRequestFullscreen ? … : moz ? … : ms …
+               会整条落空，既不报错也不生效。所以按能力探测决定**渲不渲染这个键**
+               （老师 2026-10-08 拍板：不支持就不显示，免得留一个点了没反应的按钮）。
+               判据优先看 document.fullscreenEnabled（iPhone Safari 上是 false）；
+               没有该属性的老浏览器再退回按元素上那几个 API 是否存在来判断。 */
+            const canViewerFullscreen = () => {
+                if (typeof document.fullscreenEnabled === 'boolean') {
+                    return document.fullscreenEnabled;
+                }
+                const de = document.documentElement;
+                return !!(de.requestFullscreen || de.webkitRequestFullscreen
+                    || de.mozRequestFullScreen || de.msRequestFullscreen);
+            };
             // 相册行容器（承载 data-id / data-json + 当前相册高亮）。
             // 行不再是「整行一个 <a>」，而是 .albums-row 里「左边切换链接 + 右边常显按钮」，
             // 所以按钮往上找 id 要 closest 到这一层，不能再用 .albums-item（那是 <a> 自己）。
@@ -796,8 +823,12 @@
                 toolbar: {
                     // 放最左（库按这里的键顺序渲染）。
                     crop: { show: true, click: () => cropEditor.openFromViewer() },
-                    // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()
-                    fullscreen: { show: true, click: () => toggleViewerFullscreen() },
+                    // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()。
+                    // 按能力探测决定要不要渲染这个键：不支持元素全屏的浏览器（iPhone Safari）
+                    // 干脆不显示，免得更成一个点了没反应的死按钮。
+                    ...(canViewerFullscreen()
+                        ? { fullscreen: { show: true, click: () => toggleViewerFullscreen() } }
+                        : {}),
                     'one-to-one': true,
                     reset: true,
                     prev: true,
@@ -896,7 +927,7 @@
                  * 这个函数会被库的每次切图/重绘带着跑一遍（viewer.view → syncViewerButton → 它），
                  * 早先写成 `if (on) remove(...)` ⇒ 点 toolbar 的 next/prev、或在缩略图条上滚轮切图时，
                  * 库一重绘就把刚淡出来的 ls-fs-ui 摘掉，看着就是"一操作 UI 立刻消失"。
-                 * 探针实测的调用栈钉死了这条路径。 */
+                 * 真机 DevTools 实测的调用栈钉死了这条路径。 */
                 const wasFs = document.documentElement.classList.contains('ls-viewer-fs');
                 document.documentElement.classList.toggle('ls-viewer-fs', on);
                 if (on && ! wasFs) {
@@ -1172,7 +1203,7 @@
                             return;
                         }
                         close();
-                        toastr.success('已裁剪并上传');
+                        toastr.success('已保存并上传');
                         try { if (typeof resetImages === 'function') { resetImages(); } } catch (e) {}
                     }).fail((xhr) => {
                         const data = xhr && xhr.responseJSON;
@@ -1608,14 +1639,17 @@
                             for (const i in albums) {
                                 html += $('#albums-item-tpl').html()
                                     .replace(/__id__/g, albums[i].id)
-                                    .replace(/__name__/g, albums[i].name)
-                                    .replace(/__intro__/g, albums[i].intro)
+                                    .replace(/__name__/g, escapeHtml(albums[i].name).replace(/\$/g, '$$$$'))
+                                    .replace(/__intro__/g, escapeHtml(albums[i].intro).replace(/\$/g, '$$$$'))
                                     .replace(/__image_num__/g, albums[i].image_num)
                                     // 当前所在相册标出来（与「移动到相册」弹窗同一个徽标）
                                     .replace(/__current_badge__/g, albums[i].id === selectedAlbum.id
                                         ? '<div class="ls-badge shrink-0 bg-brand-soft text-brand">当前</div>'
                                         : '')
-                                    .replace(/__json__/g, JSON.stringify(albums[i]))
+                                    // 相册名/简介会进这里的 JSON，而 data-json 是单引号属性 ——
+                                    // 名字里带 ' 就能把属性提前闭合（自伤型 XSS 面），所以先按 HTML 转义再注入
+                                    // （与图片卡片、标签行同一条规则；浏览器解析属性时会自动解码，.data() 读到的仍是原始 JSON）
+                                    .replace(/__json__/g, escapeHtml(JSON.stringify(albums[i])).replace(/\$/g, '$$$$'))
                             }
 
                             $albums.append(html);
@@ -1666,10 +1700,14 @@
                         let $item = $(this).closest(ALBUM_ROW);
                         $albums.find(UPDATE_ID).remove();
                         if (selectedId !== $item.data('id')) {
+                            // 名称/简介从行容器的 data-json 取（原始值），不要用 .html()/.attr()：
+                            // .html() 返回的是已序列化的 HTML（& 变成 &amp;），名字含 " 时还会直接
+                            // 破坏 value="..." 属性 —— 与本文件其它几处的属性注入是同一条规则。
+                            const albumData = $item.data('json') || {};
                             $item.after($('#album-update-tpl').html()
                                 .replace(/__id__/g, $item.data('id'))
-                                .replace(/__name__/g, $item.find('.name').html())
-                                .replace(/__intro__/g, $item.find('a.albums-item').attr('title'))
+                                .replace(/__name__/g, escapeHtml(albumData.name).replace(/\$/g, '$$$$'))
+                                .replace(/__intro__/g, escapeHtml(albumData.intro).replace(/\$/g, '$$$$'))
                             );
                         }
                     });
@@ -2153,6 +2191,40 @@
                 zoom: dsPageZoom(),
             });
 
+            /* ---------------- 触摸端不让 DragSelect 取消默认行为（2026-10-08 老师拍板） ----------------
+             * 为什么必须处理：库的 Interaction._start 第一句就是**无条件**的
+             *     if (e.type === 'touchstart') e.preventDefault();
+             * 而且它排在「能不能开始拖动」的判断**之前** ⇒ 图片区域内（#images-scroll 里）的触摸
+             * 默认行为一律被否掉，Chromium 因此**不合成 mousedown/mouseup/click**。两个后果：
+             *   ① 库的「点选」发生在 **mousedown**（Interaction:start → Selection 拿页面覆盖的
+             *      Selector.rect 与卡片矩形相交 → SelectedSet.add）⇒ 手机端「点图片」不勾选，
+             *      和桌面端不一致（老师报的正是这条）；
+             *   ② Viewer 的 click 也收不到（安卓上「点图片打不开大图」的隐患）。
+             * 做法：在 document 的**捕获阶段**（早于一切监听器）把落在区域内**那一发** touchstart 的
+             * preventDefault 换成空函数 —— 事件照常往下传（卡片自己的长按菜单、页面其它触摸逻辑
+             * 一个字都不动），但谁也别想取消这次触摸的默认行为。
+             * ⚠ 别改成 stopPropagation 拦事件：那样卡片元素上的 touchstart 也收不到，长按菜单直接失灵
+             *   （实测「长按不弹菜单、反而打开看图器」）。
+             * 屏蔽之后，触摸走的是**与桌面完全相同**的一条路：浏览器正常合成 mousedown/mouseup/click
+             * → 库的点选 + Viewer 打开 + 我们自己那套框选判定 ⇒ 两端行为一致。
+             * 实测（真站点副本 + CDP 真触摸 + iPhone UA）：点图片 → 勾选 + 打开大图；点右上角小圆勾 →
+             * 单选/多选（连点两张 = 2 张）；桌面鼠标逐项不变。
+             * ----------------------------------------------------------------------------------------- */
+            document.addEventListener('touchstart', (e) => {
+                const t = e.target;
+                if (! t || typeof t.closest !== 'function') {
+                    return;
+                }
+                if (t.closest(IMAGES_SCROLL)) {
+                    /* 把这一发事件上的 preventDefault 暂时换成空函数：事件照常往下传（卡片自己的
+                     * 长按菜单、页面其它触摸逻辑一个字不动），但**谁也别想取消这次触摸的默认行为**
+                     * ⇒ 浏览器正常合成 mousedown/mouseup/click。
+                     * ⚠ 别改成 stopPropagation：那样卡片元素上的 touchstart 也收不到，长按菜单直接失灵
+                     *   （实测「长按不弹菜单、反而打开看图器」）。 */
+                    try { e.preventDefault = function () {}; } catch (err) { /* 覆盖失败就退回原行为 */ }
+                }
+            }, true);
+
             /* ---------------- 框选失效的真因与修法（fork 修复） ----------------
              * 现象：图片墙上按住左键拖动，怎么拖都框不出选择框（按在图片上、按在缝隙上都不行）。
              * 真因：DragSelect 会给区域套一层 .ds-selector-area 包装盒，并把这个盒子的矩形**缓存**下来
@@ -2216,6 +2288,17 @@
             };
 
             const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0, selfSelect: false};
+            /* 最近一次触摸手势的时刻（2026-10-08）。判「这是不是触摸操作」不靠设备/UA：
+             * 老师实测「手机端滑动页面还是会触发框选」——因为 utils.isMobile() 是
+             * 「移动 UA **且 screen.width < 768**」，iPad 这类宽屏 iOS 设备上它直接返回 false，
+             * 只按它判断的守卫等于没有。改成「本页最近发生过触摸」：与设备无关，
+             * 桌面鼠标用户永远不会命中（他们根本不会有 touchstart）。 */
+            const TOUCH_GRACE_MS = 1500;      // 覆盖 touchend 之后浏览器补发的那串合成 mouse 事件
+            let lastTouchAt = 0;
+            const touchJustNow = () => (Date.now() - lastTouchAt) < TOUCH_GRACE_MS;
+            document.addEventListener('touchstart', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
+            document.addEventListener('touchmove', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
+            document.addEventListener('touchend', () => { lastTouchAt = Date.now(); }, {capture: true, passive: true});
             let dsRaf = 0;
             const dsBoxRect = () => {
                 const l = Math.min(dsBox.x0, dsBox.x1), t = Math.min(dsBox.y0, dsBox.y1);
@@ -2284,6 +2367,13 @@
                 if (! dsBox.on) {
                     return;
                 }
+                /* 手机端不跟手扩框（老师 2026-10-08 定：**框选只在电脑端生效**）——
+                 * 手指在图片墙上滑动应当是滚页面，不该顺带把沿途的图都框上、和滚动手势打架。
+                 * ★ 只让框「不再长大」，不取消 mousedown 那一发：库的**点选**正是靠按下时的
+                 *   点状框与卡片相交来落选的（见上面 Selector.rect 的说明）⇒ 点图片/点圆勾照常。 */
+                if (utils.isMobile() || touchJustNow()) {
+                    return;
+                }
                 dsBox.x1 = e.clientX;
                 dsBox.y1 = e.clientY;
             }, true);
@@ -2292,7 +2382,7 @@
                  * 只认"真的是拖动"（框任一边 > 4px）—— 侧栏上单击导航仍然是单击。
                  * 用库的对外 API 落选，这样 elementselect / elementunselect 事件照常发，
                  * 顶部的「已选择 N 张」操作栏也照常更新（bindOperates 再兜一次）。 */
-                if (dsBox.on && dsBox.selfSelect) {
+                if (dsBox.on && dsBox.selfSelect && ! utils.isMobile() && ! touchJustNow()) {
                     const r = dsBoxRect();
                     if (r.width > 4 || r.height > 4) {
                         try {
@@ -2372,10 +2462,49 @@
                 $(operates.map(item => `[data-operate=${item}]`).toString()).css('display', 'block');
             };
 
-            ds.subscribe('predragstart', ({ event }) => {
-                if (utils.isMobile()) {
-                    ds.stop();
+            /* 【2026-10-08 第六轮·修正】手机端不让库启动「触摸交互」（真机实测：不拦的话库会自己画出蓝框，
+             * 而落选判定用我们的零尺寸框 ⇒ 看着像"框选被触发但框不上"，与老师截图一致）。
+             * 上一版在 `predragstart` 里 `ds.break()` **无效** —— 读 ds.min.js 源码可见：
+             *     start(e) { this._canInteract(e) && (this.isInteracting = true, ..., this.DS.publish("Interaction:start", ...)) }
+             * `isInteracting` 在 publish 之前就置上了，回调里再 break 已经来不及；
+             * 而且这条路径 publish 的是 "Interaction:start"（对应订阅名 dragstart），我们订阅的
+             * `predragstart`（= "Interaction:start:pre"）压根不会被触发。
+             * 所以直接改判据：**触摸来源的交互一律不允许启动**（库压根进不了交互状态 ⇒ 画不出框）。
+             * 触摸之后浏览器补发的合成 mouse 事件（mousedown 的 type 就是 'mousedown'、pointerType 为
+             * 'mouse'）不受影响 ⇒ 点图片（勾选+开大图）、点小圆勾（多选）、长按菜单全部照常。 */
+            (function () {
+                const interaction = ds.Interaction;
+                if (! interaction || typeof interaction._canInteract !== 'function') {
+                    return;   // 环境里没有真实的库（如单元测试的桩）时静默跳过
                 }
+                const origCanInteract = interaction._canInteract.bind(interaction);
+                interaction._canInteract = (e) => {
+                    if (e) {
+                        if (e.type === 'touchstart' || e.type === 'touchmove' || e.type === 'touchend') {
+                            return false;
+                        }
+                        if ((e.type === 'pointerdown' || e.type === 'pointermove')
+                            && e.pointerType === 'touch') {
+                            return false;
+                        }
+                    }
+                    return origCanInteract(e);
+                };
+            })();
+
+            ds.subscribe('predragstart', ({ event }) => {
+                /* 【2026-10-08 第六轮】手机端**不让库启动「触摸交互」** —— 真机实测（DevTools 采样 + 老师描述）：
+                 * 屏幕上会出现一个**蓝色选择框**，但图片选不上（框是库自己画的，而落选判定用的是我们
+                 * 那个零尺寸框）⇒ 看着像"框选被触发"。本机 CDP 复现不出（桌面 Chrome 的合成触摸序列
+                 * 没能让库的 `_canInteract` 通过），只有真机走这条路径。
+                 * 挡在源头：这一发交互若由 `touchstart` 触发，直接 break 掉它 —— 库不进入交互状态，
+                 * 自然既画不出框、也不会有后续 update。触摸之后浏览器**合成的那串 mouse 事件**
+                 * （mousedown/mouseup/click）会重新启动一次交互，走的是鼠标路径 ⇒
+                 * 点图片（勾选 + 打开大图）、点小圆勾（单选/多选）一律照常。 */
+                /* 【2026-10-08】这里原来有一句 `if (utils.isMobile()) ds.stop();`（手机端不拖框），
+                 * 它把库的整个交互停掉 ⇒ 手机端「点图片」只剩打开大图、不勾选，与桌面端不一致
+                 *（这正是老师报的那条的直接原因）。现在触摸端由上面那段「不让库取消默认行为」
+                 * 统一成与桌面相同的路径，这句已删。 */
 
                 // 能起拖动的目标：网格/空白（带 dragselect 类）、卡片 <a> 本身、卡片里的 <img>。
                 // 别的（右上角小圆勾等控件）一律 break()，保持它们原来的点选行为 ——
@@ -2662,7 +2791,7 @@
                             for (const i in albums) {
                                 html += $('#movements-album-item-tpl').html()
                                     .replace(/__id__/g, albums[i].id)
-                                    .replace(/__name__/g, albums[i].name)
+                                    .replace(/__name__/g, escapeHtml(albums[i].name).replace(/\$/g, '$$$$'))
                                     .replace(/__image_num__/g, albums[i].image_num)
                                     // 当前所在相册标出来
                                     .replace(/__current_badge__/g, albums[i].id === selectedAlbum.id

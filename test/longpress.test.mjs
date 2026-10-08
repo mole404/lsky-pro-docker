@@ -54,7 +54,9 @@ function pinClock(window, start = 1700000000000) {
 const GRACE = Number((LIB_SRC.match(/MENU_OPEN_GRACE\s*=\s*(\d+)/) || [])[1]);
 const IGNORE_INPUT = Number((LIB_SRC.match(/MENU_OPEN_IGNORE_INPUT\s*=\s*(\d+)/) || [])[1]);
 const FADE_GUARD = Number((LIB_SRC.match(/MENU_FADE_GUARD\s*=\s*(\d+)/) || [])[1]);
-const TEST_FADE_SPEED = 100;  // boot() 里传给 context.init 的值
+// 2026-10-08 终稿后：关闭淡出不再走 options.fadeSpeed，而是「电脑 DESKTOP_FADE / 手机 TOUCH_FADE」。
+// 这里取较大的 TOUCH_FADE 作为关闭窗基准（保守：宁可等久一点，也不误判"还在吞点击"）。
+const TEST_FADE_SPEED = Number((LIB_SRC.match(/TOUCH_FADE\s*=\s*(\d+)/) || [])[1]) || 320;
 const CLOSE_WINDOW = TEST_FADE_SPEED + FADE_GUARD;  // closeMenus 之后「元素还在屏幕上」的时长
 const ANDROID_HOLD = 520;     // 安卓系统长按约 500ms 才派发 contextmenu（保守取 520）
 const SYNTH_CLICK_DELAY = 30; // 抬手到系统补发那一发 click 的延迟（保守取 30）

@@ -58,7 +58,12 @@
         }
     }
 
-    li > a:hover, li > a:focus, .dropdown-submenu:hover > a {
+    /* 【2026-10-08】补按下态。菜单项原来只有 :hover/:focus 一处高亮来源：
+        - iOS 触摸会补发合成 mouseover ⇒ 还能亮（另叠一层浏览器默认的 tap 灰块，见下面 .dropdown-context 那条），
+        - 安卓触摸**没有 hover 阶段** ⇒ 全程没有任何强调色，点完菜单就关，用户看不清选中了哪一项。
+       :active 在 touchstart 即成立（早于 click），两个平台都能在按下的一瞬间给出反馈。 */
+    li > a:hover, li > a:focus, li > a:active,
+    .dropdown-submenu:hover > a, .dropdown-submenu > a:active {
         color: #ffffff;
         text-decoration: none;
         background-color: var(--lsky-accent);
@@ -152,7 +157,33 @@
 /**
  * 	Context Styles
  */
+/* 【2026-10-08】点中菜单里的叶子项后，给这一项「定格高亮」：手指抬起、菜单开始淡出的这段时间里
+   它继续亮着（配合 closeMenus 的 LEAF_CLOSE_FADE 慢速淡出），让用户看清刚才点的是哪一项。
+   类名由 context-js.js 在点击时加上、菜单关完后清掉（菜单是复用的 DOM，残留会让下次打开误亮）。 */
+.dropdown-context a.context-pressed {
+    background-color: var(--lsky-accent);
+    color: #ffffff;
+}
+
+/* 【2026-10-08 老师真机定位后的最终写法】关闭菜单的淡出改用 **CSS transition**，
+   而不是 jQuery 的 fadeOut。证据：同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`
+   （含带回调版本）都能看到淡出，而代码里的 `fadeOut(260)` 调用后元素状态一个都没变 ——
+   jQuery 的动画靠自己的计时器推进，时长太短（260ms ≈ 15 帧）叠上主线程忙时会被整段跳过，
+   表现就是"啪"一下没了。交给浏览器合成器的 transition 就稳定了，时长也不再敏感。
+   时长由 JS 动态写 inline 的 transition-duration（一级 500ms / 二级各档）。 */
+.dropdown-context.context-fading {
+    opacity: 0 !important;          /* !important 用于压过打开时 jQuery fadeIn 留下的 inline opacity:1 */
+    transition: opacity 300ms ease-out;
+}
+
 .dropdown-context {
+    /* 【2026-10-08】iOS 的「按下灰块」：早先只把图片卡片（#images-scroll .images-item）关掉了，
+       但菜单是 $('body').append($menu) 生成的 —— 不在那个作用域里，所以菜单项一直吃的是浏览器
+       默认的灰色 tap 高亮。iOS 上「灰一下 + 蓝一下」两闪里那第一下就是它。这里按类名收口，
+       .dropdown-context 只由 context-js.js 生成（顶层下拉走 Alpine 的 .ls-menu），不会误伤别处。 */
+    &, a {
+        -webkit-tap-highlight-color: transparent;
+    }
     .nav-header {
         cursor: default;
     }

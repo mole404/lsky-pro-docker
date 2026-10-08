@@ -43,6 +43,25 @@ window.context = window.context || (function () {
                                     // 而关掉之后元素还要淡出，屏幕上看着菜单还在 —— 那一瞬间的点击就会点穿。
     const MENU_FADE_GUARD = 50;     // 关菜单后，元素还要淡出 fadeSpeed 毫秒；这段时间它在屏幕上，
                                     // 点击必须照样被吞（否则就是“看得见菜单却点穿了”）。这里再加一点余量。
+    // 【2026-10-08】叶子项（如「复制链接 → Url」）点完菜单就关，默认 100ms 淡出太快 ——
+    // 两个平台都"只能凭一瞬间捕捉点到了什么"。这里给这次关闭放慢一拍：
+    //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
+    //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
+    //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
+    // 【2026-10-08 终稿·老师定】关闭菜单：**一律不停住**，只按设备给一个淡出时长 ——
+    //   电脑：120ms；手机/平板（iOS + 安卓统一）：320ms。
+    // 历史包袱说明：中间版本按「层级（一级/二级）×平台（电脑/iOS/安卓）」分了多档 hold+fade，
+    // 老师最终定为"不分层级、不分 iOS/安卓，只分电脑和手机"⇒ 这里收敛成两个常量。
+    // 淡出由 CSS transition 驱动（见 .context-fading），不受 jQuery 跳帧影响，所以时长可以放心用。
+    const DESKTOP_FADE = 120;       // 电脑：不停地直接淡出 120ms
+    const TOUCH_FADE = 320;         // 手机/平板：不停地直接淡出 320ms
+    // 桌面判定用 **UA**，不用 matchMedia('(hover: none)')：实测 headless Chrome 在没有真实鼠标设备时
+    // 该 media query 会返回 true，桌面会被误判成触摸设备。UA 判定稳得多。
+    const UA_STR = navigator.userAgent || '';
+    const isDesktopUA = ! /Mobile|Android|iPhone|iPad|iPod/i.test(UA_STR);
+    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
+    const LEAF_PRESSED_CLASS = 'context-pressed';
+    const MENU_FADING_CLASS = 'context-fading';   // 关闭时的 CSS transition 淡出类（见 closeMenus）
     const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
 
     let options = {
@@ -74,6 +93,19 @@ window.context = window.context || (function () {
     let swipeClickUntil = 0;        // 需要吞掉 click 的时间窗
     let lastOpenAt = 0;             // 上一次由长按打开菜单的时间（用于与 contextmenu 去重）
     let guardInstalled = false;
+
+    // 【修复·菜单重建时的收口】上一轮菜单留下的两样东西必须在本轮菜单开始前收掉：
+    //
+    //   1) closeMenus 的两个清理定时器到点后是**实时查询 DOM**（.drop-left / .touch-open /
+    //      定格高亮 / exitSubmenuInplace）。如果在窗口期内又开了新菜单，它们会作用到新菜单上
+    //      —— 表现为"刚展开的二级菜单被莫名收起"、"定格高亮被抹掉"。开新菜单时先取消。
+    //   2) buildMenu 为每个带 action 的项注册 `$(document).on('click', '#event-xxx')` 委托，
+    //      而 destroyContext 注销用的 `.context-event` 类**从未真正加上**（addClass 时元素还没
+    //      进 document，$() 找不到它）⇒ 那批委托无人注销：每开一次菜单就在 document 上多叠一批
+    //      （选择器指向已删除的 ID、永不触发，但页面每次点击都要把它们遍历一遍）。开新菜单时
+    //      注销上一批，数量不再随使用次数增长。
+    let menuCleanupTimers = [];
+    let menuActionIds = [];
 
     // 压掉 iOS 的原生长按菜单与放大镜。只作用于本库绑定的元素范围 + 菜单本身，
     // 不碰页面其它地方的链接/文字，保证其它长按能力不受影响。
@@ -126,6 +158,7 @@ window.context = window.context || (function () {
         let timer = null,
             startX = 0,
             startY = 0,
+            startTs = 0,        // 手指按下那一刻的**事件时间戳**（e.timeStamp），不是处理时刻
             triggered = false;
 
         function cancel() {
@@ -157,6 +190,7 @@ window.context = window.context || (function () {
 
             startX = touch.clientX;
             startY = touch.clientY;
+            startTs = nativeEvent.timeStamp;
 
             let item = this;
             timer = setTimeout(function () {
@@ -181,6 +215,25 @@ window.context = window.context || (function () {
         });
 
         $(document).on('touchend touchcancel', selector, function (e) {
+            /* 【2026-10-08 修】主线程卡顿时（首屏排版 / 40 张图重排），浏览器会把 touchstart 的**投递**
+             * 推迟到卡顿结束，于是触屏处理器"看到"的按下与抬手只差十几毫秒，而手指其实按了 1.5s 以上 ——
+             * 250ms 的定时器还没到点就被这一发 touchend 清掉，长按菜单于是偶发不弹（实测卡顿场景 0/3）。
+             * 事件的 e.timeStamp 记的是浏览器**生成**该事件的真实时刻，不受投递延迟影响 ⇒ 用它补一次判定：
+             * 定时器还活着（= 手指没移动过，touchmove 里的 cancel 没跑）且真实时长够 ⇒ 现在补开菜单。
+             * 守卫：!triggered（已正常弹过不重复弹）、timer !== null（拖动/滚动一律不补）、阈值沿用常量。 */
+            let nativeEnd = e.originalEvent;
+
+            if (! triggered && timer !== null && nativeEnd && startTs > 0
+                && (nativeEnd.timeStamp - startTs) >= LONG_PRESS_DELAY) {
+                cancel();
+                triggered = true;
+                lastOpenAt = Date.now();
+                openMenu(this, startX, startY);
+                swipeClickUntil = Date.now() + NEXT_CLICK_WINDOW;
+                e.preventDefault();
+                return;
+            }
+
             cancel();
 
             if (triggered) {
@@ -203,6 +256,7 @@ window.context = window.context || (function () {
     let debugBuffer = [];           // 诊断环缓冲
     let debugToConsole = false;     // context.debug = true 时实时打控制台
     let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
+    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
     let suppressClickUntil = 0;
     let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
     let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -337,16 +391,55 @@ window.context = window.context || (function () {
         }
 
         menuVisible = false;
-        // 淡出期间元素仍在屏幕上：这段时间的点击必须照样被吞
-        menuClosingUntil = Date.now() + options.fadeSpeed + MENU_FADE_GUARD;
+        // 【2026-10-08】刚点过叶子项（如「复制链接 → Url」）⇒ 这次淡出慢一点，让眼睛跟得上
+        // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
+        // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
+        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
+        // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
+        // 【终稿】一律不停住；只按设备给淡出时长（电脑 120 / 手机 320）。所有关闭路径统一 ——
+        // 点菜单项、点菜单外、Esc 都一样，不再区分"是不是刚点过叶子项"。
+        const fade = isDesktopUA ? DESKTOP_FADE : TOUCH_FADE;
+        // 「先停住」的时长：这一段菜单**完全不变化**，让人看清点在哪儿，然后才开始淡出。
+        // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
+        menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 
-        exitSubmenuInplace(true);       // 就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
+        if (! leafClose) {
+            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
+        }
+        // 【2026-10-08】点中二级菜单里的叶子项时**不能**在这里即时收子菜单 ——
+        // 那会让用户看到"先返回一级菜单、再整个消失"（老师报的观感）。改成延到淡出之后
+        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
+        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 
-        $('.dropdown-context').fadeOut(options.fadeSpeed, function () {
-            $('.dropdown-context').css({ display: '' });
-            $('.dropdown-context .drop-left').removeClass('drop-left');
-            $('.dropdown-context .touch-open').removeClass('touch-open');
-        });
+        // 【2026-10-08 老师真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
+        // 证据：老师在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
+        // 而代码里 `fadeOut(260)` 被调用后元素状态**一个都没变** —— jQuery 的动画依赖它自己的计时器推进，
+        // 时长短（260ms ≈ 15 帧）+ 主线程忙时会被整段跳过，表现就是"啪"一下没了。
+        // 改成 CSS transition：浏览器合成器驱动，主线程再忙也能看到渐变；时长也不再敏感。
+        const $menu = $('.dropdown-context:not(.dropdown-context-sub)');
+        const doFadeOut = function () {
+            $menu.addClass(MENU_FADING_CLASS);          // CSS：opacity → 0，带 transition: opacity <fade>ms
+            $menu.css('transition-duration', fade + 'ms');
+            // 句柄留在 menuCleanupTimers 里：下次开菜单时会先取消（见 openMenu），
+            // 否则它们到点后实时查到的会是**新菜单**，把刚展开的二级菜单收起。
+            menuCleanupTimers = [];
+            menuCleanupTimers.push(setTimeout(function () {
+                $menu.removeClass(MENU_FADING_CLASS)
+                    .css({ display: '', opacity: '', transitionDuration: '' });
+                $('.dropdown-context .drop-left').removeClass('drop-left');
+                $('.dropdown-context .touch-open').removeClass('touch-open');
+            }, fade + 60));
+        };
+        doFadeOut();
+        // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
+        //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
+        //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
+        menuCleanupTimers.push(setTimeout(function () {
+            $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
+            if (leafClose) {
+                exitSubmenuInplace(true);
+            }
+        }, fade + 150));
     }
 
     function isInsideMenu(node) {
@@ -903,6 +996,30 @@ window.context = window.context || (function () {
 
         installMenuGuard();
 
+        // 【2026-10-08】点中菜单里的叶子项（如「复制链接 → Url」）：记一笔，并给这一项定格高亮。
+        //   * 记时刻 ⇒ closeMenus 据此跳过"先退回一级菜单"那一步（老师 2026-10-08 的要求）；
+        //   * 定格高亮（.context-pressed）⇒ 手指抬起后它继续亮着随菜单淡出，而不是瞬间就没了。
+        // 注意判据必须挂在 **li** 上、而不是 `li > a`：实测（CDP 捕获真实点击的 target）点「Url」时
+        // target 是那个 <li>（`<a>` 只占其中一部分高度，padding 区域点下去 target 就是 li）。
+        // 用 `li > a` 做委托选择器时 jQuery 会拿 target 及其祖先去 matches，li / ul / .dropdown-context
+        // 都不满足 ⇒ 处理器根本不执行（高亮永远加不上）。
+        // 这里挂在 li 上，再取它**直接的** a；父项（.dropdown-submenu，点它只是展开子菜单）与
+        // 标题行（.nav-header，没有可读文本）一律不算叶子项。
+        $(document).on('click', '.dropdown-context li', function () {
+            const $li = $(this);
+            if ($li.hasClass('dropdown-submenu') || $li.hasClass('nav-header')) {
+                return;
+            }
+            const $a = $li.children('a');
+            if (! $a.length || ! $.trim($a.text())) {
+                return;
+            }
+            lastLeafTapAt = Date.now();
+            // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
+            // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
+            $a.addClass(LEAF_PRESSED_CLASS);
+        });
+
         $(document).on('click', 'html', function () {
             // 菜单内部的点击照旧关闭菜单（菜单外的点击在守卫里处理，事件已经被吞掉、到不了这里）
             if (menuVisible) {
@@ -972,10 +1089,15 @@ window.context = window.context || (function () {
                     let actionID = 'event-' + new Date().getTime() * Math.floor(Math.random() * 100000),
                         eventAction = data[i].action;
                     $a.attr('id', actionID);
+                    // 说明：$a 此刻还没进 document（要到下面的 $menu.append($sub) 才挂上去），
+                    // 所以这句按 ID 查不到元素、`.context-event` 从来没被真正加上 ——
+                    // destroyContext 里注销 .context-event 也就成了空操作。保持原样（不影响任何行为），
+                    // 委托的注销改由 openMenu 按 menuActionIds 精确收口。
                     $('#' + actionID).addClass('context-event');
                     $(document).on('click', '#' + actionID, function () {
                         eventAction.call(this, event);
                     });
+                    menuActionIds.push(actionID);
                 }
                 $menu.append($sub);
                 if (typeof data[i].subMenu != 'undefined') {
@@ -1017,6 +1139,22 @@ window.context = window.context || (function () {
             if (! item) {
                 return;
             }
+
+            // 【修复·收口上一轮菜单】必须在 buildMenu **之前**做 —— 它会把新一批 actionID
+            // 记进 menuActionIds，晚一步就会连新的一起注销掉。
+            //   1) 取消上一轮 closeMenus 留下的清理定时器：它们到点后实时查 DOM，会作用到本轮
+            //      新菜单上（把刚展开的二级菜单收起、抹掉定格高亮）；
+            //   2) 注销上一轮注册的 document click 委托：目标 ID 已随旧菜单删除、永不触发，
+            //      留着只会让页面每次点击都多遍历一批选择器。
+            // 旧菜单元素紧接着会被 remove()，所以上面两步不涉及任何仍在屏幕上的东西 = 无观感变化。
+            for (let t = 0; t < menuCleanupTimers.length; t++) {
+                clearTimeout(menuCleanupTimers[t]);
+            }
+            menuCleanupTimers = [];
+            for (let a = 0; a < menuActionIds.length; a++) {
+                $(document).off('click', '#' + menuActionIds[a]);
+            }
+            menuActionIds = [];
 
             typeof opts.beforeOpen === 'function' && opts.beforeOpen.call(evt || item, item);
 
