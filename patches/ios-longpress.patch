@@ -52,7 +52,7 @@
 # 三个文件各自的 md5（与 Dockerfile「自证 2」里的期望值一致）：
 #   c1b339b189dd1bc25664cc8d27d664e8  src/resources/js/context-js.js
 #   c1b339b189dd1bc25664cc8d27d664e8  src/public/js/context-js/context-js.js
-#   ecf89b82ecf6d966c78029868317c28e  src/resources/views/user/images.blade.php
+#   5588d9b9370a7133a697a4bf6904c003  src/resources/views/user/images.blade.php
 #   c0e51e962b68b14a3bc4b62ee50afba8  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不参与 Dockerfile 的 md5 自证（那份只钉 9 条）；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里，此处只作存档对照。）
@@ -161,8 +161,8 @@
 #      防御式写法：环境里没有真实库（单元测试的桩）时静默跳过。
 #  ⑫ 探针补量「库画的框」(.ds-selector rect+display) 与 isInteracting/isDragging ——
 #      上一版只量我们自己的框，才会出现「我们这边全 0、用户却看得见蓝框」的分歧。
+#      2026-10-08 第七轮：真机复验「所有行为达到预期、手机端不再出框」⇒ 探针整段删除。
 #  实测证据：触摸滑动全程 `libhid0x0|int00`（修复前 `libVIS2x2|int10`）；桌面 `libVIS273x497`、选中 9 张。
-
 ---- src/resources/js/context-js.js
 --- lsky-pro@38d52c46/resources/js/context-js.js	（上游原文件）
 +++ src/resources/js/context-js.js	（本 fork）
@@ -4663,7 +4663,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,10 +2155,352 @@
+@@ -468,10 +2155,274 @@
              });
          </script>
          <script>
@@ -4935,88 +4935,10 @@
 +                }
 +            });
 +
-+
-+            /* ===================== 临时诊断打点（只在 ?dbg=1 时启用） =====================
-+             * 用途：定位「手机端滑动仍会触发框选」（2026-10-08 老师报，iOS/安卓都有）。
-+             * 只读：只挂监听 + fetch 打点，不改任何状态；不带 ?dbg=1 时整段不执行。
-+             * 数据落在容器访问日志里（fetch 到 /dbg-… 路径），我在远程 docker logs 里读。
-+             * 用完即删（连同 Dockerfile 的 md5 重钉）。 */
-+            (function () {
-+                if (! /[?&]dbg=1\b/.test(location.search)) { return; }
-+                const SID = 'dbg' + Date.now().toString(36);
-+                let seq = 0;
-+                let lastBox = '';
-+                let lastEvt = '';
-+                const send = (tag, detail) => {
-+                    if (seq > 500) { return; }
-+                    seq += 1;
-+                    const url = '/dbg-' + SID + '/' + seq + '/' + tag
-+                        + '-' + encodeURIComponent(String(detail));
-+                    try { fetch(url, {mode: 'no-cors', keepalive: true}); } catch (e) {}
-+                };
-+                const boxState = () => {
-+                    try {
-+                        const b = dsBoxRect();
-+                        return Math.round(b.width) + 'x' + Math.round(b.height);
-+                    } catch (e) { return 'na'; }
-+                };
-+                const selState = () => {
-+                    try { return ds.getSelection().length; } catch (e) { return 'na'; }
-+                };
-+                const touchAge = () => (Date.now() - lastTouchAt);
-+                // 2026-10-08 补：第一次采样漏了**库自己画的框**（老师截图里那个蓝框就是它）——
-+                // 本次连它一起量，免得再出现「我们这边全是 0、用户却看得见」的分歧。
-+                const libBox = () => {
-+                    try {
-+                        const el = document.querySelector('.ds-selector');
-+                        if (!el) { return 'none'; }
-+                        const r = el.getBoundingClientRect();
-+                        const cs = getComputedStyle(el);
-+                        return (cs.display === 'none' ? 'hid' : 'VIS')
-+                            + Math.round(r.width) + 'x' + Math.round(r.height);
-+                    } catch (e) { return 'na'; }
-+                };
-+                const interacting = () => {
-+                    try { return (ds.Interaction.isInteracting ? 1 : 0) + '' + (ds.Interaction.isDragging ? 1 : 0); }
-+                    catch (e) { return 'na'; }
-+                };
-+
-+                ['touchstart', 'touchmove', 'touchend', 'touchcancel',
-+                    'mousedown', 'mousemove', 'mouseup', 'click'].forEach((type) => {
-+                    document.addEventListener(type, (e) => {
-+                        // move 类事件量大：每 3 条只留 1 条（够看出轨迹，又不刷爆日志）
-+                        if ((type === 'touchmove' || type === 'mousemove') && seq % 3 !== 0) { return; }
-+                        lastEvt = type;
-+                        const p = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
-+                        send('e', type
-+                            + '|x' + Math.round(p.clientX || 0) + '|y' + Math.round(p.clientY || 0)
-+                            + '|pd' + (e.defaultPrevented ? 1 : 0)
-+                            + '|tgt' + String((e.target && (e.target.className || e.target.tagName)) || '?').slice(0, 20)
-+                            + '|box' + boxState() + '|sel' + selState()
-+                            + '|mob' + (utils.isMobile() ? 1 : 0)
-+                            + '|lt' + touchAge()
-+                            + '|lib' + libBox()
-+                            + '|int' + interacting());
-+                    }, true);
-+                });
-+                // 框尺寸变化（100ms 采样，变了才发）
-+                setInterval(() => {
-+                    const b = boxState();
-+                    if (b !== lastBox) {
-+                        lastBox = b;
-+                        send('box', b + '|lastEvt' + lastEvt + '|sel' + selState() + '|lt' + touchAge()
-+                            + '|lib' + libBox() + '|int' + interacting());
-+                    }
-+                }, 100);
-+                // 选择变化
-+                ds.subscribe('elementselect', () => send('sel+', 'n' + selState() + '|lastEvt' + lastEvt + '|box' + boxState()));
-+                ds.subscribe('elementunselect', () => send('sel-', 'n' + selState() + '|lastEvt' + lastEvt + '|box' + boxState()));
-+                send('boot', 'sid' + SID + '|cards' + document.querySelectorAll('.images-item').length + '|mob' + (utils.isMobile() ? 1 : 0));
-+            })();
  
              const bindOperates = () => {
                  let selected = ds.getSelection();
-@@ -486,10 +2515,14 @@
+@@ -486,10 +2437,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -5033,7 +4955,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -497,22 +2530,112 @@
+@@ -497,22 +2452,112 @@
                  $(operates.map(item => `[data-operate=${item}]`).toString()).css('display', 'block');
              };
  
@@ -5151,7 +5073,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +2656,250 @@
+@@ -533,27 +2578,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -5419,7 +5341,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +2910,9 @@
+@@ -564,7 +2832,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -5430,7 +5352,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +2920,19 @@
+@@ -572,47 +2842,19 @@
                          }
                      });
                  },
@@ -5487,7 +5409,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +2969,10 @@
+@@ -649,6 +2891,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -5498,7 +5420,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +2986,23 @@
+@@ -662,13 +2908,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -5524,7 +5446,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,7 +3017,11 @@
+@@ -683,7 +2939,11 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -5536,7 +5458,7 @@
                                  .replace(/__album_name__/g, image.album ? image.album.name : '-')
                                  .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
                                  .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-@@ -694,10 +3032,13 @@
+@@ -694,10 +2954,13 @@
                                  .replace(/__height__/g, image.height)
                                  .replace(/__md5__/g, image.md5)
                                  .replace(/__sha1__/g, image.sha1)
@@ -5552,7 +5474,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +3060,11 @@
+@@ -719,6 +2982,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -5564,7 +5486,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +3129,9 @@
+@@ -783,9 +3051,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -5577,7 +5499,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +3149,10 @@
+@@ -803,9 +3071,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -5589,7 +5511,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -844,17 +3191,27 @@
+@@ -844,17 +3113,27 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;
