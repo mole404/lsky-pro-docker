@@ -126,6 +126,7 @@ window.context = window.context || (function () {
         let timer = null,
             startX = 0,
             startY = 0,
+            startTs = 0,        // 手指按下那一刻的**事件时间戳**（e.timeStamp），不是处理时刻
             triggered = false;
 
         function cancel() {
@@ -157,6 +158,7 @@ window.context = window.context || (function () {
 
             startX = touch.clientX;
             startY = touch.clientY;
+            startTs = nativeEvent.timeStamp;
 
             let item = this;
             timer = setTimeout(function () {
@@ -181,6 +183,25 @@ window.context = window.context || (function () {
         });
 
         $(document).on('touchend touchcancel', selector, function (e) {
+            /* 【2026-10-08 修】主线程卡顿时（首屏排版 / 40 张图重排），浏览器会把 touchstart 的**投递**
+             * 推迟到卡顿结束，于是触屏处理器"看到"的按下与抬手只差十几毫秒，而手指其实按了 1.5s 以上 ——
+             * 250ms 的定时器还没到点就被这一发 touchend 清掉，长按菜单于是偶发不弹（实测卡顿场景 0/3）。
+             * 事件的 e.timeStamp 记的是浏览器**生成**该事件的真实时刻，不受投递延迟影响 ⇒ 用它补一次判定：
+             * 定时器还活着（= 手指没移动过，touchmove 里的 cancel 没跑）且真实时长够 ⇒ 现在补开菜单。
+             * 守卫：!triggered（已正常弹过不重复弹）、timer !== null（拖动/滚动一律不补）、阈值沿用常量。 */
+            let nativeEnd = e.originalEvent;
+
+            if (! triggered && timer !== null && nativeEnd && startTs > 0
+                && (nativeEnd.timeStamp - startTs) >= LONG_PRESS_DELAY) {
+                cancel();
+                triggered = true;
+                lastOpenAt = Date.now();
+                openMenu(this, startX, startY);
+                swipeClickUntil = Date.now() + NEXT_CLICK_WINDOW;
+                e.preventDefault();
+                return;
+            }
+
             cancel();
 
             if (triggered) {

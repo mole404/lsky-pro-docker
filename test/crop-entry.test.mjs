@@ -212,8 +212,11 @@ console.log('\n[5] 看图器原有选项与钉住的产物没被改动');
         && /body\.viewer-open \{ overflow: visible; \}/.test(blade));
     check('「飞入」CSS 兜底还在', blade.includes('.viewer-canvas > img:not([style])'));
     const dockerfile = fs.readFileSync(path.join(here, '..', 'Dockerfile'), 'utf8');
-    check('Dockerfile 里 context-js 的两个 md5 未被改动（本轮不该碰它）',
-        (dockerfile.match(/c0e513ec8e93fd81b34b3c6de5cf5eb8/g) || []).length === 3);
+    // 2026-10-08：这条原先钉死「context-js 的 md5 不许变」（那时改裁剪不该碰它）。长按健壮性修复
+    // 确实改了 context-js ⇒ 换成「与当前文件实算值一致」，免得又变成一份会漂移的副本。
+    const ctxJsSrc = read('public', 'js', 'context-js', 'context-js.js');
+    check('Dockerfile 里 context-js 的 md5 与当前文件一致（实算，出现 3 处）',
+        (dockerfile.match(new RegExp(require_md5(ctxJsSrc), 'g')) || []).length === 3);
     check('Dockerfile 里 images.blade.php 的 md5 与当前文件一致（实算）',
         dockerfile.includes(blade && require_md5(blade)));
 }

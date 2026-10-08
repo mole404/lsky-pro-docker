@@ -415,7 +415,7 @@
           </div>
             <div class="crop-group crop-actions">
                 <a href="javascript:void(0)" data-crop-action="cancel">取消</a>
-                <a href="javascript:void(0)" data-crop-action="crop" class="crop-primary">裁剪并上传</a>
+                <a href="javascript:void(0)" data-crop-action="crop" class="crop-primary">保存并上传</a>
             </div>
         </div>
     </div>
@@ -739,6 +739,22 @@
             try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) {}
             const IMAGES_GRID = '#images-grid';
             const IMAGES_ITEM = '.images-item';
+
+            /* iPhone 的 Safari 没有元素全屏 API（Fullscreen API 在 iOS 上只给了 iPad），
+               看图器工具栏的「全屏」键在那里点了必然**静默无反应**：库内部那句
+                 documentElement.requestFullscreen ? … : webkitRequestFullscreen ? … : moz ? … : ms …
+               会整条落空，既不报错也不生效。所以按能力探测决定**渲不渲染这个键**
+               （老师 2026-10-08 拍板：不支持就不显示，免得留一个点了没反应的按钮）。
+               判据优先看 document.fullscreenEnabled（iPhone Safari 上是 false）；
+               没有该属性的老浏览器再退回按元素上那几个 API 是否存在来判断。 */
+            const canViewerFullscreen = () => {
+                if (typeof document.fullscreenEnabled === 'boolean') {
+                    return document.fullscreenEnabled;
+                }
+                const de = document.documentElement;
+                return !!(de.requestFullscreen || de.webkitRequestFullscreen
+                    || de.mozRequestFullScreen || de.msRequestFullscreen);
+            };
             // 相册行容器（承载 data-id / data-json + 当前相册高亮）。
             // 行不再是「整行一个 <a>」，而是 .albums-row 里「左边切换链接 + 右边常显按钮」，
             // 所以按钮往上找 id 要 closest 到这一层，不能再用 .albums-item（那是 <a> 自己）。
@@ -796,8 +812,12 @@
                 toolbar: {
                     // 放最左（库按这里的键顺序渲染）。
                     crop: { show: true, click: () => cropEditor.openFromViewer() },
-                    // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()
-                    fullscreen: { show: true, click: () => toggleViewerFullscreen() },
+                    // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()。
+                    // 按能力探测决定要不要渲染这个键：不支持元素全屏的浏览器（iPhone Safari）
+                    // 干脆不显示，免得更成一个点了没反应的死按钮。
+                    ...(canViewerFullscreen()
+                        ? { fullscreen: { show: true, click: () => toggleViewerFullscreen() } }
+                        : {}),
                     'one-to-one': true,
                     reset: true,
                     prev: true,
@@ -1172,7 +1192,7 @@
                             return;
                         }
                         close();
-                        toastr.success('已裁剪并上传');
+                        toastr.success('已保存并上传');
                         try { if (typeof resetImages === 'function') { resetImages(); } } catch (e) {}
                     }).fail((xhr) => {
                         const data = xhr && xhr.responseJSON;
@@ -2153,6 +2173,40 @@
                 zoom: dsPageZoom(),
             });
 
+            /* ---------------- 触摸端不让 DragSelect 取消默认行为（2026-10-08 老师拍板） ----------------
+             * 为什么必须处理：库的 Interaction._start 第一句就是**无条件**的
+             *     if (e.type === 'touchstart') e.preventDefault();
+             * 而且它排在「能不能开始拖动」的判断**之前** ⇒ 图片区域内（#images-scroll 里）的触摸
+             * 默认行为一律被否掉，Chromium 因此**不合成 mousedown/mouseup/click**。两个后果：
+             *   ① 库的「点选」发生在 **mousedown**（Interaction:start → Selection 拿页面覆盖的
+             *      Selector.rect 与卡片矩形相交 → SelectedSet.add）⇒ 手机端「点图片」不勾选，
+             *      和桌面端不一致（老师报的正是这条）；
+             *   ② Viewer 的 click 也收不到（安卓上「点图片打不开大图」的隐患）。
+             * 做法：在 document 的**捕获阶段**（早于一切监听器）把落在区域内**那一发** touchstart 的
+             * preventDefault 换成空函数 —— 事件照常往下传（卡片自己的长按菜单、页面其它触摸逻辑
+             * 一个字都不动），但谁也别想取消这次触摸的默认行为。
+             * ⚠ 别改成 stopPropagation 拦事件：那样卡片元素上的 touchstart 也收不到，长按菜单直接失灵
+             *   （实测「长按不弹菜单、反而打开看图器」）。
+             * 屏蔽之后，触摸走的是**与桌面完全相同**的一条路：浏览器正常合成 mousedown/mouseup/click
+             * → 库的点选 + Viewer 打开 + 我们自己那套框选判定 ⇒ 两端行为一致。
+             * 实测（真站点副本 + CDP 真触摸 + iPhone UA）：点图片 → 勾选 + 打开大图；点右上角小圆勾 →
+             * 单选/多选（连点两张 = 2 张）；桌面鼠标逐项不变。
+             * ----------------------------------------------------------------------------------------- */
+            document.addEventListener('touchstart', (e) => {
+                const t = e.target;
+                if (! t || typeof t.closest !== 'function') {
+                    return;
+                }
+                if (t.closest(IMAGES_SCROLL)) {
+                    /* 把这一发事件上的 preventDefault 暂时换成空函数：事件照常往下传（卡片自己的
+                     * 长按菜单、页面其它触摸逻辑一个字不动），但**谁也别想取消这次触摸的默认行为**
+                     * ⇒ 浏览器正常合成 mousedown/mouseup/click。
+                     * ⚠ 别改成 stopPropagation：那样卡片元素上的 touchstart 也收不到，长按菜单直接失灵
+                     *   （实测「长按不弹菜单、反而打开看图器」）。 */
+                    try { e.preventDefault = function () {}; } catch (err) { /* 覆盖失败就退回原行为 */ }
+                }
+            }, true);
+
             /* ---------------- 框选失效的真因与修法（fork 修复） ----------------
              * 现象：图片墙上按住左键拖动，怎么拖都框不出选择框（按在图片上、按在缝隙上都不行）。
              * 真因：DragSelect 会给区域套一层 .ds-selector-area 包装盒，并把这个盒子的矩形**缓存**下来
@@ -2373,9 +2427,10 @@
             };
 
             ds.subscribe('predragstart', ({ event }) => {
-                if (utils.isMobile()) {
-                    ds.stop();
-                }
+                /* 【2026-10-08】这里原来有一句 `if (utils.isMobile()) ds.stop();`（手机端不拖框），
+                 * 它把库的整个交互停掉 ⇒ 手机端「点图片」只剩打开大图、不勾选，与桌面端不一致
+                 *（这正是老师报的那条的直接原因）。现在触摸端由上面那段「不让库取消默认行为」
+                 * 统一成与桌面相同的路径，这句已删。 */
 
                 // 能起拖动的目标：网格/空白（带 dragselect 类）、卡片 <a> 本身、卡片里的 <img>。
                 // 别的（右上角小圆勾等控件）一律 break()，保持它们原来的点选行为 ——
