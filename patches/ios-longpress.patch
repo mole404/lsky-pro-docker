@@ -5,6 +5,10 @@
 #   └ 构建用的就是仓库里 src/ 下这三个文件本身（改它们 = 改产品）。
 #      随时可用 `bash tools/diff-vs-upstream.sh` 重新生成/核对这份 diff。
 #
+# 注意：这份 diff 是**阶段性存档**。此后仓库里又做了几处改动（菜单关闭时的委托/定时器收口、
+#       相册列表渲染转义、{filename} 的 URL 危险字符清洗），它们**没有**重新并进下面这几段 diff。
+#       需要最新全貌时，按上面那行命令（tools/diff-vs-upstream.sh）重新生成，或直接看 git 历史。
+#
 # 上游基线：lsky-org/lsky-pro @ 38d52c4609eb85236b45ac75acac2ced55174953
 #           （2025-11-24 的 master；上游随后再无提交，且 README 已声明"开源版本已停止维护"）
 #

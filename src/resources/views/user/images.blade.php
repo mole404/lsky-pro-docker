@@ -1639,14 +1639,17 @@
                             for (const i in albums) {
                                 html += $('#albums-item-tpl').html()
                                     .replace(/__id__/g, albums[i].id)
-                                    .replace(/__name__/g, albums[i].name)
-                                    .replace(/__intro__/g, albums[i].intro)
+                                    .replace(/__name__/g, escapeHtml(albums[i].name).replace(/\$/g, '$$$$'))
+                                    .replace(/__intro__/g, escapeHtml(albums[i].intro).replace(/\$/g, '$$$$'))
                                     .replace(/__image_num__/g, albums[i].image_num)
                                     // 当前所在相册标出来（与「移动到相册」弹窗同一个徽标）
                                     .replace(/__current_badge__/g, albums[i].id === selectedAlbum.id
                                         ? '<div class="ls-badge shrink-0 bg-brand-soft text-brand">当前</div>'
                                         : '')
-                                    .replace(/__json__/g, JSON.stringify(albums[i]))
+                                    // 相册名/简介会进这里的 JSON，而 data-json 是单引号属性 ——
+                                    // 名字里带 ' 就能把属性提前闭合（自伤型 XSS 面），所以先按 HTML 转义再注入
+                                    // （与图片卡片、标签行同一条规则；浏览器解析属性时会自动解码，.data() 读到的仍是原始 JSON）
+                                    .replace(/__json__/g, escapeHtml(JSON.stringify(albums[i])).replace(/\$/g, '$$$$'))
                             }
 
                             $albums.append(html);
@@ -1697,10 +1700,14 @@
                         let $item = $(this).closest(ALBUM_ROW);
                         $albums.find(UPDATE_ID).remove();
                         if (selectedId !== $item.data('id')) {
+                            // 名称/简介从行容器的 data-json 取（原始值），不要用 .html()/.attr()：
+                            // .html() 返回的是已序列化的 HTML（& 变成 &amp;），名字含 " 时还会直接
+                            // 破坏 value="..." 属性 —— 与本文件其它几处的属性注入是同一条规则。
+                            const albumData = $item.data('json') || {};
                             $item.after($('#album-update-tpl').html()
                                 .replace(/__id__/g, $item.data('id'))
-                                .replace(/__name__/g, $item.find('.name').html())
-                                .replace(/__intro__/g, $item.find('a.albums-item').attr('title'))
+                                .replace(/__name__/g, escapeHtml(albumData.name).replace(/\$/g, '$$$$'))
+                                .replace(/__intro__/g, escapeHtml(albumData.intro).replace(/\$/g, '$$$$'))
                             );
                         }
                     });
@@ -2784,7 +2791,7 @@
                             for (const i in albums) {
                                 html += $('#movements-album-item-tpl').html()
                                     .replace(/__id__/g, albums[i].id)
-                                    .replace(/__name__/g, albums[i].name)
+                                    .replace(/__name__/g, escapeHtml(albums[i].name).replace(/\$/g, '$$$$'))
                                     .replace(/__image_num__/g, albums[i].image_num)
                                     // 当前所在相册标出来
                                     .replace(/__current_badge__/g, albums[i].id === selectedAlbum.id

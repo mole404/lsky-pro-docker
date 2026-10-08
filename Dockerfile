@@ -114,6 +114,10 @@ RUN printf '%s\n' \
 # app/Services/ImageService.php 同样是有意偏离的：移除 SVG 支持时删掉了几个「只可能因为
 # svg 数据而命中」的分支（上传跳过图片处理 / 跳过违规扫描的 in_array svg、makeThumbnail
 # 里 svg 直拷原文件），详见 README「与上游的差异」第 7 条。
+# 另外还给 {filename} 命名规则加了 URL 危险字符清洗（sanitizeFilename）：替换结果会被直接
+# 拼成存储路径并由 Image::url() 原样拼成直链（全程无 rawurlencode），名字里带 ? 会让直链
+# 在 ? 处被截断成查询串 ⇒ 图片永远打不开（# 更彻底，请求都不会发出）。这些字符在正常
+# 文件名里不会出现，所以对正常文件名是恒等变换 —— 不改变现有命名结果与链接形态。
 # routes/auth.php 也是有意偏离（F23 防爆破）：给 login / register / forgot-password /
 # confirm-password 四个 POST 端点加了 throttle（详见文件内注释）。它同样被钉住，
 # 改了不更新这行 md5 就构建失败。
@@ -122,7 +126,7 @@ RUN printf '%s\n' \
         '1087b3697db7d075b83199fe764d89a6  ./config/convention.php' \
         '881fdbaed19ef39027783f093448875d  ./routes/web.php' \
         'c1ab546f3e7f5237c1d45435171858ce  ./routes/auth.php' \
-        'ea2977cb9090ee60bebbf383057ab7c3  ./app/Services/ImageService.php' \
+        '06c38d587ac188750af34aaf224a239d  ./app/Services/ImageService.php' \
     | md5sum -c -
 
 # 有意偏离上游的另一个文件：composer.lock。
@@ -163,9 +167,9 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 # 改 src/ 里这三个文件后必须同步更新这里的 md5（故意做成"改了不更新就构建失败"），
 # 并重新生成 patches/ios-longpress.patch（tools/diff-vs-upstream.sh）。
 RUN printf '%s\n' \
-        '5ddf0eed1c5aeacc547ff38ad72156aa  ./public/js/context-js/context-js.js' \
-        '5ddf0eed1c5aeacc547ff38ad72156aa  ./resources/js/context-js.js' \
-        'b7394a153bb65dd25faee71a30e9775f  ./resources/views/user/images.blade.php' \
+        'e885e4b78abd47ad042af5877ed95140  ./public/js/context-js/context-js.js' \
+        'e885e4b78abd47ad042af5877ed95140  ./resources/js/context-js.js' \
+        'f578d1b804ee3674febe5397614ece85  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -177,7 +181,11 @@ RUN printf '%s\n' \
     && grep -q 'fitSubmenu' ./public/js/context-js/context-js.js \
     && grep -q 'clampMenu' ./resources/js/context-js.js \
     && grep -q 'submenu-inplace' ./public/js/context-js/context-js.js \
-    && grep -q 'SUBMENU_GUARD' ./public/js/context-js/context-js.js
+    && grep -q 'SUBMENU_GUARD' ./public/js/context-js/context-js.js \
+    && grep -q 'menuActionIds' ./public/js/context-js/context-js.js \
+    && grep -q 'menuCleanupTimers' ./public/js/context-js/context-js.js \
+    && grep -q 'sanitizeFilename' ./app/Services/ImageService.php \
+    && grep -q 'escapeHtml(JSON.stringify(albums' ./resources/views/user/images.blade.php
 
 # 代码版本标记：入口脚本用它判断「卷里的代码是不是当前镜像这一版」，不一致才同步（见 entrypoint.sh）。
 # 它由「源码 commit + 补丁 md5 + 内容指纹」组成：任何代码/补丁变化都会让它变。
@@ -189,6 +197,11 @@ RUN printf '%s\n' \
 #   app_src_md5 = app/ config/ routes/ 三个目录下所有文件「按路径排序后内容拼接」的 md5
 #                 （排序用 sort -z，与文件系统返回顺序无关 = 同一份源码在任何机器上结果一致）；
 #   app_js_md5  = public/js/app.js 的 md5；app_css_md5 = public/css/app.css 的 md5；
+#   context_css_md5 = public/css/context-js/context-js.css 的 md5
+#                 （补这一条的背景：菜单那一块的样式在 resources/css/context-js.less 里，编译产物
+#                  是这个 css。它此前**不在任何 md5/指纹里** —— 只改它会连同 less 一起被漏掉，
+#                  标记不变 ⇒ 老卷永远不会重新同步 ⇒ 镜像里是新样式、卷里是旧样式，且没有任何报错。
+#                  与 context_js_md5 / images_blade_md5 那两个「我们打补丁的文件」是同一条要求。）
 #   composer_lock_md5 = composer.lock 的 md5（应用根目录，构建后镜像里是 /var/www/lsky/composer.lock）。
 #                 补这一条的背景：上面的指纹只覆盖「代码」，而 composer.lock 变了（只升级 vendor 依赖、
 #                 其它 PHP/前端都没动）时，标记不变 → 老卷不会重新同步 → 卷里是旧依赖、镜像里是新依赖。
@@ -202,16 +215,19 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
     [ -n "$APP_JS_MD5" ] || APP_JS_MD5=none; \
     APP_CSS_MD5=$(md5sum public/css/app.css 2>/dev/null | cut -d' ' -f1); \
     [ -n "$APP_CSS_MD5" ] || APP_CSS_MD5=none; \
+    CONTEXT_CSS_MD5=$(md5sum public/css/context-js/context-js.css 2>/dev/null | cut -d' ' -f1); \
+    [ -n "$CONTEXT_CSS_MD5" ] || CONTEXT_CSS_MD5=none; \
     COMPOSER_LOCK_MD5=$(md5sum composer.lock 2>/dev/null | cut -d' ' -f1); \
     [ -n "$COMPOSER_LOCK_MD5" ] || COMPOSER_LOCK_MD5=none; \
     printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
-        "context_js_md5=5ddf0eed1c5aeacc547ff38ad72156aa" \
-        "images_blade_md5=b7394a153bb65dd25faee71a30e9775f" \
+        "context_js_md5=e885e4b78abd47ad042af5877ed95140" \
+        "images_blade_md5=f578d1b804ee3674febe5397614ece85" \
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
+        "context_css_md5=${CONTEXT_CSS_MD5}" \
         "composer_lock_md5=${COMPOSER_LOCK_MD5}" \
         > .code-revision \
     && cat .code-revision

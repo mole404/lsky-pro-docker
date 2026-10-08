@@ -94,6 +94,19 @@ window.context = window.context || (function () {
     let lastOpenAt = 0;             // 上一次由长按打开菜单的时间（用于与 contextmenu 去重）
     let guardInstalled = false;
 
+    // 【修复·菜单重建时的收口】上一轮菜单留下的两样东西必须在本轮菜单开始前收掉：
+    //
+    //   1) closeMenus 的两个清理定时器到点后是**实时查询 DOM**（.drop-left / .touch-open /
+    //      定格高亮 / exitSubmenuInplace）。如果在窗口期内又开了新菜单，它们会作用到新菜单上
+    //      —— 表现为"刚展开的二级菜单被莫名收起"、"定格高亮被抹掉"。开新菜单时先取消。
+    //   2) buildMenu 为每个带 action 的项注册 `$(document).on('click', '#event-xxx')` 委托，
+    //      而 destroyContext 注销用的 `.context-event` 类**从未真正加上**（addClass 时元素还没
+    //      进 document，$() 找不到它）⇒ 那批委托无人注销：每开一次菜单就在 document 上多叠一批
+    //      （选择器指向已删除的 ID、永不触发，但页面每次点击都要把它们遍历一遍）。开新菜单时
+    //      注销上一批，数量不再随使用次数增长。
+    let menuCleanupTimers = [];
+    let menuActionIds = [];
+
     // 压掉 iOS 的原生长按菜单与放大镜。只作用于本库绑定的元素范围 + 菜单本身，
     // 不碰页面其它地方的链接/文字，保证其它长按能力不受影响。
     function injectTouchStyles() {
@@ -407,23 +420,26 @@ window.context = window.context || (function () {
         const doFadeOut = function () {
             $menu.addClass(MENU_FADING_CLASS);          // CSS：opacity → 0，带 transition: opacity <fade>ms
             $menu.css('transition-duration', fade + 'ms');
-            setTimeout(function () {
+            // 句柄留在 menuCleanupTimers 里：下次开菜单时会先取消（见 openMenu），
+            // 否则它们到点后实时查到的会是**新菜单**，把刚展开的二级菜单收起。
+            menuCleanupTimers = [];
+            menuCleanupTimers.push(setTimeout(function () {
                 $menu.removeClass(MENU_FADING_CLASS)
                     .css({ display: '', opacity: '', transitionDuration: '' });
                 $('.dropdown-context .drop-left').removeClass('drop-left');
                 $('.dropdown-context .touch-open').removeClass('touch-open');
-            }, fade + 60);
+            }, fade + 60));
         };
         doFadeOut();
         // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
         //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
         //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
-        setTimeout(function () {
+        menuCleanupTimers.push(setTimeout(function () {
             $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
             if (leafClose) {
                 exitSubmenuInplace(true);
             }
-        }, fade + 150);
+        }, fade + 150));
     }
 
     function isInsideMenu(node) {
@@ -1073,10 +1089,15 @@ window.context = window.context || (function () {
                     let actionID = 'event-' + new Date().getTime() * Math.floor(Math.random() * 100000),
                         eventAction = data[i].action;
                     $a.attr('id', actionID);
+                    // 说明：$a 此刻还没进 document（要到下面的 $menu.append($sub) 才挂上去），
+                    // 所以这句按 ID 查不到元素、`.context-event` 从来没被真正加上 ——
+                    // destroyContext 里注销 .context-event 也就成了空操作。保持原样（不影响任何行为），
+                    // 委托的注销改由 openMenu 按 menuActionIds 精确收口。
                     $('#' + actionID).addClass('context-event');
                     $(document).on('click', '#' + actionID, function () {
                         eventAction.call(this, event);
                     });
+                    menuActionIds.push(actionID);
                 }
                 $menu.append($sub);
                 if (typeof data[i].subMenu != 'undefined') {
@@ -1118,6 +1139,22 @@ window.context = window.context || (function () {
             if (! item) {
                 return;
             }
+
+            // 【修复·收口上一轮菜单】必须在 buildMenu **之前**做 —— 它会把新一批 actionID
+            // 记进 menuActionIds，晚一步就会连新的一起注销掉。
+            //   1) 取消上一轮 closeMenus 留下的清理定时器：它们到点后实时查 DOM，会作用到本轮
+            //      新菜单上（把刚展开的二级菜单收起、抹掉定格高亮）；
+            //   2) 注销上一轮注册的 document click 委托：目标 ID 已随旧菜单删除、永不触发，
+            //      留着只会让页面每次点击都多遍历一批选择器。
+            // 旧菜单元素紧接着会被 remove()，所以上面两步不涉及任何仍在屏幕上的东西 = 无观感变化。
+            for (let t = 0; t < menuCleanupTimers.length; t++) {
+                clearTimeout(menuCleanupTimers[t]);
+            }
+            menuCleanupTimers = [];
+            for (let a = 0; a < menuActionIds.length; a++) {
+                $(document).off('click', '#' + menuActionIds[a]);
+            }
+            menuActionIds = [];
 
             typeof opts.beforeOpen === 'function' && opts.beforeOpen.call(evt || item, item);
 
