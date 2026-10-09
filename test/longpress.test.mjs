@@ -265,7 +265,7 @@ console.log('\n[iPhone Safari] 长按的取消与边界');
     await sleep(500);
     check('短按（<250ms 抬手）不触发菜单', !menu(c.window));
 
-    // 阈值回归：250ms 是新的分界线，压短了就必须守住边界（老师要求 500 -> 250）
+    // 阈值回归：250ms 是新的分界线，压短了就必须守住边界（要求 500 -> 250）
     const d = boot({ ua: UA.iphone });
     touch(d.window, 'touchstart', 100, 200, d.$item[0]);
     await sleep(320);
@@ -396,7 +396,7 @@ console.log('\n[iPhone Safari] 二级菜单：点击展开/收起，不再"闪�
         return r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight;
     })());
 
-    // —— 防误触：老师手机上报的场景（手指还按着，二级菜单出现在手指底下）——
+    // —— 防误触：手机端上报的场景（手指还按着，二级菜单出现在手指底下）——
     window.__copied = 0;
     const leaf = doc.querySelector('.dropdown-context-sub a.copy');
     check('二级菜单里有叶子项（Url/Html）', !!leaf);
@@ -505,7 +505,7 @@ console.log('\n[Windows 桌面] 鼠标右键，必须完全走原路径');
 }
 
 // ---------------------------------------------------------------- 回归：看得见的菜单必须拦得住
-console.log('\n[回归] 菜单还在屏幕上时，任何路径都不许“点穿”（老师报的 Windows 偶尔点穿）');
+console.log('\n[回归] 菜单还在屏幕上时，任何路径都不许“点穿”（Windows 偶尔点穿）');
 {
     const { window, $, $item, img } = boot({ ua: UA.windows, platform: 'Win32', maxTouchPoints: 0, hasTouch: false });
     // 假时钟：A/B/C/D 全部是「必须在某个时间窗之内 / 之外」的断言。用真实 sleep 卡窗口是抽奖
@@ -563,7 +563,7 @@ console.log('\n[回归] 菜单还在屏幕上时，任何路径都不许“点�
     tapClick(window, img);
     check('D 菜单彻底消失后：点击恢复正常', window.__viewerOpened === 1, `viewer=${window.__viewerOpened}`);
 
-    // E. 诊断转储：能拿到开/关记录（含关闭原因），出问题时老师复制出来即可
+    // E. 诊断转储：能拿到开/关记录（含关闭原因），出问题时复制出来即可
     $item.trigger($.Event('contextmenu', { pageX: 30, pageY: 40 }));
     clock.advance(IGNORE_INPUT + 20);
     window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));

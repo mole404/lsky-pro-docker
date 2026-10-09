@@ -128,7 +128,7 @@
         <div class="relative p-4 rounded-md bg-surface mb-8 shadow-card">
             {{-- fork 2026-10-09：第一行品牌区（LOGO 图案 + 站点名，读站点配置、不写死；与登录页同一张图）。
                  尺寸走 inline style 的 26px（= 原来 24px 的 +10%，产物 app.css 里没有 26px 对应的工具类）；
-                 图标与站名的间隙由 gap-2(8px) 收到 gap-1(4px)（原来那 8px 在老师看来「像多了个空格」）。 --}}
+                 图标与站名的间隙由 gap-2(8px) 收到 gap-1(4px)（原来那 8px 看起来「像多了个空格」）。 --}}
             <p class="flex items-center justify-center gap-1 pt-2 text-ink">
                 <img src="{{ asset('static/lsky-logo.png') . '?v=' . \App\Utils::assetVersion('static/lsky-logo.png') }}"
                      alt="" width="26" height="26" decoding="async" style="width:26px;height:26px" class="shrink-0 select-none">
@@ -137,7 +137,7 @@
             <p class="text-center mt-1 text-ink">
                 {{ $version }}@if($commit) <span class="text-ink-2 font-mono">{{ $commit }}</span>@endif
             </p>
-            <p class="text-center pb-2 text-sm text-ink-2">Forked By {{ $author }}</p>
+            <p class="text-center pb-2 text-sm text-ink-2 mt-0.5">Forked By {{ $author }}</p>
         </div>
     </div>
 

@@ -1,6 +1,6 @@
 name: Update composer.lock (targeted)
 
-# 用途：本机/CI 里没有 php，composer.lock 只能在容器里重算。
+# 用途：本地/CI 里没有 php，composer.lock 只能在容器里重算。
 # 这个 workflow 只做一件事：在指定 PHP 版本里对**指定包**跑 composer update，
 # 把新的 composer.lock 作为 artifact 上传（**不自动提交**，人工看过再 commit）。
 # 这样"升依赖"这件事不会意外改动我们没打算动的包。

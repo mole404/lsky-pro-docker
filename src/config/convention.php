@@ -105,7 +105,7 @@ return [
         GroupConfigKey::LimitPerWeek => 600,
         GroupConfigKey::LimitPerMonth => 999,
         // fork（F3）：后缀白名单移除 svg —— 不再把 SVG 当成可上传/可存储/可内联展示的图片格式
-        // （原图直出时是 image/svg+xml，SVG 内嵌脚本 = 同源存储型 XSS）。本机也不需要 SVG 上传。
+        // （原图直出时是 image/svg+xml，SVG 内嵌脚本 = 同源存储型 XSS）。本地也不需要 SVG 上传。
         GroupConfigKey::AcceptedFileSuffixes => ['jpeg', 'jpg', 'png', 'gif', 'tif', 'bmp', 'ico', 'psd', 'webp'],
         GroupConfigKey::ImageSaveFormat => '',
         // fork（2026-10-05）：图床要原汁原味 —— 新建角色组 / 全新安装的默认保存质量 75 → 100

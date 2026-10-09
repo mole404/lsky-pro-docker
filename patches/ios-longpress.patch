@@ -69,7 +69,7 @@
 #   bab81ff5e43b50a760935c7b3ae6475c  public/js/context-js/context-js.js
 #   22c896eb7322ec2ff37d5eddd7ca0dec  resources/views/user/images.blade.php
 
-# 2026-10-01 第二轮（老师试完测试版提的意见）：两个标签窗口合并成一个（旧 tag-manage-modal 删除）、
+# 2026-10-01 第二轮（试完测试版提的意见）：两个标签窗口合并成一个（旧 tag-manage-modal 删除）、
 #   三态勾选改成两态、加「显示图片标签」开关、修好卡片拖动框选（图片穿透 + 拖动起点放宽 +
 #   由卡片自己开预览）。
 #
@@ -80,7 +80,7 @@
 #   同时修正本文件此前记错的一行：上游原文件 resources/views/user/images.blade.php 的真实 md5
 #   是 22c896eb7322ec2ff37d5eddd7ca0dec（旧值 28c8e000… 实为我们改后那份的值，写错了）。
 #
-# 2026-10-05（老师第七批意见；两处都在 images.blade.php）：
+# 2026-10-05（第七批意见；两处都在 images.blade.php）：
 #   （1）相册弹窗标题下加一行副标题「点击进入相册，再次点击退出相册」
 #       （样式与「标签管理」窗口的 __hint__ 同一套：mt-1 text-[13px] leading-5 text-ink-3）；
 #   （2）相册行 .albums-row 补 overflow-hidden —— 右侧两个 44×44 常显按钮的方形 hover 底色
@@ -106,7 +106,7 @@
 #   ③ 看图器工具栏的「全屏」键改成能力探测后渲染：iPhone 上 document.fullscreenEnabled === false
 #      （元素全屏 API 在 iOS 只给了 iPad），原先点了必然静默无反应 ⇒ 不支持的浏览器干脆不渲染该键。
 #   ④ 裁剪面板文案「裁剪并上传」→「保存并上传」（按钮 + toastr 保持一致）。
-# 2026-10-08 第二轮（老师拍板「可以一起修」）：
+# 2026-10-08 第二轮（拍板「可以一起修」）：
 #   ⑤ context-js.js（两份）：修「长按菜单偶发不弹」。主线程卡顿（首屏 40 张图重排）会把 touchstart
 #      的**投递**推迟到卡顿结束，触屏处理器"看到"的按下与抬手只差十几毫秒（真实按压 1.5s+），
 #      250ms 定时器还没到点就被 touchend 清掉 ⇒ 菜单偶发不弹（卡顿场景实测 0/3；改动前同样如此，
@@ -114,18 +114,18 @@
 #      touchend 时若定时器仍活着且真实时长 ≥ LONG_PRESS_DELAY，就地补开一次菜单（并吞掉随后那发 click）。
 #      守卫不变：已弹过不重弹、手指移动过（touchmove 已 cancel）不补、阈值沿用常量。实测卡顿 0/3 → 4/4，
 #      正常长按 5/5 不受影响；两份文件必须字节一致。
-# 2026-10-08 第三轮（老师试完测试版的反馈）：
+# 2026-10-08 第三轮（测试版实测）：
 #   ⑥ 登录页居中：components/auth-card.blade.php 里 LOGO 与卡片原来同处一个 justify-center 列，
 #      居中基准是「LOGO + 卡片」整体 ⇒ 卡片必然偏下（线上实测 390×844 偏下 35.5px、1280×720 偏下 38.9px）。
 #      改成 LOGO 悬在卡片正上方的绝对定位元素（inline style；避开未生成的 Tailwind 类），
 #      居中基准只剩卡片本身 —— 三个视口实测偏移全为 0。
-#   ⑦ 手机端不再支持拖框选择（老师定：框选只在电脑端生效，否则和滚页面手势打架）：
+#   ⑦ 手机端不再支持拖框选择（定：框选只在电脑端生效，否则和滚页面手势打架）：
 #      images.blade.php 的 mousemove 守卫里加 `if (utils.isMobile()) return;` —— 只让框「不再长大」，
 #      不取消 mousedown 那一发（库的点选正是靠按下时的点状框相交），所以点图片/点圆勾照常。
 #      实测：手机 UA 拖动 → 框宽 0、不多选（仍可点选）；桌面拖动 → 框宽 274、选中 9 张。
 #   ⑧ iOS 点图片闪灰：改动后不再 preventDefault，iOS 把默认的 -webkit-tap-highlight-color 放回来了；
 #      在图片墙范围内关掉它（#images-scroll .images-item）。它是继承属性，卡片内的 img 与小圆勾一并覆盖。
-# 2026-10-08 第四轮（老师实测反馈：手机端滑动仍会触发框选）：
+# 2026-10-08 第四轮（实测：手机端滑动仍会触发框选）：
 #   ⑨ 框选守卫从「只有 utils.isMobile()」补成两道 —— utils.isMobile() 的实现是
 #      「移动 UA **且 screen.width < 768**」，iPad 这类宽屏 iOS 设备上直接返回 false，只按它判等于没判。
 #      新增与设备无关的第二道闸：本页最近发生过触摸（TOUCH_GRACE_MS=1500，覆盖 touchend 之后浏览器
@@ -135,14 +135,14 @@
 # 2026-10-08 第五轮【临时诊断，用完必删】：
 #   ⑩ images.blade.php 末尾加了一段只在 `?dbg=1` 时启用的只读打点（事件流 + 框尺寸 + 选中数，
 #      fetch 到 /dbg-<sid>/<seq>/… ⇒ 落进容器访问日志，我在远程 docker logs 读）。
-#      原因：老师实测「手机端滑动仍会触发框选」（iOS/安卓都有），本机 CDP 复现不出 ⇒ 必须拿真机数据。
+#      原因：实测「手机端滑动仍会触发框选」（iOS/安卓都有），本地 CDP 复现不出 ⇒ 必须拿真机数据。
 # 2026-10-08 第六轮（真机根因确认 + 修复）：
 #   ⑪ 【修复】predragstart 里加：`if (event && event.type === 'touchstart') { ds.break(); return; }`
-#      —— 手机端不让库启动「触摸交互」。老师截图证实：真机上库被 touchstart 启动成功后自己画出
+#      —— 手机端不让库启动「触摸交互」。实测证实：真机上库被 touchstart 启动成功后自己画出
 #      蓝色选择框（DS 默认 rgba(0,0,255,.45) 细边），而落选判定用我们的零尺寸框 ⇒ 框出来但选不上。
-#      本机 CDP 复现不出（桌面 Chrome 的合成触摸序列过不了库的 _canInteract）。
+#      本地 CDP 复现不出（桌面 Chrome 的合成触摸序列过不了库的 _canInteract）。
 #      触摸之后浏览器补发的合成 mousedown/mouseup/click 会重新启动一次交互（鼠标路径）⇒
-#      点图片（勾选+开图）、点小圆勾（多选）、长按菜单一律照常（本机实测 sel=1 / sel=2 / 菜单弹出）。
+#      点图片（勾选+开图）、点小圆勾（多选）、长按菜单一律照常（本地实测 sel=1 / sel=2 / 菜单弹出）。
 #   ⑫ 探针补量「库画的框」(.ds-selector 的 rect+display) 与 ds.Interaction.isInteracting/isDragging
 #      —— 上一版只量了我们自己的框，才会出现「我们这边全 0、用户却看得见」的分歧。
 #   ⑪ 最终修法（上一版 predragstart + ds.break() 无效，已删）：直接改库的判据 ——
@@ -152,7 +152,7 @@
 #      状态在 publish 之前就置上了，所以回调里 break 来不及；且该路径发的是 "Interaction:start"，
 #      订阅名 `predragstart`(= "Interaction:start:pre") 根本收不到。
 #      合成 mouse 事件（type 'mousedown'）不受影响 ⇒ 点图片勾选+开图、点小圆勾多选、长按菜单照常。
-#      本机实测：触摸滑动全程 libhid0x0/int00（修复前 libVIS2x2/int10）；桌面拖动 libVIS273x497、选中 9 张。
+#      本地实测：触摸滑动全程 libhid0x0/int00（修复前 libVIS2x2/int10）；桌面拖动 libVIS273x497、选中 9 张。
 # 2026-10-08 第六轮（真机根因确认 + 最终修法；上一版 predragstart+break 无效已删）：
 #  ⑪ 【修复】包装 `ds.Interaction._canInteract`：touchstart/touchmove/touchend（及
 #      pointerType==='touch'）一律返回 false ⇒ 库压根进不了交互状态，不再自己画蓝框。
@@ -161,13 +161,13 @@
 #      之前就置上了；而且这条路径发的是 "Interaction:start"（订阅名 dragstart），订阅
 #      `predragstart`(= "Interaction:start:pre") 根本收不到 ⇒ 上一版是空转。
 #      合成 mouse 事件（type 'mousedown'）不受影响 ⇒ 点图片（勾选+开图）、点小圆勾（多选）、
-#      长按菜单一律照常（本机实测 sel=1 / sel=2 多选 / 菜单弹出）。
+#      长按菜单一律照常（本地实测 sel=1 / sel=2 多选 / 菜单弹出）。
 #      防御式写法：环境里没有真实库（单元测试的桩）时静默跳过。
 #  ⑫ 探针补量「库画的框」(.ds-selector rect+display) 与 isInteracting/isDragging ——
 #      上一版只量我们自己的框，才会出现「我们这边全 0、用户却看得见蓝框」的分歧。
 #      2026-10-08 第七轮：真机复验「所有行为达到预期、手机端不再出框」⇒ 探针整段删除。
 #  实测证据：触摸滑动全程 `libhid0x0|int00`（修复前 `libVIS2x2|int10`）；桌面 `libVIS273x497`、选中 9 张。
-# 2026-10-08 第八轮（手机端菜单项的按下反馈）：
+# 2026-10-08 第八轮（手机端菜单项的按下响应）：
 #  ⑬ context-js.less / context-js.css：菜单项原来只有 `li>a:hover`/`:focus` 一处高亮来源，
 #     全仓没有 `:active`。iOS 触摸会补发合成 hover ⇒ 还能亮；安卓没有 hover 阶段 ⇒ 按下去
 #     完全没有强调色，且点完菜单即关 ⇒「看不清选中了哪一项」。加 `li>a:active` 与
@@ -179,7 +179,7 @@
 #     —— 与 JS 那侧一致；原来 CSS 没版本串，iOS/Safari 启发式缓存会让改了的样式不生效。
 #  实测证据（CDP 强制伪状态 CSS.forcePseudoState）：未按下背景 rgba(0,0,0,0) → 强制 :active 后
 #     rgb(37,99,235)（= --lsky-accent #2563eb）+ 文字白；容器 -webkit-tap-highlight-color 读到透明。
-# 2026-10-08 第九轮（老师反馈：点二级菜单项还是消失太快，希望加一点延迟）：
+# 2026-10-08 第九轮（实测：点二级菜单项还是消失太快，希望加一点延迟）：
 #  ⑯ context-js.js：点中叶子项后，**这一次**关闭的淡出从 100ms 放到 LEAF_CLOSE_FADE=280ms；
 #     同时给该项加 .context-pressed 定格高亮（手指抬起后它继续亮着随菜单淡出）。
 #     逻辑关闭依旧立即（menuVisible 立刻 false），menuClosingUntil 与淡出时长一起延长，
@@ -190,7 +190,7 @@
 #     现在挂 li，再取它直接的 a；父项 .dropdown-submenu 与标题行 .nav-header 不算叶子项。
 #  实测（真实鼠标事件，CDP）：点 Url 当帧 bg = rgb(37,99,235)（= --lsky-accent）、pressed=true，
 #     菜单到不可见 418ms（原先约 100~150ms），关完后 .context-pressed 残留 0。
-# 2026-10-08 第十轮（老师：点二级菜单项后不要看到「先返回一级菜单再消失」）：
+# 2026-10-08 第十轮（点二级菜单项后不要看到「先返回一级菜单再消失」）：
 #  ⑱ closeMenus 里那句 `exitSubmenuInplace(true)` 原先是**即时**执行的 —— 它会把菜单从
 #     「子菜单就地展开」切回一级，于是用户看到「先返回一级、再整个消失」。
 #     改：**叶子项关闭路径**（leafClose）跳过即时调用，与 .context-pressed 的清理一起放到
@@ -201,7 +201,7 @@
 #  实测（CDP 模拟 hover:none 让点「复制链接」走就地展开那条真实手机路径）：
 #     点击当帧 pressed=true、bg=rgb(37,99,235)、**inplace 仍为 true**（没退回一级）、Url 仍可见；
 #     120ms 后高亮保持；菜单 395ms 到不可见；随后 inplace=false、返回行=0、高亮残留=0。
-# 2026-10-08 第十一轮（老师：安卓端二级延迟再长一点 + 一级也加一点但短于二级；**只动安卓**）：
+# 2026-10-08 第十一轮（安卓端二级延迟再长一点 + 一级也加一点但短于二级；**只动安卓**）：
 #  ⑲ context-js.js 的关闭淡出按时长分级，且**只有安卓是新增行为**：
 #     iOS：二级保持 SUB_FADE_IOS=280（第七轮定的值），一级保持 options.fadeSpeed（原行为）—— 与改动前完全一致。
 #     安卓：二级 SUB_FADE_ANDROID=420、一级 MAIN_FADE_ANDROID=200（一级 < 二级）。
@@ -211,18 +211,18 @@
 #     iOS 二级 195ms / 安卓二级 333ms（安卓更长）；iOS 一级 77ms（原样）/ 安卓一级 150ms（短于安卓二级）。
 #     注：别用 context.isMenuOnScreen() 计时 —— 它含「DOM 高度>0」兜底，fadeOut 回调把 display 改回 ''
 #     后高度又非 0，读数会虚高且不线性；也别用 CDP 轮询 opacity（往返几十毫秒抓不住短窗口）。
-# 2026-10-08 第十二轮（老师实测：安卓端两级延迟「几乎没变」）：
+# 2026-10-08 第十二轮（实测：安卓端两级延迟「几乎没变」）：
 #  ⑳ 判据由「正向认 Android」改成**反判**：`isIOSUA = /iPhone|iPad|iPod/i`、`useLongFade = ! isIOSUA`。
 #     原因：原判据 /Android/i 一旦认不出来（桌面模式 UA、WebView 精简 UA、UA-CH 冻结 UA），
-#     就会静默退化成 iOS 那条 280/100 的路径 —— 表现正好是老师看到的「几乎没变」。
+#     就会静默退化成 iOS 那条 280/100 的路径 —— 表现正好是实测看到的「几乎没变」。
 #     反判的保底方向正确：只有 iOS 保持原值，其余一律吃长延迟。
 #  ㉑【临时诊断，拿到数据后删】?dbg=1 时打三笔到访问日志（/dbg-ctx…）：
 #     boot（UA/platform/userAgentData.platform/isIOS/isAndroid/useLong/实际常量）、
 #     tap（target 标签/文本/是否在子菜单容器/fade 取值）、
 #     close（leafClose/fade/默认 fadeSpeed/常量/useLong）。
-#  本机（CDP 模拟安卓 UA）实测：boot useLong=true subFade=420；tap tag=LI txt=Url inSub=true fade=420；
+#  本地（CDP 模拟安卓 UA）实测：boot useLong=true subFade=420；tap tag=LI txt=Url inSub=true fade=420；
 #     close leaf=true fade=420 def=100；淡出曲线 330ms。
-# 2026-10-08 第十三轮（老师真机打点：420/200 确实生效，但「感觉跟没变一样」）：
+# 2026-10-08 第十三轮（真机打点：420/200 确实生效，但「感觉跟没变一样」）：
 #  ㉒ 结论：「关闭延迟」必须是**先停住再收**，而不是「立刻开始慢慢淡出」—— 后者第一帧就在变淡，
 #     观感上仍然是「马上就关」。所以把时长拆成 hold（完全静止）+ fade（之后的淡出）：
 #       非 iOS · 二级：hold 320 + fade 140；非 iOS · 一级：hold 160 + fade 120（一级 < 二级）。
@@ -231,28 +231,28 @@
 #  实测（页面内 rAF 采样，CDP 模拟非 iOS UA + hover:none 走就地展开路径）：
 #     安卓二级：点击后 **429ms 菜单完全不变** → 然后 101ms 淡出；
 #     安卓一级：点击后 **348ms 不变** → 45ms 淡出。（改前同口径是「点击后 0ms 就开始变淡」）
-#  真机打点（老师安卓 Edge 153 · Android 10）确认：useLong=true、二级 fade=420、一级 fade=200 都真的
+#  真机打点（安卓 Edge 153 · Android 10）确认：useLong=true、二级 fade=420、一级 fade=200 都真的
 #     传进了 fadeOut —— 说明代码取值一直是对的，问题在口径（「淡化」≠「延迟」）。
-# 2026-10-08 第十四轮（老师：①诊断全撤 ②一级菜单没有淡出、电脑上也有 ③电脑不该有延迟）：
+# 2026-10-08 第十四轮（①诊断全撤 ②一级菜单没有淡出、电脑上也有 ③电脑不该有延迟）：
 #  ㉓ 三级判据（关键修正）：
 #       电脑（isDesktopUA）→ hold 0 + fade options.fadeSpeed —— **完全原样**；
 #       iOS  → hold 0 + 二级 280 / 一级 options.fadeSpeed —— 第七轮既定行为，未动；
 #       其它（安卓等）→ 二级 hold 320 + fade 140；一级 hold 160 + fade **180**
-#         （一级原来 120，实测到不可见只有 58ms ⇒ 老师看着像「直接消失」，现改为 180 ⇒ 实测 134ms）。
+#         （一级原来 120，实测到不可见只有 58ms ⇒ 看着像「直接消失」，现改为 180 ⇒ 实测 134ms）。
 #     桌面判定改用 UA 而不是 matchMedia('(hover: none)')：实测 headless Chrome 在无真实鼠标设备时
 #     该 media query 返回 true，桌面会被误判成触摸设备。
 #  ㉔ 诊断全部撤除（dbg 函数 + 三处调用，grep 残留 0）。
 #  实测（页面内 rAF 采样）：桌面二级「延迟 90ms / 淡出 83ms」(≈立即)；安卓一级「延迟 317ms / 淡出 134ms」。
-# 2026-10-08 第十五轮（老师最终口径：**所有平台**的一级菜单淡出都要更明显，iOS 也一样）：
+# 2026-10-08 第十五轮（最终口径：**所有平台**的一级菜单淡出都要更明显，iOS 也一样）：
 #  ㉕ 一级菜单的淡出时长统一成 MAIN_FADE = 260（三个分支的一级都指向它）：
-#       电脑一级：hold 0（**不停顿**，老师要求电脑不要延迟）+ fade 260；
-#       iOS 一级：hold 0 + fade 260（老师：「我发现 iOS 的一级菜单也没有淡出」—— 这条覆盖了
+#       电脑一级：hold 0（**不停顿**，要求电脑不要延迟）+ fade 260；
+#       iOS 一级：hold 0 + fade 260（「我发现 iOS 的一级菜单也没有淡出」—— 这条覆盖了
 #                 此前「iOS 一律不要动」的范围；iOS **二级**仍保持第七轮的 280 不变）；
 #       安卓等一级：hold 160 + fade 260（总 420，仍短于二级的 320+140=460）。
 #  实测（页面内 rAF 采样，纯淡出时长）：iOS 一级 198ms / 电脑一级 200ms / 安卓一级 201ms（改前约 58~80ms）；
 #     电脑一级仍是「无停顿」（起淡延迟 114ms ≈ 点击往返），iOS 二级仍 217ms（= 280 不变）。
-# 2026-10-08 第十六轮（老师真机 DevTools 定位：淡出改用 CSS transition）：
-#  ㉖ 根因（老师三组对照实验）：同一台电脑上手动 `$('.dropdown-context').fadeOut(500)` 与
+# 2026-10-08 第十六轮（真机 DevTools 定位：淡出改用 CSS transition）：
+#  ㉖ 根因（三组对照实验）：同一台电脑上手动 `$('.dropdown-context').fadeOut(500)` 与
 #     `fadeOut(500, 回调)` **都能看到淡出**，而代码里 `fadeOut(260)` 被调用后元素状态一个都没变 ——
 #     jQuery 的动画靠它自己的计时器推进，时长太短（260ms ≈ 15 帧）叠上主线程忙时会被整段跳过，
 #     表现就是「啪」一下没了。所以**不再用 jQuery 的 fadeOut**，改用 CSS transition：
@@ -260,19 +260,19 @@
 #         （!important 用来压过打开时 jQuery fadeIn 留下的 inline opacity:1）；
 #       - JS：关菜单时加类 + `$menu.css('transition-duration', fade + 'ms')`，
 #         `setTimeout(fade + 60)` 后再移除类并恢复 display/opacity —— 动画交给浏览器合成器，时长不再敏感。
-#  ㉗ MAIN_FADE 由 260 提到 500（老师实验证明 500ms 在该环境下能看见淡出）。
-#     注：这使一级的总时长（安卓 160+500）长于二级（320+140）—— 老师最早「一级比二级短」是针对**停顿**，
+#  ㉗ MAIN_FADE 由 260 提到 500（实验证明 500ms 在该环境下能看见淡出）。
+#     注：这使一级的总时长（安卓 160+500）长于二级（320+140）—— 最早「一级比二级短」是针对**停顿**，
 #     最新「一级淡出要更明显」优先，测试断言相应改为只钉住停顿部分的层级。
 #  实测（rAF 采样，CDP 三平台）：iOS 一级 延迟 168ms + 淡出 306ms；安卓 301 + 400ms；电脑 75 + 401ms；
 #     三者都确认 `context-fading` 类加上、inline transition-duration = 500ms。
-# 2026-10-08 第十七轮（老师：一级淡出太长了，和二级一致就好）：
+# 2026-10-08 第十七轮（一级淡出太长了，和二级一致就好）：
 #  ㉘ 关闭时的**淡出时长不再按层级区分** —— 一级直接用各平台二级那一档：
 #       电脑 options.fadeSpeed(100) / iOS SUB_FADE_IOS(280) / 安卓 SUB_FADE_ANDROID(140)。
 #     MAIN_FADE（一级专属 fade）删除。hold（停顿）仍分层级：电脑 0 / iOS 0 / 安卓 一级 160、二级 320。
 #     注：因为已换成 CSS transition（不受 jQuery 跳帧影响），100~280ms 这种短时长也能看见淡出。
 #  实测（rAF 采样，CDP）：电脑 一级 64ms / 二级 67ms；安卓 一级 100ms / 二级 100ms；
 #     iOS 一级 210ms / 二级 216ms —— 三平台的一级与二级**淡出时长一致**。
-# 2026-10-08 第十八轮·终稿（老师定稿参数 + 要求无任何诊断）：
+# 2026-10-08 第十八轮·终稿（定稿参数 + 要求无任何诊断）：
 #  ㉙ 关闭菜单**一律不停住**，只按设备给淡出时长：
 #       电脑 DESKTOP_FADE = 120；手机/平板（iOS + 安卓统一）TOUCH_FADE = 320。
 #     中间版本按「层级（一级/二级）× 平台（电脑/iOS/安卓）」分的多档常量
@@ -308,7 +308,7 @@
 + *       紧接着那发 click 撞上关闭逻辑，整个菜单直接消失。
 + * 处理：(a) 在 document 的**捕获阶段**装一层菜单守卫 —— 只关菜单、并吞掉这一发事件；
 + *       (b) 触摸设备（(hover: none)）改成点击展开/收起二级菜单，有鼠标的设备继续用 hover；
-+ *       另外支持滚动/缩放/Esc 关闭菜单（都是老师要的"收得优雅"）。
++ *       另外支持滚动/缩放/Esc 关闭菜单（都是需要的"收得优雅"）。
 + *
 + * 隔离性：长按分支只在 iPad/iPhone/iPod（含 iPadOS 伪装成 Mac）上返回真，Android/Windows 继续走
 + * contextmenu 原路径，长按相关代码一行都不执行。菜单守卫是通用行为，但其中"点击展开二级菜单"
@@ -338,10 +338,10 @@
 +    //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
 +    //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
 +    //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
-+    // 【2026-10-08 终稿·老师定】关闭菜单：**一律不停住**，只按设备给一个淡出时长 ——
++    // 【2026-10-08 终稿】关闭菜单：**一律不停住**，只按设备给一个淡出时长 ——
 +    //   电脑：120ms；手机/平板（iOS + 安卓统一）：320ms。
 +    // 历史包袱说明：中间版本按「层级（一级/二级）×平台（电脑/iOS/安卓）」分了多档 hold+fade，
-+    // 老师最终定为"不分层级、不分 iOS/安卓，只分电脑和手机"⇒ 这里收敛成两个常量。
++    // 最终定为"不分层级、不分 iOS/安卓，只分电脑和手机"⇒ 这里收敛成两个常量。
 +    // 淡出由 CSS transition 驱动（见 .context-fading），不受 jQuery 跳帧影响，所以时长可以放心用。
 +    const DESKTOP_FADE = 120;       // 电脑：不停地直接淡出 120ms
 +    const TOUCH_FADE = 320;         // 手机/平板：不停地直接淡出 320ms
@@ -573,7 +573,7 @@
 +            + ' background: transparent !important; }'
 +            // 主菜单版（与下面二级菜单那份同一套 arming 机制，见 armMenuHoverGuard）：
 +            // 长按弹出的主菜单同样会顶在手指底下，真机触摸的粘滞 hover 会把手指底下那一项当成 hover 目标
-+            // → 弹出瞬间那项就跳高亮（老师截图里的「复制图片」）。这里连 li 一起关指针事件：
++            // → 弹出瞬间那项就跳高亮（实测里的「复制图片」）。这里连 li 一起关指针事件：
 +            // 只关 a 的话，主题里的 `.dropdown-submenu:hover > a` 仍会因为 li 被 hover 而给「复制链接」上色。
 +            // 另外 hover 那套是「底色 + 文字变白」两件一起上（见 context-js.less 的 li>a:hover），
 +            // 所以文字色也一并还原 —— 万一 :hover/:focus 还是粘住了，那一项也保持原样，不会变成白底白字。
@@ -581,7 +581,7 @@
 +            // ⚠ color / background-color 这两条强制覆盖只准落在「真正的菜单项」(`> li > a`) 上，不能落在 li 层：
 +            //   标题是 `> li.nav-header`，自带灰色（.nav-header{color:var(--lsky-text-3)}），
 +            //   被 `color:inherit` 压成面板继承来的近黑（--lsky-text）→ 守卫窗口内「图片操作」黑一下、
-+            //   窗口一过又弹回灰色 = 老师看到的闪烁；
++            //   窗口一过又弹回灰色 = 实测看到的闪烁；
 +            //   同理分隔线 `> li.divider` 有自己的底色，也会被 `background-color:transparent` 打掉又弹回来。
 +            // 防误触真正的关键是 li 上的 pointer-events:none（配合 a 上那份），把强制换色的声明收窄到 a
 +            // 不会削弱任何一层守卫：li 层原本也不需要靠换色来防误触。
@@ -600,7 +600,7 @@
 +
 +    // ===== 诊断（fork 新增）=====
 +    // 常驻记录“与菜单有关”的事件：开、关（含原因）、以及菜单牵涉到的点击判定。
-+    // 万一现场还出问题，老师说一句 context.debugDump() 就能把证据拿出来，不用再猜。
++    // 万一现场还出问题，可执行 context.debugDump() 就能把证据拿出来，不用再猜。
 +    function describeNode(node) {
 +        if (! node || ! node.tagName) {
 +            return String(node);
@@ -680,12 +680,12 @@
 +            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
 +        }
 +        // 【2026-10-08】点中二级菜单里的叶子项时**不能**在这里即时收子菜单 ——
-+        // 那会让用户看到"先返回一级菜单、再整个消失"（老师报的观感）。改成延到淡出之后
++        // 那会让用户看到"先返回一级菜单、再整个消失"（实测的观感）。改成延到淡出之后
 +        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
 +        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 +
-+        // 【2026-10-08 老师真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
-+        // 证据：老师在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
++        // 【2026-10-08 真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
++        // 证据：在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
 +        // 而代码里 `fadeOut(260)` 被调用后元素状态**一个都没变** —— jQuery 的动画依赖它自己的计时器推进，
 +        // 时长短（260ms ≈ 15 帧）+ 主线程忙时会被整段跳过，表现就是"啪"一下没了。
 +        // 改成 CSS transition：浏览器合成器驱动，主线程再忙也能看到渐变；时长也不再敏感。
@@ -730,7 +730,7 @@
 +    const SUBMENU_GUARD = 350;      // 二级菜单「就地替换」后这段毫秒内，触摸点击一律吞掉（防按住误选）
 +    const SUBMENU_ARM_MS = 420;     // 二级菜单刚弹出的这段毫秒内，先别接受指针指向（防那一下高亮跳色）
 +    const MENU_ARM_MS = 420;        // 主菜单（长按弹出）同理：弹出后这段时间内的项不接受指针指向
-+    const MENU_ARM_TAIL_MS = 260;   // 抬手之后再压这么多毫秒 —— 老师原话「手抬起来的那一瞬间留冗余」，
++    const MENU_ARM_TAIL_MS = 260;   // 抬手之后再压这么多毫秒 —— 口径「手抬起来的那一瞬间留冗余」，
 +                                    // 与二级菜单那份抬手冗余同一个数（见 armMenuHoverGuard / touchend）
 +
 +    function viewportSize() {
@@ -916,7 +916,7 @@
 +        $('.dropdown-context').removeClass('submenu-arming');
 +    }
 +
-+    // 主菜单版（同一套机制，老师要求「复用到长按弹出的主菜单」）：
++    // 主菜单版（同一套机制，要求「复用到长按弹出的主菜单」）：
 +    // 主菜单弹在手指底下时，那一项会被浏览器判成 hover 目标 → 弹出瞬间跳高亮，功能和以前一样、就是看着脏。
 +    // 做法与二级菜单那份一致：挂 .menu-arming（里面的项不接受指针事件 + hover 底色压平），
 +    // 抬手后由 touchend 再续 MENU_ARM_TAIL_MS —— 窗口跟着手势走，不是弹出时定死的一个定时器。
@@ -1099,7 +1099,7 @@
 +                }
 +
 +                // 防误触（必须排在父项处理与「返回」之前）：真机触摸带粘滞 :hover，二级菜单会先于
-+                // 抬手出现，抬手那发合成 click 就落在菜单项上（老师实测点「复制链接」被判成「Url」，
++                // 抬手出现，抬手那发合成 click 就落在菜单项上（实测点「复制链接」被判成「Url」，
 +                // 按住久一点（实测 700ms）也照样中招 —— 所以判据是「同一根手指那一发」而不是时长）。
 +                // 判据：这次 click 属于「打开二级菜单的那次手指按下」→ 一律吞掉，什么都不做。
 +
@@ -1158,7 +1158,7 @@
 +                    armSubmenuHoverGuard(260);      // 抬手后再压 260ms，抬手那一刻也不会跳色
 +                }
 +
-+                // 主菜单同理（老师原话：「只要给我手抬起来的那一瞬间留冗余就够」）——
++                // 主菜单同理（口径：「只要手抬起来的那一瞬间留冗余就够」）——
 +                // 判据同样是「这一发手指就是打开主菜单的那一发」，按住再久也不会在抬手那一刻跳色。
 +                if (armedMenuGestureId && armedMenuGestureId === touchGestureId
 +                    && $('.dropdown-context:not(.dropdown-context-sub)').length) {
@@ -1267,7 +1267,7 @@
 +        installMenuGuard();
 +
 +        // 【2026-10-08】点中菜单里的叶子项（如「复制链接 → Url」）：记一笔，并给这一项定格高亮。
-+        //   * 记时刻 ⇒ closeMenus 据此跳过"先退回一级菜单"那一步（老师 2026-10-08 的要求）；
++        //   * 记时刻 ⇒ closeMenus 据此跳过"先退回一级菜单"那一步（2026-10-08 的要求）；
 +        //   * 定格高亮（.context-pressed）⇒ 手指抬起后它继续亮着随菜单淡出，而不是瞬间就没了。
 +        // 注意判据必须挂在 **li** 上、而不是 `li > a`：实测（CDP 捕获真实点击的 target）点「Url」时
 +        // target 是那个 <li>（`<a>` 只占其中一部分高度，padding 区域点下去 target 就是 li）。
@@ -1498,7 +1498,7 @@
 + *       紧接着那发 click 撞上关闭逻辑，整个菜单直接消失。
 + * 处理：(a) 在 document 的**捕获阶段**装一层菜单守卫 —— 只关菜单、并吞掉这一发事件；
 + *       (b) 触摸设备（(hover: none)）改成点击展开/收起二级菜单，有鼠标的设备继续用 hover；
-+ *       另外支持滚动/缩放/Esc 关闭菜单（都是老师要的"收得优雅"）。
++ *       另外支持滚动/缩放/Esc 关闭菜单（都是需要的"收得优雅"）。
 + *
 + * 隔离性：长按分支只在 iPad/iPhone/iPod（含 iPadOS 伪装成 Mac）上返回真，Android/Windows 继续走
 + * contextmenu 原路径，长按相关代码一行都不执行。菜单守卫是通用行为，但其中"点击展开二级菜单"
@@ -1528,10 +1528,10 @@
 +    //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
 +    //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
 +    //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
-+    // 【2026-10-08 终稿·老师定】关闭菜单：**一律不停住**，只按设备给一个淡出时长 ——
++    // 【2026-10-08 终稿】关闭菜单：**一律不停住**，只按设备给一个淡出时长 ——
 +    //   电脑：120ms；手机/平板（iOS + 安卓统一）：320ms。
 +    // 历史包袱说明：中间版本按「层级（一级/二级）×平台（电脑/iOS/安卓）」分了多档 hold+fade，
-+    // 老师最终定为"不分层级、不分 iOS/安卓，只分电脑和手机"⇒ 这里收敛成两个常量。
++    // 最终定为"不分层级、不分 iOS/安卓，只分电脑和手机"⇒ 这里收敛成两个常量。
 +    // 淡出由 CSS transition 驱动（见 .context-fading），不受 jQuery 跳帧影响，所以时长可以放心用。
 +    const DESKTOP_FADE = 120;       // 电脑：不停地直接淡出 120ms
 +    const TOUCH_FADE = 320;         // 手机/平板：不停地直接淡出 320ms
@@ -1767,7 +1767,7 @@
 +            + ' background: transparent !important; }'
 +            // 主菜单版（与下面二级菜单那份同一套 arming 机制，见 armMenuHoverGuard）：
 +            // 长按弹出的主菜单同样会顶在手指底下，真机触摸的粘滞 hover 会把手指底下那一项当成 hover 目标
-+            // → 弹出瞬间那项就跳高亮（老师截图里的「复制图片」）。这里连 li 一起关指针事件：
++            // → 弹出瞬间那项就跳高亮（实测里的「复制图片」）。这里连 li 一起关指针事件：
 +            // 只关 a 的话，主题里的 `.dropdown-submenu:hover > a` 仍会因为 li 被 hover 而给「复制链接」上色。
 +            // 另外 hover 那套是「底色 + 文字变白」两件一起上（见 context-js.less 的 li>a:hover），
 +            // 所以文字色也一并还原 —— 万一 :hover/:focus 还是粘住了，那一项也保持原样，不会变成白底白字。
@@ -1775,7 +1775,7 @@
 +            // ⚠ color / background-color 这两条强制覆盖只准落在「真正的菜单项」(`> li > a`) 上，不能落在 li 层：
 +            //   标题是 `> li.nav-header`，自带灰色（.nav-header{color:var(--lsky-text-3)}），
 +            //   被 `color:inherit` 压成面板继承来的近黑（--lsky-text）→ 守卫窗口内「图片操作」黑一下、
-+            //   窗口一过又弹回灰色 = 老师看到的闪烁；
++            //   窗口一过又弹回灰色 = 实测看到的闪烁；
 +            //   同理分隔线 `> li.divider` 有自己的底色，也会被 `background-color:transparent` 打掉又弹回来。
 +            // 防误触真正的关键是 li 上的 pointer-events:none（配合 a 上那份），把强制换色的声明收窄到 a
 +            // 不会削弱任何一层守卫：li 层原本也不需要靠换色来防误触。
@@ -1794,7 +1794,7 @@
 +
 +    // ===== 诊断（fork 新增）=====
 +    // 常驻记录“与菜单有关”的事件：开、关（含原因）、以及菜单牵涉到的点击判定。
-+    // 万一现场还出问题，老师说一句 context.debugDump() 就能把证据拿出来，不用再猜。
++    // 万一现场还出问题，可执行 context.debugDump() 就能把证据拿出来，不用再猜。
 +    function describeNode(node) {
 +        if (! node || ! node.tagName) {
 +            return String(node);
@@ -1874,12 +1874,12 @@
 +            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
 +        }
 +        // 【2026-10-08】点中二级菜单里的叶子项时**不能**在这里即时收子菜单 ——
-+        // 那会让用户看到"先返回一级菜单、再整个消失"（老师报的观感）。改成延到淡出之后
++        // 那会让用户看到"先返回一级菜单、再整个消失"（实测的观感）。改成延到淡出之后
 +        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
 +        // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 +
-+        // 【2026-10-08 老师真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
-+        // 证据：老师在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
++        // 【2026-10-08 真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
++        // 证据：在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
 +        // 而代码里 `fadeOut(260)` 被调用后元素状态**一个都没变** —— jQuery 的动画依赖它自己的计时器推进，
 +        // 时长短（260ms ≈ 15 帧）+ 主线程忙时会被整段跳过，表现就是"啪"一下没了。
 +        // 改成 CSS transition：浏览器合成器驱动，主线程再忙也能看到渐变；时长也不再敏感。
@@ -1924,7 +1924,7 @@
 +    const SUBMENU_GUARD = 350;      // 二级菜单「就地替换」后这段毫秒内，触摸点击一律吞掉（防按住误选）
 +    const SUBMENU_ARM_MS = 420;     // 二级菜单刚弹出的这段毫秒内，先别接受指针指向（防那一下高亮跳色）
 +    const MENU_ARM_MS = 420;        // 主菜单（长按弹出）同理：弹出后这段时间内的项不接受指针指向
-+    const MENU_ARM_TAIL_MS = 260;   // 抬手之后再压这么多毫秒 —— 老师原话「手抬起来的那一瞬间留冗余」，
++    const MENU_ARM_TAIL_MS = 260;   // 抬手之后再压这么多毫秒 —— 口径「手抬起来的那一瞬间留冗余」，
 +                                    // 与二级菜单那份抬手冗余同一个数（见 armMenuHoverGuard / touchend）
 +
 +    function viewportSize() {
@@ -2110,7 +2110,7 @@
 +        $('.dropdown-context').removeClass('submenu-arming');
 +    }
 +
-+    // 主菜单版（同一套机制，老师要求「复用到长按弹出的主菜单」）：
++    // 主菜单版（同一套机制，要求「复用到长按弹出的主菜单」）：
 +    // 主菜单弹在手指底下时，那一项会被浏览器判成 hover 目标 → 弹出瞬间跳高亮，功能和以前一样、就是看着脏。
 +    // 做法与二级菜单那份一致：挂 .menu-arming（里面的项不接受指针事件 + hover 底色压平），
 +    // 抬手后由 touchend 再续 MENU_ARM_TAIL_MS —— 窗口跟着手势走，不是弹出时定死的一个定时器。
@@ -2293,7 +2293,7 @@
 +                }
 +
 +                // 防误触（必须排在父项处理与「返回」之前）：真机触摸带粘滞 :hover，二级菜单会先于
-+                // 抬手出现，抬手那发合成 click 就落在菜单项上（老师实测点「复制链接」被判成「Url」，
++                // 抬手出现，抬手那发合成 click 就落在菜单项上（实测点「复制链接」被判成「Url」，
 +                // 按住久一点（实测 700ms）也照样中招 —— 所以判据是「同一根手指那一发」而不是时长）。
 +                // 判据：这次 click 属于「打开二级菜单的那次手指按下」→ 一律吞掉，什么都不做。
 +
@@ -2352,7 +2352,7 @@
 +                    armSubmenuHoverGuard(260);      // 抬手后再压 260ms，抬手那一刻也不会跳色
 +                }
 +
-+                // 主菜单同理（老师原话：「只要给我手抬起来的那一瞬间留冗余就够」）——
++                // 主菜单同理（口径：「只要手抬起来的那一瞬间留冗余就够」）——
 +                // 判据同样是「这一发手指就是打开主菜单的那一发」，按住再久也不会在抬手那一刻跳色。
 +                if (armedMenuGestureId && armedMenuGestureId === touchGestureId
 +                    && $('.dropdown-context:not(.dropdown-context-sub)').length) {
@@ -2461,7 +2461,7 @@
 +        installMenuGuard();
 +
 +        // 【2026-10-08】点中菜单里的叶子项（如「复制链接 → Url」）：记一笔，并给这一项定格高亮。
-+        //   * 记时刻 ⇒ closeMenus 据此跳过"先退回一级菜单"那一步（老师 2026-10-08 的要求）；
++        //   * 记时刻 ⇒ closeMenus 据此跳过"先退回一级菜单"那一步（2026-10-08 的要求）；
 +        //   * 定格高亮（.context-pressed）⇒ 手指抬起后它继续亮着随菜单淡出，而不是瞬间就没了。
 +        // 注意判据必须挂在 **li** 上、而不是 `li > a`：实测（CDP 捕获真实点击的 target）点「Url」时
 +        // target 是那个 <li>（`<a>` 只占其中一部分高度，padding 区域点下去 target 就是 li）。
@@ -2789,7 +2789,7 @@
 +    /* 【2026-10-08】补按下态。菜单项原来只有 :hover/:focus 一处高亮来源：
 +        - iOS 触摸会补发合成 mouseover ⇒ 还能亮（另叠一层浏览器默认的 tap 灰块，见下面 .dropdown-context 那条），
 +        - 安卓触摸**没有 hover 阶段** ⇒ 全程没有任何强调色，点完菜单就关，用户看不清选中了哪一项。
-+       :active 在 touchstart 即成立（早于 click），两个平台都能在按下的一瞬间给出反馈。 */
++       :active 在 touchstart 即成立（早于 click），两个平台都能在按下的一瞬间给出按压响应。 */
 +    li > a:hover, li > a:focus, li > a:active,
 +    .dropdown-submenu:hover > a, .dropdown-submenu > a:active {
          color: #ffffff;
@@ -2857,7 +2857,7 @@
 +    color: #ffffff;
 +}
 +
-+/* 【2026-10-08 老师真机定位后的最终写法】关闭菜单的淡出改用 **CSS transition**，
++/* 【2026-10-08 真机定位后的最终写法】关闭菜单的淡出改用 **CSS transition**，
 +   而不是 jQuery 的 fadeOut。证据：同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`
 +   （含带回调版本）都能看到淡出，而代码里的 `fadeOut(260)` 调用后元素状态一个都没变 ——
 +   jQuery 的动画靠自己的计时器推进，时长太短（260ms ≈ 15 帧）叠上主线程忙时会被整段跳过，
@@ -2895,7 +2895,7 @@
 +.dropdown-context .submenu-back > a > i {
 +    margin-right: 7px;
 +}
-+/* fork：去掉右键 / 长按菜单左上角的气泡尖角（老师要求，电脑端 + 手机端一致）。
++/* fork：去掉右键 / 长按菜单左上角的气泡尖角（要求，电脑端 + 手机端一致）。
 +   尖角就是这两条伪元素画出来的（上面一条深色描边 + 下面一条面板色叠出「箭头」）。
 +   用 content: none 让伪元素根本不生成 —— 只少这一个装饰；菜单的尺寸 / 圆角 / 阴影 /
 +   定位 / 滚动关闭行为一个字都没动。
@@ -2985,7 +2985,7 @@
 +            scroll 监听，能力没丢（代价同「移动到相册」弹窗：那三种文案在这个弹窗里不再显示，
 +            接口 status=false 时仍有 toastr.error）。
 +         2) 桌面宽度：x-modal 的卡片宽度是给「详细信息」那类宽内容定的（md:max-w-2xl / lg:max-w-4xl），
-+            相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 520px（原来 420px，用户反馈
++            相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 520px（原来 420px，观感
 +            「稍微加宽一些」）。手机上 x-modal 是底部抽屉
 +            （<640px 贴底），这条 media query 不生效，抽屉行为不受影响。
 +         3) 相册行的编辑/删除是**行内常显的 44×44 按钮**（不再靠 hover 才出现），所以这里
@@ -3005,7 +3005,7 @@
 +             *   浏览器会把哨兵当锚点、上方内容变高就自动往下补 scrollTop，于是哨兵又进视口、
 +             *   又触发下一页 —— 连锁滚到底。安卓 Edge 上尤其明显（安卓 Chrome / iOS 不这样）。 */
 +            html, body, #images-scroll, #images-scroll .infinite-scroll { overflow-anchor: none; }
-+            /* 注：#images-scroll 的左侧内边距曾加过 18px，老师否掉了（图库左侧不该空出一条）——
++            /* 注：#images-scroll 的左侧内边距曾加过 18px，否掉了（图库左侧不该空出一条）——
 +             * "左侧拖不出框"要从侧栏/判定那边解决，不能靠给网格加空白。 */
 +            /* ★ 让滚动条的位置**永远被预留**（桌面端）。
 +             *   看图器打开时库会给 body 加 .viewer-open{overflow:hidden}，滚动条消失 ⇒
@@ -3022,7 +3022,7 @@
 +             *   看图器自身是 fixed 全屏覆盖 + touch-action:none，指针/触摸不会漏到后面；
 +             *   滚轮被库自己的 zoomOnWheel 处理（非 passive + preventDefault），背景也不会被滚走。 */
 +            body.viewer-open { overflow: visible; }
-+            /* ★ 再把库写的那份 body padding-right 按回 0。真机实测（老师浏览器打印）：
++            /* ★ 再把库写的那份 body padding-right 按回 0。真机实测（浏览器打印）：
 +             *   打开看图器时 body 的 padding-right 会变成 8px —— 那正是**槽位**的宽度
 +             *   （库 initBody 量的就是 innerWidth − documentElement.clientWidth），
 +             *   而槽位已经把空间预留住了，再补一次就把内容挤窄 8px ⇒ 卡片重排
@@ -3097,7 +3097,7 @@
 +        /* 框外变暗：**不用**库的 .cropper-modal。
 +           库那套是「半透明黑盖住整图 + 往 .cropper-view-box 里再塞一张克隆图把框内提亮」——
 +           真机实测那一步在 iOS(WebKit) 上不生效，表现就是整张（含框内）都是灰的
-+           （老师截图按像素量：框外 127、框内 140，140 正是 127 又叠了库那层 10% 白 highlight）。
++           （按像素量：框外 127、框内 140，140 正是 127 又叠了库那层 10% 白 highlight）。
 +           改成：关闭 modal（Cropper 选项 modal:false），用裁剪框自己的大范围 box-shadow 压暗框外 ——
 +           框内直接就是原图本体，没有任何遮罩压在它上面 ⇒ 各平台一致；容器裁掉阴影溢出，
 +           工具栏与页面其它部分不受影响。 */
@@ -3145,14 +3145,14 @@
 +            #crop-layer .cropper-point.point-se { width: 14px; height: 14px; }
 +        }
 +
-+        /* ── fork：看图器「全屏」的观感（老师要的"进去只剩图"）─────────────────
++        /* ── fork：看图器「全屏」的观感（需要的"进去只剩图"）─────────────────
 +           进全屏时 JS 给 <html> 加 .ls-viewer-fs：UI 全藏、背景压成纯黑，缩放手势/拖动/切图一概不动。
 +           鼠标动一下或轻触一下临时淡入（.ls-fs-ui，2.5s 后自动隐）；点背景关掉看图器即彻底退出全屏。 */
 +        html.ls-viewer-fs .viewer-backdrop,
 +        html.ls-viewer-fs .viewer-container { background-color: #000; }
 +        /* 顺手把**页面自己**那条右侧滚动条也收掉（全屏里页面本来也不该滚），
 +           连"给滚动条留出来的那块空白"一起收 —— 只是 overflow:hidden 的话，
-+           scrollbar-gutter: stable 仍会在右边留一条 8px 的空白（老师截图里能看到）。
++           scrollbar-gutter: stable 仍会在右边留一条 8px 的空白（实测能看到）。
 +           全屏期间没有滚动条，也就不需要槽位 ⇒ 两条一起写。 */
 +        html.ls-viewer-fs { overflow: hidden; scrollbar-gutter: auto; }
 +        html.ls-viewer-fs .viewer-toolbar,
@@ -3283,7 +3283,7 @@
                  </x-slot>
              </x-dropdown>
 +            {{-- fork：标签筛选（多选，后端 AND 语义）。这里原来是「权限」下拉，
-+                 已按老师要求整体下线、换成标签 —— 只替换这一个下拉，不新增第三个，
++                 已按要求整体下线、换成标签 —— 只替换这一个下拉，不新增第三个，
 +                 免得 <768px 时工具栏换行、把 sticky top-14 的吸顶高度撑高。
 +                 标签按用户隔离，列表来自 GET user/tags，由 JS（loadTags → renderTagFilter）
 +                 渲染进 #tag-filter-list；勾选任意一项立刻 resetImages({page:1, tags:[...]})。
@@ -3299,7 +3299,7 @@
 +                         （否则会顶动 sticky 吸顶工具栏那一行）。--}}
 +                    <a id="tag-filter" class="inline-flex items-center gap-1.5 text-sm py-1.5 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
 +                        <span>标签</span>
-+                        {{-- 实测：图标墨迹中心比文字高 0.5px（文字 90.0 / 图标 89.5，截图按像素量的），
++                        {{-- 实测：图标墨迹中心比文字高 0.5px（文字 90.0 / 图标 89.5，按像素量的），
 +                             用 relative+top 精确压下去 0.5px。--}}
 +                        <i class="fas fa-tags text-brand relative top-[0.5px]"></i>
                      </a>
@@ -3377,7 +3377,7 @@
 +         ① 给「选中的这几张图」打标：勾选 = 加上该标签，取消 = 从这些图移除；
 +         ② 标签本身的新建 / 重命名 / 删除。
 +         入口三处：桌面工具栏 / 手机 ⋯ 菜单的「标签管理」、图片右键菜单、顶部「标签」下拉底部。
-+         （原来「修改标签」和「管理标签」是两个窗口，已按老师要求合并成一个。）--}}
++         （原来「修改标签」和「管理标签」是两个窗口，已按要求合并成一个。）--}}
 +    <x-modal id="image-tags-modal">
 +        <div id="image-tags-content"></div>
 +    </x-modal>
@@ -3428,7 +3428,7 @@
                  </div>
              </div>
 -            <div class="image-mask absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
-+            {{-- 缩略图上的名称/时间遮罩：老师要求先隐藏（不要删代码，以后可能改回来）。
++            {{-- 缩略图上的名称/时间遮罩：要求先隐藏（不要删代码，以后可能改回来）。
 +                 要恢复：把下面这个 hidden 去掉即可，其余一个字没动。
 +                 注意：遮罩隐藏后点击落在 img 上，看图器照旧正常打开（原来靠这里的 onclick 转发）。--}}
 +            <div class="image-mask hidden absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
@@ -3519,7 +3519,7 @@
 -                <span class="delete"><i class="fas fa-trash-alt text-xs text-red-400"></i></span>
 +        {{-- overflow-hidden 是必需的：右边两个 44×44 常显按钮的 hover 底色是**方形**的，
 +             行的圆角是 rounded-lg —— 不裁的话方块会盖住圆角，选中（当前相册）时那条品牌色
-+             边框的两个右角看着就像缺角（老师反馈）。标签行（#image-tags-item-tpl）一直是这么写的。 --}}
++             边框的两个右角看着就像缺角。标签行（#image-tags-item-tpl）一直是这么写的。 --}}
 +        <div class="albums-row flex items-stretch min-h-[44px] w-full overflow-hidden rounded-lg border border-line bg-surface" data-id="__id__" data-json='__json__'>
 +            <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item group flex min-w-0 flex-1 items-center gap-2.5 rounded-l-lg px-3 py-1">
 +                <div class="min-w-0 flex-1 truncate text-[14px] name">__name__</div>
@@ -3550,9 +3550,9 @@
      </script>
  
 +    {{-- 图片「详细信息」：居中卡片弹窗（不再渲染进右侧抽屉）。
-+         字段顺序按老师要求：**上传时间第一、图片名称紧跟其后**，其余字段一个没删、只换了位置
++         字段顺序按要求：**上传时间第一、图片名称紧跟其后**，其余字段一个没删、只换了位置
 +         （相册名称 / 使用策略 / 图片原始名称 / 图片大小 / 图片类型 / 尺寸 / MD5 / SHA-128 / 权限 / 上传 IP）。
-+         排版（老师二次验收提「排版、字号、字体颜色都优化一下」后统一成这一套）：
++         排版（二次验收提「排版、字号、字体颜色都优化一下」后统一成这一套）：
 +         顶部＝小缩略图 + 16px semibold 标题；下面一整块圆角卡片（rounded-lg + border-line + bg-surface-2），
 +         字段之间用 divide-line 细线分隔、每行等距 py-3（所以分区间距一致）；
 +         标签 13px text-ink-3 在左（sm:w-28 定宽对齐）、值 14px text-ink 在右（窄屏 flex-col 自动上下堆叠），行高 leading-6。
@@ -3676,9 +3676,9 @@
 +    {{-- 「移动到相册」弹窗：相册列表（单选）+ 底部「移动」「取消」。
 +         列表数据与顶部工具栏的「相册列表」同一个接口；点一行只选中，底部「移动」才提交。
 +         每行 min-h-[44px]（手机点击区 ≥44px），当前所在相册带「当前」标记（__current_badge__）。
-+         排版（老师二次验收「排版/字号/字体颜色」统一）：标题 16px semibold、副标题 13px text-ink-3、
++         排版（二次验收「排版/字号/字体颜色」统一）：标题 16px semibold、副标题 13px text-ink-3、
 +         列表行 14px / 数量 13px text-ink-3，间距统一用 mt-4 + gap-1.5；颜色只走设计令牌。
-+         底部**不要横线**：老师看到的那条就是 footer 的 border-t，已去掉，只留上间距。
++         底部**不要横线**：实测的那条就是 footer 的 border-t，已去掉，只留上间距。
 +         按钮沿用全局 ls-btn / ls-btn-primary（与弹窗、页面其它按钮同一套）。
 +         ⚠ 列表底部那条「我也是有底线的~」是 utils.infiniteScroll 自动插进 #movements-albums 的哨兵，
 +         在这个弹窗里用 CSS 隐藏（见 common.less：#image-movements-modal .infinite-scroll { display: none }），
@@ -3718,7 +3718,7 @@
 +        <div class="mx-auto flex w-full max-w-xl flex-col">
 +            <p class="text-[16px] font-semibold leading-6 text-ink">标签管理</p>
 +            <p class="mt-1 text-[13px] leading-5 text-ink-3">__hint__</p>
-+            {{-- 新建标签放在首行（老师要求）：进窗口第一眼就能建新标签 --}}
++            {{-- 新建标签放在首行（要求）：进窗口第一眼就能建新标签 --}}
 +            <div class="mt-3 flex items-center gap-2">
 +                <input type="text" id="image-tags-new" maxlength="64" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入新标签名称">
 +                <button type="button" id="image-tags-create" class="ls-btn h-11 shrink-0 px-4 sm:h-9">新建标签</button>
@@ -3745,7 +3745,7 @@
 +
 +    {{-- 「标签管理」窗口里的一行：左边是勾选区（整块 ≥44px 点击区），右边两个常显的 44×44
 +         「重命名 / 删除」按钮（改标签本身，不影响图片）。
-+         勾选语义（按老师定的两态）：勾上 = 给选中的这些图片加上该标签；取消勾选 = 从这些图片移除。
++         勾选语义（按两态）：勾上 = 给选中的这些图片加上该标签；取消勾选 = 从这些图片移除。
 +         如果该标签只在「部分选中的图片」上有，就显示成半勾表示现状，点一下变全勾（加上）。 --}}
 +    <script type="text/html" id="image-tags-item-tpl">
 +        <div class="image-tag-row flex min-h-[44px] w-full items-stretch overflow-hidden rounded-lg border border-line bg-surface transition-colors duration-150" data-id="__id__" data-json='__json__'>
@@ -3808,7 +3808,7 @@
 +               看图器工具栏的「全屏」键在那里点了必然**静默无反应**：库内部那句
 +                 documentElement.requestFullscreen ? … : webkitRequestFullscreen ? … : moz ? … : ms …
 +               会整条落空，既不报错也不生效。所以按能力探测决定**渲不渲染这个键**
-+               （老师 2026-10-08 拍板：不支持就不显示，免得留一个点了没反应的按钮）。
++               （2026-10-08 拍板：不支持就不显示，免得留一个点了没反应的按钮）。
 +               判据优先看 document.fullscreenEnabled（iPhone Safari 上是 false）；
 +               没有该属性的老浏览器再退回按元素上那几个 API 是否存在来判断。 */
 +            const canViewerFullscreen = () => {
@@ -3913,7 +3913,7 @@
 -                        this.open(title, content, callback);
 +                    slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
 +
-+                // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
++                // 到头不再绕回（明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
 +                // 控件重建画布/缩略图条 ⇒ iOS 整个界面左偏、安卓缩略图全空，见后续修复记录）
 +                loop: false,
 +                // focus: false —— Claude 定位 + 真机对照验证：
@@ -3933,7 +3933,7 @@
 +             *   update() 会把 .viewer-list 的 width 设成 auto 并重建所有 <li>，
 +             *   但当前图没变时不会调 renderList() ⇒ 位置（width + translateX((容器宽-30)/2 - 31*index)）
 +             *   还是旧值。图越靠后这个负偏移越大，超过一屏宽后整个列表被推出导航条可视区，
-+             *   只剩一条空的黑底 —— 就是老师看到的"缩略图条不显示"；手指一滑（goTo → view → renderList）
++             *   只剩一条空的黑底 —— 就是实测看到的"缩略图条不显示"；手指一滑（goTo → view → renderList）
 +             *   位置被重算，缩略图立刻回来。
 +             * 谁会在看图时调 update()：images.blade.php 里无限滚动每次请求结束的 complete 回调
 +             * （看图时后台正好加载完一批就会触发），以及侧栏折叠。所以是"偶尔"。
@@ -3965,7 +3965,7 @@
 +             *   · 看图器工具栏的「裁剪」按钮（cropEditor.openFromViewer）
 +             *   · 选中操作条的 [data-operate="edit"]（只有单选 jpg/jpeg/png 时出现）
 +             *   · 右键 / 长按菜单的「编辑图片」
-+             * 规则（老师拍板）：
++             * 规则（拍板）：
 +             *   · 只有 jpg/jpeg/png 给入口，其它格式一律不出现；
 +             *   · 导出格式跟随原图：png → PNG 无损；jpg/jpeg → JPEG q0.95；
 +             *   · 不设长边上限（按原图尺寸导出，绝不放大），框选 >30MP 时在标题栏提示体积；
@@ -4012,7 +4012,7 @@
 +            /* 全屏里鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态） */
 +            const FS_UI_MS = 2500;
 +            let fsUiTimer = 0;
-+            /* 全屏里"人还在 UI 上"就不收起 —— 老师第七轮要的：
++            /* 全屏里"人还在 UI 上"就不收起 —— 第七轮要的：
 +             * "我正操作着呢 UI 自己没了，这多烦人"。原来的实现只做了"每次操作重新计时"，
 +             * 但鼠标停在 toolbar/缩略图条上不动时没有任何事件，计时照样走完 ⇒ UI 在手指底下消失
 +             * （而且此刻它们是 pointer-events:none，点下去还会穿透、甚至误关看图器）。
@@ -4056,7 +4056,7 @@
 +                document.addEventListener(ev, flashFullscreenUI, {capture: true, passive: true});
 +            });
 +
-+            /* 老师第八轮：① 非全屏"拖动后松手"不该被当成点击；② 全屏点空白不许关、改成显示 UI。
++            /* 第八轮：① 非全屏"拖动后松手"不该被当成点击；② 全屏点空白不许关、改成显示 UI。
 +             * 库里这条链路（压缩产物实读）：
 +             *   pointerup 里，若手势 < 500ms、松手目标是 canvas、backdrop 未被关掉，
 +             *   就向 .viewer-canvas 派发一个 'click'（常量 S = "click"）；
@@ -4347,7 +4347,7 @@
 +                return { open: open, openFromViewer: openFromViewer, supported: supported, close: close };
 +            })();
 +
-+            /* 底部缩略图条上的快捷切图（老师要的功能）。
++            /* 底部缩略图条上的快捷切图（要求的功能）。
 +             *   · 电脑：光标在缩略图条上滚轮 ⇒ 滚一格切一张。
 +             *     控件自己在外层容器上绑了"滚轮缩放"（捕获阶段），所以这里也在 document 捕获
 +             *     阶段抢在它之前，并且**只对落在缩略图条上的滚轮生效**：图上滚轮依旧是缩放。
@@ -4372,7 +4372,7 @@
 +                    if (target !== viewer.index) viewer.view(target);
 +                };
 +                /* 滚轮切图：这里**必须**能 preventDefault，否则页面会跟着一起滚
-+                 * （老师报的"缩略图条滚轮切图的同时整页也在滚"）。
++                 * （实测的"缩略图条滚轮切图的同时整页也在滚"）。
 +                 * 代价：document 上的非 passive wheel 会让浏览器失去"不等 JS 就滚动"的快路径 ⇒
 +                 * 只在看图器打开期间挂它（shown 挂 / hidden 摘），平时整页滚动一点不受影响。
 +                 * 仍然要 stopPropagation：控件"把滚轮当缩放"是在外层容器的捕获阶段做的，
@@ -4408,7 +4408,7 @@
 +                /* 注意：这个监听器**必须**是 passive，绝不能 preventDefault。
 +                 * 在 document 上注册「非 passive 的 touchmove」会让 Chrome 失去"不等 JS 就滚动/绘制"
 +                 * 的快路径 —— 表现是远离手指的元素（比如屏幕底部的缩略图条）不重绘：一直空白，
-+                 * 手指一碰它才突然画出来（安卓上尤其明显）。老师说"像被什么卡住了"就是这个。
++                 * 手指一碰它才突然画出来（安卓上尤其明显）。"像被什么卡住了"就是这个现象。
 +                 * 而缩略图条本来就是 touch-action:none、浏览器不会滚它，所以根本不用 preventDefault。 */
 +                document.addEventListener('touchmove', (e) => {
 +                    if (!navDown) return;
@@ -4482,13 +4482,13 @@
 +             *   2. 是拖动 ⇒ 立刻清掉库的 imageClicked，让拖动永远不能充当"第一次轻点"；
 +             *      若这一下之前已经有"第一次轻点"了（imageClicked 曾被置位），说明是"轻点+拖动"，
 +             *      那发 50ms 后要派发的合成 dblclick 也一并拦掉。
-+             *   3. 两次都不动的轻点 ⇒ 真双击，放行；并按老师要求把有效期从 500ms 收到 300ms
++             *   3. 两次都不动的轻点 ⇒ 真双击，放行；并按要求把有效期从 500ms 收到 300ms
 +             *      （300ms 后清掉库的 imageClicked，等效于缩短双击判定窗口）。
 +             * 注意必须用 touchstart/touchend 的坐标差，**不能**靠 touchmove：安卓上控件在指针处理里
 +             * preventDefault 之后 touchmove 可能根本收不到。 */
 +            (function () {
 +                const TAP_SLOP = 30;      // 超过它就当"拖动"
-+                const TAP_WINDOW = 300;   // 等效双击窗口（老师定）
++                const TAP_WINDOW = 300;   // 等效双击窗口（已定）
 +                let startX = 0;
 +                let startY = 0;
 +                let tapTimer = 0;
@@ -4904,7 +4904,7 @@
 +
 +            /* 注：这里原有一个 refreshAfterTagChange()（改名/删除后 loadTags + setTags）。
 +             * setTags() 会通过 resetImages() 清空图片墙并 ds.clearSelection() —— 把用户正在打标的
-+             * 这批选中图片连同弹窗勾选态一起丢掉（老师报的「编辑/删除会整页刷新」就是这个）。
++             * 这批选中图片连同弹窗勾选态一起丢掉（实测的「编辑/删除会整页刷新」就是这个）。
 +             * 已删除：改名/删除改成 patchCardsTag() 就地同步；只有「被删的标签正用作筛选项」
 +             * 那种结果集真的变了的情况，才单独调一次 setTags()。 */
 +
@@ -4970,7 +4970,7 @@
 +                        let pendingRemove = removeIds.indexOf(id) !== -1;
 +                        let partial = ! checked && ! pendingRemove && someHave(id) && ! allHave(id);
 +
-+                        // 行内只留左边那个勾表达状态（老师要求：不要「已有 / 移除」这类字样，太误导）
++                        // 行内只留左边那个勾表达状态（要求：不要「已有 / 移除」这类字样，太误导）
 +                        let icon = 'fa-square text-ink-3';
 +                        if (checked) {
 +                            icon = 'fa-check-square text-brand';
@@ -5195,7 +5195,7 @@
 +             * 内部 _zoom 就是为它准备的），但不传就会按"无缩放"算：
 +             *   实测它的「内部判定框」= 用户看到的那只框 × 1.1 + 偏移(-28, +55)，
 +             *   尺寸大 10%（411×312 → 452×343），位置偏差随滚动量增大 ——
-+             *   于是"框住上一行、下面一整行却被选中"、"误差随滚动变大"（老师报的正是这个）。
++             *   于是"框住上一行、下面一整行却被选中"、"误差随滚动变大"（实测的正是这个）。
 +             * 之前 fork 里叠的那层手工补偿（把内联坐标除以 zoom 再写回去）是**第二个补偿**，
 +             * 与库自身的算法互相打架，已整体删除 —— 交给库自己算。
 +             * 倍数用「视觉尺寸 ÷ 布局尺寸」的比值求，不读 getComputedStyle(html).zoom：
@@ -5216,14 +5216,14 @@
 +                zoom: dsPageZoom(),
              });
 +
-+            /* ---------------- 触摸端不让 DragSelect 取消默认行为（2026-10-08 老师拍板） ----------------
++            /* ---------------- 触摸端不让 DragSelect 取消默认行为（2026-10-08 拍板） ----------------
 +             * 为什么必须处理：库的 Interaction._start 第一句就是**无条件**的
 +             *     if (e.type === 'touchstart') e.preventDefault();
 +             * 而且它排在「能不能开始拖动」的判断**之前** ⇒ 图片区域内（#images-scroll 里）的触摸
 +             * 默认行为一律被否掉，Chromium 因此**不合成 mousedown/mouseup/click**。两个后果：
 +             *   ① 库的「点选」发生在 **mousedown**（Interaction:start → Selection 拿页面覆盖的
 +             *      Selector.rect 与卡片矩形相交 → SelectedSet.add）⇒ 手机端「点图片」不勾选，
-+             *      和桌面端不一致（老师报的正是这条）；
++             *      和桌面端不一致（实测的正是这条）；
 +             *   ② Viewer 的 click 也收不到（安卓上「点图片打不开大图」的隐患）。
 +             * 做法：在 document 的**捕获阶段**（早于一切监听器）把落在区域内**那一发** touchstart 的
 +             * preventDefault 换成空函数 —— 事件照常往下传（卡片自己的长按菜单、页面其它触摸逻辑
@@ -5294,7 +5294,7 @@
 +             *     get rect(){ return this._rect ? this._rect : this._rect = this.HTMLNode.getBoundingClientRect() }
 +             *   —— **算一次就永久缓存**。原来只在 jg.complete / jg.resize 清过，于是滚动、切侧栏、
 +             *   懒加载新图、窗口变化之后它全过期 ⇒ 症状就是"某些位置能拖、某些位置怎么拖都不出框"
-+             *   （老师实测：同一页里换个起点就成一个不成）。
++             *   （实测：同一页里换个起点就成一个不成）。
 +             * 这里每帧/每次按下都把它刷成**当前真实矩形**，库那一刻读到的就是活值 —— 不再依赖
 +             * 猜"哪种操作会让它过期"。 */
 +            const dsSyncAreaRect = () => {
@@ -5314,7 +5314,7 @@
 +
 +            const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0, selfSelect: false};
 +            /* 最近一次触摸手势的时刻（2026-10-08）。判「这是不是触摸操作」不靠设备/UA：
-+             * 老师实测「手机端滑动页面还是会触发框选」——因为 utils.isMobile() 是
++             * 实测「手机端滑动页面还是会触发框选」——因为 utils.isMobile() 是
 +             * 「移动 UA **且 screen.width < 768**」，iPad 这类宽屏 iOS 设备上它直接返回 false，
 +             * 只按它判断的守卫等于没有。改成「本页最近发生过触摸」：与设备无关，
 +             * 桌面鼠标用户永远不会命中（他们根本不会有 touchstart）。 */
@@ -5368,7 +5368,7 @@
 +                 * 顺序上我们一定先跑，库判定时读到的才是刷新后的矩形。 */
 +                dsSyncAreaRect();
 +                const inArea = !! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM);
-+                /* 老师第六轮的期待：「从窗口最左边按下拖动也要能框选」。
++                /* 第六轮的期待：「从窗口最左边按下拖动也要能框选」。
 +                 * 侧栏是 fixed 元素、盖在网格左边（展开时 256px 宽），它上面的 mousedown 根本到不了
 +                 * DragSelect 的区域 ⇒ 库不会启动。所以这种"区域外起始"的拖动由我们接管：
 +                 * 只要按点落在**网格所在的水平范围与垂直范围**内（x ≤ 网格右缘、y ≥ 网格上缘），
@@ -5392,7 +5392,7 @@
 +                if (! dsBox.on) {
 +                    return;
 +                }
-+                /* 手机端不跟手扩框（老师 2026-10-08 定：**框选只在电脑端生效**）——
++                /* 手机端不跟手扩框（2026-10-08 定：**框选只在电脑端生效**）——
 +                 * 手指在图片墙上滑动应当是滚页面，不该顺带把沿途的图都框上、和滚动手势打架。
 +                 * ★ 只让框「不再长大」，不取消 mousedown 那一发：库的**点选**正是靠按下时的
 +                 *   点状框与卡片相交来落选的（见上面 Selector.rect 的说明）⇒ 点图片/点圆勾照常。 */
@@ -5483,7 +5483,7 @@
              };
  
 +            /* 【2026-10-08 第六轮·修正】手机端不让库启动「触摸交互」（真机实测：不拦的话库会自己画出蓝框，
-+             * 而落选判定用我们的零尺寸框 ⇒ 看着像"框选被触发但框不上"，与老师截图一致）。
++             * 而落选判定用我们的零尺寸框 ⇒ 看着像"框选被触发但框不上"，与实测一致）。
 +             * 上一版在 `predragstart` 里 `ds.break()` **无效** —— 读 ds.min.js 源码可见：
 +             *     start(e) { this._canInteract(e) && (this.isInteracting = true, ..., this.DS.publish("Interaction:start", ...)) }
 +             * `isInteracting` 在 publish 之前就置上了，回调里再 break 已经来不及；
@@ -5518,9 +5518,9 @@
 -                }
 -
 -                if (! $(event.target).hasClass('dragselect')) {
-+                /* 【2026-10-08 第六轮】手机端**不让库启动「触摸交互」** —— 真机实测（DevTools 采样 + 老师描述）：
++                /* 【2026-10-08 第六轮】手机端**不让库启动「触摸交互」** —— 真机实测（DevTools 采样 + 现场表现）：
 +                 * 屏幕上会出现一个**蓝色选择框**，但图片选不上（框是库自己画的，而落选判定用的是我们
-+                 * 那个零尺寸框）⇒ 看着像"框选被触发"。本机 CDP 复现不出（桌面 Chrome 的合成触摸序列
++                 * 那个零尺寸框）⇒ 看着像"框选被触发"。本地 CDP 复现不出（桌面 Chrome 的合成触摸序列
 +                 * 没能让库的 `_canInteract` 通过），只有真机走这条路径。
 +                 * 挡在源头：这一发交互若由 `touchstart` 触发，直接 break 掉它 —— 库不进入交互状态，
 +                 * 自然既画不出框、也不会有后续 update。触摸之后浏览器**合成的那串 mouse 事件**
@@ -5528,7 +5528,7 @@
 +                 * 点图片（勾选 + 打开大图）、点小圆勾（单选/多选）一律照常。 */
 +                /* 【2026-10-08】这里原来有一句 `if (utils.isMobile()) ds.stop();`（手机端不拖框），
 +                 * 它把库的整个交互停掉 ⇒ 手机端「点图片」只剩打开大图、不勾选，与桌面端不一致
-+                 *（这正是老师报的那条的直接原因）。现在触摸端由上面那段「不让库取消默认行为」
++                 *（这正是实测的那条的直接原因）。现在触摸端由上面那段「不让库取消默认行为」
 +                 * 统一成与桌面相同的路径，这句已删。 */
 +
 +                // 能起拖动的目标：网格/空白（带 dragselect 类）、卡片 <a> 本身、卡片里的 <img>。
@@ -5637,7 +5637,7 @@
 +
 +            /* 标签「改名 / 删除」后就地同步所有卡片与详情卡 —— **绝不重拉图片墙**。
 +             * 重拉（setTags → resetImages）会清空图片墙并 ds.clearSelection()，把用户正在打标的
-+             * 这批选中图片丢掉，弹窗里的勾选态也随之失真（老师报过的「编辑/删除会整页刷新」）。
++             * 这批选中图片丢掉，弹窗里的勾选态也随之失真（实测过的「编辑/删除会整页刷新」）。
 +             * newName 传 null 表示这个标签已被删除。 */
 +            const patchCardsTag = (tagId, newName) => {
 +                tagId = String(tagId);
@@ -6073,13 +6073,13 @@
 -    <div>
 -        {{ $logo }}
 -    </div>
-+{{-- 老师 2026-10-08：登录框要**自己**几何居中。
++{{-- 2026-10-08：登录框要**自己**几何居中。
 +     原来 LOGO 与卡片同处一个 justify-center 的列里 ⇒ 居中基准是「LOGO + 卡片」这个整体，
 +     卡片必然被压到中线以下（线上实测：390×844 偏下 35.5px、1280×720 偏下 38.9px）。
 +     注意这与右上角的「外观切换」无关 —— 它是 absolute，不占布局（实测只在 16→56 那条带里）。
 +     现在把 LOGO 改成悬在卡片正上方的绝对定位元素，居中基准只剩卡片本身。
 +     ★ 定位用 inline style，不用 bottom-full / inset-x-0 这类 Tailwind 类：产物里可能还没生成，
-+       新类不重建 CSS 就不生效（本机预览时因此当场露馅一次）。 --}}
++       新类不重建 CSS 就不生效（本地预览时因此当场露馅一次）。 --}}
 +<div class="min-h-screen ls-zoom-minh-screen flex flex-col justify-center items-center py-6 bg-bg px-4">
 +    <div class="relative w-full flex flex-col items-center">
 +        <div class="absolute flex justify-center" style="left: 0; right: 0; bottom: 100%; margin-bottom: 1.5rem;">

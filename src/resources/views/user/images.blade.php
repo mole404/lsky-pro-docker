@@ -16,7 +16,7 @@
             scroll 监听，能力没丢（代价同「移动到相册」弹窗：那三种文案在这个弹窗里不再显示，
             接口 status=false 时仍有 toastr.error）。
          2) 桌面宽度：x-modal 的卡片宽度是给「详细信息」那类宽内容定的（md:max-w-2xl / lg:max-w-4xl），
-            相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 520px（原来 420px，用户反馈
+            相册列表在窄卡片里更好看 —— 按弹窗 id 把卡片收窄到约 520px（原来 420px，观感
             「稍微加宽一些」）。手机上 x-modal 是底部抽屉
             （<640px 贴底），这条 media query 不生效，抽屉行为不受影响。
          3) 相册行的编辑/删除是**行内常显的 44×44 按钮**（不再靠 hover 才出现），所以这里
@@ -36,7 +36,7 @@
              *   浏览器会把哨兵当锚点、上方内容变高就自动往下补 scrollTop，于是哨兵又进视口、
              *   又触发下一页 —— 连锁滚到底。安卓 Edge 上尤其明显（安卓 Chrome / iOS 不这样）。 */
             html, body, #images-scroll, #images-scroll .infinite-scroll { overflow-anchor: none; }
-            /* 注：#images-scroll 的左侧内边距曾加过 18px，老师否掉了（图库左侧不该空出一条）——
+            /* 注：#images-scroll 的左侧内边距曾加过 18px，否掉了（图库左侧不该空出一条）——
              * "左侧拖不出框"要从侧栏/判定那边解决，不能靠给网格加空白。 */
             /* ★ 让滚动条的位置**永远被预留**（桌面端）。
              *   看图器打开时库会给 body 加 .viewer-open{overflow:hidden}，滚动条消失 ⇒
@@ -53,7 +53,7 @@
              *   看图器自身是 fixed 全屏覆盖 + touch-action:none，指针/触摸不会漏到后面；
              *   滚轮被库自己的 zoomOnWheel 处理（非 passive + preventDefault），背景也不会被滚走。 */
             body.viewer-open { overflow: visible; }
-            /* ★ 再把库写的那份 body padding-right 按回 0。真机实测（老师浏览器打印）：
+            /* ★ 再把库写的那份 body padding-right 按回 0。真机实测（浏览器打印）：
              *   打开看图器时 body 的 padding-right 会变成 8px —— 那正是**槽位**的宽度
              *   （库 initBody 量的就是 innerWidth − documentElement.clientWidth），
              *   而槽位已经把空间预留住了，再补一次就把内容挤窄 8px ⇒ 卡片重排
@@ -128,7 +128,7 @@
         /* 框外变暗：**不用**库的 .cropper-modal。
            库那套是「半透明黑盖住整图 + 往 .cropper-view-box 里再塞一张克隆图把框内提亮」——
            真机实测那一步在 iOS(WebKit) 上不生效，表现就是整张（含框内）都是灰的
-           （老师截图按像素量：框外 127、框内 140，140 正是 127 又叠了库那层 10% 白 highlight）。
+           （按像素量：框外 127、框内 140，140 正是 127 又叠了库那层 10% 白 highlight）。
            改成：关闭 modal（Cropper 选项 modal:false），用裁剪框自己的大范围 box-shadow 压暗框外 ——
            框内直接就是原图本体，没有任何遮罩压在它上面 ⇒ 各平台一致；容器裁掉阴影溢出，
            工具栏与页面其它部分不受影响。 */
@@ -176,14 +176,14 @@
             #crop-layer .cropper-point.point-se { width: 14px; height: 14px; }
         }
 
-        /* ── fork：看图器「全屏」的观感（老师要的"进去只剩图"）─────────────────
+        /* ── fork：看图器「全屏」的观感（需要的"进去只剩图"）─────────────────
            进全屏时 JS 给 <html> 加 .ls-viewer-fs：UI 全藏、背景压成纯黑，缩放手势/拖动/切图一概不动。
            鼠标动一下或轻触一下临时淡入（.ls-fs-ui，2.5s 后自动隐）；点背景关掉看图器即彻底退出全屏。 */
         html.ls-viewer-fs .viewer-backdrop,
         html.ls-viewer-fs .viewer-container { background-color: #000; }
         /* 顺手把**页面自己**那条右侧滚动条也收掉（全屏里页面本来也不该滚），
            连"给滚动条留出来的那块空白"一起收 —— 只是 overflow:hidden 的话，
-           scrollbar-gutter: stable 仍会在右边留一条 8px 的空白（老师截图里能看到）。
+           scrollbar-gutter: stable 仍会在右边留一条 8px 的空白（实测能看到）。
            全屏期间没有滚动条，也就不需要槽位 ⇒ 两条一起写。 */
         html.ls-viewer-fs { overflow: hidden; scrollbar-gutter: auto; }
         html.ls-viewer-fs .viewer-toolbar,
@@ -305,7 +305,7 @@
                 </x-slot>
             </x-dropdown>
             {{-- fork：标签筛选（多选，后端 AND 语义）。这里原来是「权限」下拉，
-                 已按老师要求整体下线、换成标签 —— 只替换这一个下拉，不新增第三个，
+                 已按要求整体下线、换成标签 —— 只替换这一个下拉，不新增第三个，
                  免得 <768px 时工具栏换行、把 sticky top-14 的吸顶高度撑高。
                  标签按用户隔离，列表来自 GET user/tags，由 JS（loadTags → renderTagFilter）
                  渲染进 #tag-filter-list；勾选任意一项立刻 resetImages({page:1, tags:[...]})。
@@ -318,7 +318,7 @@
                          （否则会顶动 sticky 吸顶工具栏那一行）。--}}
                     <a id="tag-filter" class="inline-flex items-center gap-1.5 text-sm py-1.5 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
                         <span>标签</span>
-                        {{-- 实测：图标墨迹中心比文字高 0.5px（文字 90.0 / 图标 89.5，截图按像素量的），
+                        {{-- 实测：图标墨迹中心比文字高 0.5px（文字 90.0 / 图标 89.5，按像素量的），
                              用 relative+top 精确压下去 0.5px。--}}
                         <i class="fas fa-tags text-brand relative top-[0.5px]"></i>
                     </a>
@@ -382,7 +382,7 @@
          ① 给「选中的这几张图」打标：勾选 = 加上该标签，取消 = 从这些图移除；
          ② 标签本身的新建 / 重命名 / 删除。
          入口三处：桌面工具栏 / 手机 ⋯ 菜单的「标签管理」、图片右键菜单、顶部「标签」下拉底部。
-         （原来「修改标签」和「管理标签」是两个窗口，已按老师要求合并成一个。）--}}
+         （原来「修改标签」和「管理标签」是两个窗口，已按要求合并成一个。）--}}
     <x-modal id="image-tags-modal">
         <div id="image-tags-content"></div>
     </x-modal>
@@ -430,7 +430,7 @@
                     <i class="fas fa-check-circle block rounded-full bg-white text-white border border-line-2"></i>
                 </div>
             </div>
-            {{-- 缩略图上的名称/时间遮罩：老师要求先隐藏（不要删代码，以后可能改回来）。
+            {{-- 缩略图上的名称/时间遮罩：要求先隐藏（不要删代码，以后可能改回来）。
                  要恢复：把下面这个 hidden 去掉即可，其余一个字没动。
                  注意：遮罩隐藏后点击落在 img 上，看图器照旧正常打开（原来靠这里的 onclick 转发）。--}}
             <div class="image-mask hidden absolute left-0 right-0 bottom-0 h-20 z-[1] bg-gradient-to-t from-black" onclick="$(this).siblings('img').trigger('click')">
@@ -512,7 +512,7 @@
     <script type="text/html" id="albums-item-tpl">
         {{-- overflow-hidden 是必需的：右边两个 44×44 常显按钮的 hover 底色是**方形**的，
              行的圆角是 rounded-lg —— 不裁的话方块会盖住圆角，选中（当前相册）时那条品牌色
-             边框的两个右角看着就像缺角（老师反馈）。标签行（#image-tags-item-tpl）一直是这么写的。 --}}
+             边框的两个右角看着就像缺角。标签行（#image-tags-item-tpl）一直是这么写的。 --}}
         <div class="albums-row flex items-stretch min-h-[44px] w-full overflow-hidden rounded-lg border border-line bg-surface" data-id="__id__" data-json='__json__'>
             <a href="javascript:void(0)" data-id="__id__" data-json='__json__' title="__intro__" class="albums-item group flex min-w-0 flex-1 items-center gap-2.5 rounded-l-lg px-3 py-1">
                 <div class="min-w-0 flex-1 truncate text-[14px] name">__name__</div>
@@ -538,9 +538,9 @@
     </script>
 
     {{-- 图片「详细信息」：居中卡片弹窗（不再渲染进右侧抽屉）。
-         字段顺序按老师要求：**上传时间第一、图片名称紧跟其后**，其余字段一个没删、只换了位置
+         字段顺序按要求：**上传时间第一、图片名称紧跟其后**，其余字段一个没删、只换了位置
          （相册名称 / 使用策略 / 图片原始名称 / 图片大小 / 图片类型 / 尺寸 / MD5 / SHA-128 / 权限 / 上传 IP）。
-         排版（老师二次验收提「排版、字号、字体颜色都优化一下」后统一成这一套）：
+         排版（二次验收提「排版、字号、字体颜色都优化一下」后统一成这一套）：
          顶部＝小缩略图 + 16px semibold 标题；下面一整块圆角卡片（rounded-lg + border-line + bg-surface-2），
          字段之间用 divide-line 细线分隔、每行等距 py-3（所以分区间距一致）；
          标签 13px text-ink-3 在左（sm:w-28 定宽对齐）、值 14px text-ink 在右（窄屏 flex-col 自动上下堆叠），行高 leading-6。
@@ -617,9 +617,9 @@
     {{-- 「移动到相册」弹窗：相册列表（单选）+ 底部「移动」「取消」。
          列表数据与顶部工具栏的「相册列表」同一个接口；点一行只选中，底部「移动」才提交。
          每行 min-h-[44px]（手机点击区 ≥44px），当前所在相册带「当前」标记（__current_badge__）。
-         排版（老师二次验收「排版/字号/字体颜色」统一）：标题 16px semibold、副标题 13px text-ink-3、
+         排版（二次验收「排版/字号/字体颜色」统一）：标题 16px semibold、副标题 13px text-ink-3、
          列表行 14px / 数量 13px text-ink-3，间距统一用 mt-4 + gap-1.5；颜色只走设计令牌。
-         底部**不要横线**：老师看到的那条就是 footer 的 border-t，已去掉，只留上间距。
+         底部**不要横线**：实测的那条就是 footer 的 border-t，已去掉，只留上间距。
          按钮沿用全局 ls-btn / ls-btn-primary（与弹窗、页面其它按钮同一套）。
          ⚠ 列表底部那条「我也是有底线的~」是 utils.infiniteScroll 自动插进 #movements-albums 的哨兵，
          在这个弹窗里用 CSS 隐藏（见 common.less：#image-movements-modal .infinite-scroll { display: none }），
@@ -659,7 +659,7 @@
         <div class="mx-auto flex w-full max-w-xl flex-col">
             <p class="text-[16px] font-semibold leading-6 text-ink">标签管理</p>
             <p class="mt-1 text-[13px] leading-5 text-ink-3">__hint__</p>
-            {{-- 新建标签放在首行（老师要求）：进窗口第一眼就能建新标签 --}}
+            {{-- 新建标签放在首行（要求）：进窗口第一眼就能建新标签 --}}
             <div class="mt-3 flex items-center gap-2">
                 <input type="text" id="image-tags-new" maxlength="64" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入新标签名称">
                 <button type="button" id="image-tags-create" class="ls-btn h-11 shrink-0 px-4 sm:h-9">新建标签</button>
@@ -686,7 +686,7 @@
 
     {{-- 「标签管理」窗口里的一行：左边是勾选区（整块 ≥44px 点击区），右边两个常显的 44×44
          「重命名 / 删除」按钮（改标签本身，不影响图片）。
-         勾选语义（按老师定的两态）：勾上 = 给选中的这些图片加上该标签；取消勾选 = 从这些图片移除。
+         勾选语义（按两态）：勾上 = 给选中的这些图片加上该标签；取消勾选 = 从这些图片移除。
          如果该标签只在「部分选中的图片」上有，就显示成半勾表示现状，点一下变全勾（加上）。 --}}
     <script type="text/html" id="image-tags-item-tpl">
         <div class="image-tag-row flex min-h-[44px] w-full items-stretch overflow-hidden rounded-lg border border-line bg-surface transition-colors duration-150" data-id="__id__" data-json='__json__'>
@@ -755,7 +755,7 @@
                看图器工具栏的「全屏」键在那里点了必然**静默无反应**：库内部那句
                  documentElement.requestFullscreen ? … : webkitRequestFullscreen ? … : moz ? … : ms …
                会整条落空，既不报错也不生效。所以按能力探测决定**渲不渲染这个键**
-               （老师 2026-10-08 拍板：不支持就不显示，免得留一个点了没反应的按钮）。
+               （2026-10-08 拍板：不支持就不显示，免得留一个点了没反应的按钮）。
                判据优先看 document.fullscreenEnabled（iPhone Safari 上是 false）；
                没有该属性的老浏览器再退回按元素上那几个 API 是否存在来判断。 */
             const canViewerFullscreen = () => {
@@ -841,7 +841,7 @@
                 },
                     slideOnTouch: false,   // 关掉库自带的触摸切图：单指动作永远是 move ⇒ 库自己的平移就是跟手拖动
 
-                // 到头不再绕回（老师明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
+                // 到头不再绕回（明确不要循环：第一张向右滑会绕到最后一张，且那一下会让
                 // 控件重建画布/缩略图条 ⇒ iOS 整个界面左偏、安卓缩略图全空，见后续修复记录）
                 loop: false,
                 // focus: false —— Claude 定位 + 真机对照验证：
@@ -861,7 +861,7 @@
              *   update() 会把 .viewer-list 的 width 设成 auto 并重建所有 <li>，
              *   但当前图没变时不会调 renderList() ⇒ 位置（width + translateX((容器宽-30)/2 - 31*index)）
              *   还是旧值。图越靠后这个负偏移越大，超过一屏宽后整个列表被推出导航条可视区，
-             *   只剩一条空的黑底 —— 就是老师看到的"缩略图条不显示"；手指一滑（goTo → view → renderList）
+             *   只剩一条空的黑底 —— 就是实测看到的"缩略图条不显示"；手指一滑（goTo → view → renderList）
              *   位置被重算，缩略图立刻回来。
              * 谁会在看图时调 update()：images.blade.php 里无限滚动每次请求结束的 complete 回调
              * （看图时后台正好加载完一批就会触发），以及侧栏折叠。所以是"偶尔"。
@@ -893,7 +893,7 @@
              *   · 看图器工具栏的「裁剪」按钮（cropEditor.openFromViewer）
              *   · 选中操作条的 [data-operate="edit"]（只有单选 jpg/jpeg/png 时出现）
              *   · 右键 / 长按菜单的「编辑图片」
-             * 规则（老师拍板）：
+             * 规则（拍板）：
              *   · 只有 jpg/jpeg/png 给入口，其它格式一律不出现；
              *   · 导出格式跟随原图：png → PNG 无损；jpg/jpeg → JPEG q0.95；
              *   · 不设长边上限（按原图尺寸导出，绝不放大），框选 >30MP 时在标题栏提示体积；
@@ -940,7 +940,7 @@
             /* 全屏里鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态） */
             const FS_UI_MS = 2500;
             let fsUiTimer = 0;
-            /* 全屏里"人还在 UI 上"就不收起 —— 老师第七轮要的：
+            /* 全屏里"人还在 UI 上"就不收起 —— 第七轮要的：
              * "我正操作着呢 UI 自己没了，这多烦人"。原来的实现只做了"每次操作重新计时"，
              * 但鼠标停在 toolbar/缩略图条上不动时没有任何事件，计时照样走完 ⇒ UI 在手指底下消失
              * （而且此刻它们是 pointer-events:none，点下去还会穿透、甚至误关看图器）。
@@ -984,7 +984,7 @@
                 document.addEventListener(ev, flashFullscreenUI, {capture: true, passive: true});
             });
 
-            /* 老师第八轮：① 非全屏"拖动后松手"不该被当成点击；② 全屏点空白不许关、改成显示 UI。
+            /* 第八轮：① 非全屏"拖动后松手"不该被当成点击；② 全屏点空白不许关、改成显示 UI。
              * 库里这条链路（压缩产物实读）：
              *   pointerup 里，若手势 < 500ms、松手目标是 canvas、backdrop 未被关掉，
              *   就向 .viewer-canvas 派发一个 'click'（常量 S = "click"）；
@@ -1271,7 +1271,7 @@
                 return { open: open, openFromViewer: openFromViewer, supported: supported, close: close };
             })();
 
-            /* 底部缩略图条上的快捷切图（老师要的功能）。
+            /* 底部缩略图条上的快捷切图（要求的功能）。
              *   · 电脑：光标在缩略图条上滚轮 ⇒ 滚一格切一张。
              *     控件自己在外层容器上绑了"滚轮缩放"（捕获阶段），所以这里也在 document 捕获
              *     阶段抢在它之前，并且**只对落在缩略图条上的滚轮生效**：图上滚轮依旧是缩放。
@@ -1296,7 +1296,7 @@
                     if (target !== viewer.index) viewer.view(target);
                 };
                 /* 滚轮切图：这里**必须**能 preventDefault，否则页面会跟着一起滚
-                 * （老师报的"缩略图条滚轮切图的同时整页也在滚"）。
+                 * （实测的"缩略图条滚轮切图的同时整页也在滚"）。
                  * 代价：document 上的非 passive wheel 会让浏览器失去"不等 JS 就滚动"的快路径 ⇒
                  * 只在看图器打开期间挂它（shown 挂 / hidden 摘），平时整页滚动一点不受影响。
                  * 仍然要 stopPropagation：控件"把滚轮当缩放"是在外层容器的捕获阶段做的，
@@ -1332,7 +1332,7 @@
                 /* 注意：这个监听器**必须**是 passive，绝不能 preventDefault。
                  * 在 document 上注册「非 passive 的 touchmove」会让 Chrome 失去"不等 JS 就滚动/绘制"
                  * 的快路径 —— 表现是远离手指的元素（比如屏幕底部的缩略图条）不重绘：一直空白，
-                 * 手指一碰它才突然画出来（安卓上尤其明显）。老师说"像被什么卡住了"就是这个。
+                 * 手指一碰它才突然画出来（安卓上尤其明显）。"像被什么卡住了"就是这个现象。
                  * 而缩略图条本来就是 touch-action:none、浏览器不会滚它，所以根本不用 preventDefault。 */
                 document.addEventListener('touchmove', (e) => {
                     if (!navDown) return;
@@ -1406,13 +1406,13 @@
              *   2. 是拖动 ⇒ 立刻清掉库的 imageClicked，让拖动永远不能充当"第一次轻点"；
              *      若这一下之前已经有"第一次轻点"了（imageClicked 曾被置位），说明是"轻点+拖动"，
              *      那发 50ms 后要派发的合成 dblclick 也一并拦掉。
-             *   3. 两次都不动的轻点 ⇒ 真双击，放行；并按老师要求把有效期从 500ms 收到 300ms
+             *   3. 两次都不动的轻点 ⇒ 真双击，放行；并按要求把有效期从 500ms 收到 300ms
              *      （300ms 后清掉库的 imageClicked，等效于缩短双击判定窗口）。
              * 注意必须用 touchstart/touchend 的坐标差，**不能**靠 touchmove：安卓上控件在指针处理里
              * preventDefault 之后 touchmove 可能根本收不到。 */
             (function () {
                 const TAP_SLOP = 30;      // 超过它就当"拖动"
-                const TAP_WINDOW = 300;   // 等效双击窗口（老师定）
+                const TAP_WINDOW = 300;   // 等效双击窗口（已定）
                 let startX = 0;
                 let startY = 0;
                 let tapTimer = 0;
@@ -1870,7 +1870,7 @@
 
             /* 注：这里原有一个 refreshAfterTagChange()（改名/删除后 loadTags + setTags）。
              * setTags() 会通过 resetImages() 清空图片墙并 ds.clearSelection() —— 把用户正在打标的
-             * 这批选中图片连同弹窗勾选态一起丢掉（老师报的「编辑/删除会整页刷新」就是这个）。
+             * 这批选中图片连同弹窗勾选态一起丢掉（实测的「编辑/删除会整页刷新」就是这个）。
              * 已删除：改名/删除改成 patchCardsTag() 就地同步；只有「被删的标签正用作筛选项」
              * 那种结果集真的变了的情况，才单独调一次 setTags()。 */
 
@@ -1936,7 +1936,7 @@
                         let pendingRemove = removeIds.indexOf(id) !== -1;
                         let partial = ! checked && ! pendingRemove && someHave(id) && ! allHave(id);
 
-                        // 行内只留左边那个勾表达状态（老师要求：不要「已有 / 移除」这类字样，太误导）
+                        // 行内只留左边那个勾表达状态（要求：不要「已有 / 移除」这类字样，太误导）
                         let icon = 'fa-square text-ink-3';
                         if (checked) {
                             icon = 'fa-check-square text-brand';
@@ -2170,7 +2170,7 @@
              * 内部 _zoom 就是为它准备的），但不传就会按"无缩放"算：
              *   实测它的「内部判定框」= 用户看到的那只框 × 1.1 + 偏移(-28, +55)，
              *   尺寸大 10%（411×312 → 452×343），位置偏差随滚动量增大 ——
-             *   于是"框住上一行、下面一整行却被选中"、"误差随滚动变大"（老师报的正是这个）。
+             *   于是"框住上一行、下面一整行却被选中"、"误差随滚动变大"（实测的正是这个）。
              * 之前 fork 里叠的那层手工补偿（把内联坐标除以 zoom 再写回去）是**第二个补偿**，
              * 与库自身的算法互相打架，已整体删除 —— 交给库自己算。
              * 倍数用「视觉尺寸 ÷ 布局尺寸」的比值求，不读 getComputedStyle(html).zoom：
@@ -2191,14 +2191,14 @@
                 zoom: dsPageZoom(),
             });
 
-            /* ---------------- 触摸端不让 DragSelect 取消默认行为（2026-10-08 老师拍板） ----------------
+            /* ---------------- 触摸端不让 DragSelect 取消默认行为（2026-10-08 拍板） ----------------
              * 为什么必须处理：库的 Interaction._start 第一句就是**无条件**的
              *     if (e.type === 'touchstart') e.preventDefault();
              * 而且它排在「能不能开始拖动」的判断**之前** ⇒ 图片区域内（#images-scroll 里）的触摸
              * 默认行为一律被否掉，Chromium 因此**不合成 mousedown/mouseup/click**。两个后果：
              *   ① 库的「点选」发生在 **mousedown**（Interaction:start → Selection 拿页面覆盖的
              *      Selector.rect 与卡片矩形相交 → SelectedSet.add）⇒ 手机端「点图片」不勾选，
-             *      和桌面端不一致（老师报的正是这条）；
+             *      和桌面端不一致（实测的正是这条）；
              *   ② Viewer 的 click 也收不到（安卓上「点图片打不开大图」的隐患）。
              * 做法：在 document 的**捕获阶段**（早于一切监听器）把落在区域内**那一发** touchstart 的
              * preventDefault 换成空函数 —— 事件照常往下传（卡片自己的长按菜单、页面其它触摸逻辑
@@ -2269,7 +2269,7 @@
              *     get rect(){ return this._rect ? this._rect : this._rect = this.HTMLNode.getBoundingClientRect() }
              *   —— **算一次就永久缓存**。原来只在 jg.complete / jg.resize 清过，于是滚动、切侧栏、
              *   懒加载新图、窗口变化之后它全过期 ⇒ 症状就是"某些位置能拖、某些位置怎么拖都不出框"
-             *   （老师实测：同一页里换个起点就成一个不成）。
+             *   （实测：同一页里换个起点就成一个不成）。
              * 这里每帧/每次按下都把它刷成**当前真实矩形**，库那一刻读到的就是活值 —— 不再依赖
              * 猜"哪种操作会让它过期"。 */
             const dsSyncAreaRect = () => {
@@ -2289,7 +2289,7 @@
 
             const dsBox = {on: false, x0: 0, y0: 0, x1: 0, y1: 0, selfSelect: false};
             /* 最近一次触摸手势的时刻（2026-10-08）。判「这是不是触摸操作」不靠设备/UA：
-             * 老师实测「手机端滑动页面还是会触发框选」——因为 utils.isMobile() 是
+             * 实测「手机端滑动页面还是会触发框选」——因为 utils.isMobile() 是
              * 「移动 UA **且 screen.width < 768**」，iPad 这类宽屏 iOS 设备上它直接返回 false，
              * 只按它判断的守卫等于没有。改成「本页最近发生过触摸」：与设备无关，
              * 桌面鼠标用户永远不会命中（他们根本不会有 touchstart）。 */
@@ -2343,7 +2343,7 @@
                  * 顺序上我们一定先跑，库判定时读到的才是刷新后的矩形。 */
                 dsSyncAreaRect();
                 const inArea = !! e.target.closest(IMAGES_SCROLL + ', ' + IMAGES_ITEM);
-                /* 老师第六轮的期待：「从窗口最左边按下拖动也要能框选」。
+                /* 第六轮的期待：「从窗口最左边按下拖动也要能框选」。
                  * 侧栏是 fixed 元素、盖在网格左边（展开时 256px 宽），它上面的 mousedown 根本到不了
                  * DragSelect 的区域 ⇒ 库不会启动。所以这种"区域外起始"的拖动由我们接管：
                  * 只要按点落在**网格所在的水平范围与垂直范围**内（x ≤ 网格右缘、y ≥ 网格上缘），
@@ -2367,7 +2367,7 @@
                 if (! dsBox.on) {
                     return;
                 }
-                /* 手机端不跟手扩框（老师 2026-10-08 定：**框选只在电脑端生效**）——
+                /* 手机端不跟手扩框（2026-10-08 定：**框选只在电脑端生效**）——
                  * 手指在图片墙上滑动应当是滚页面，不该顺带把沿途的图都框上、和滚动手势打架。
                  * ★ 只让框「不再长大」，不取消 mousedown 那一发：库的**点选**正是靠按下时的
                  *   点状框与卡片相交来落选的（见上面 Selector.rect 的说明）⇒ 点图片/点圆勾照常。 */
@@ -2463,7 +2463,7 @@
             };
 
             /* 【2026-10-08 第六轮·修正】手机端不让库启动「触摸交互」（真机实测：不拦的话库会自己画出蓝框，
-             * 而落选判定用我们的零尺寸框 ⇒ 看着像"框选被触发但框不上"，与老师截图一致）。
+             * 而落选判定用我们的零尺寸框 ⇒ 看着像"框选被触发但框不上"，与实测一致）。
              * 上一版在 `predragstart` 里 `ds.break()` **无效** —— 读 ds.min.js 源码可见：
              *     start(e) { this._canInteract(e) && (this.isInteracting = true, ..., this.DS.publish("Interaction:start", ...)) }
              * `isInteracting` 在 publish 之前就置上了，回调里再 break 已经来不及；
@@ -2493,9 +2493,9 @@
             })();
 
             ds.subscribe('predragstart', ({ event }) => {
-                /* 【2026-10-08 第六轮】手机端**不让库启动「触摸交互」** —— 真机实测（DevTools 采样 + 老师描述）：
+                /* 【2026-10-08 第六轮】手机端**不让库启动「触摸交互」** —— 真机实测（DevTools 采样 + 现场表现）：
                  * 屏幕上会出现一个**蓝色选择框**，但图片选不上（框是库自己画的，而落选判定用的是我们
-                 * 那个零尺寸框）⇒ 看着像"框选被触发"。本机 CDP 复现不出（桌面 Chrome 的合成触摸序列
+                 * 那个零尺寸框）⇒ 看着像"框选被触发"。本地 CDP 复现不出（桌面 Chrome 的合成触摸序列
                  * 没能让库的 `_canInteract` 通过），只有真机走这条路径。
                  * 挡在源头：这一发交互若由 `touchstart` 触发，直接 break 掉它 —— 库不进入交互状态，
                  * 自然既画不出框、也不会有后续 update。触摸之后浏览器**合成的那串 mouse 事件**
@@ -2503,7 +2503,7 @@
                  * 点图片（勾选 + 打开大图）、点小圆勾（单选/多选）一律照常。 */
                 /* 【2026-10-08】这里原来有一句 `if (utils.isMobile()) ds.stop();`（手机端不拖框），
                  * 它把库的整个交互停掉 ⇒ 手机端「点图片」只剩打开大图、不勾选，与桌面端不一致
-                 *（这正是老师报的那条的直接原因）。现在触摸端由上面那段「不让库取消默认行为」
+                 *（这正是实测的那条的直接原因）。现在触摸端由上面那段「不让库取消默认行为」
                  * 统一成与桌面相同的路径，这句已删。 */
 
                 // 能起拖动的目标：网格/空白（带 dragselect 类）、卡片 <a> 本身、卡片里的 <img>。
@@ -2625,7 +2625,7 @@
 
             /* 标签「改名 / 删除」后就地同步所有卡片与详情卡 —— **绝不重拉图片墙**。
              * 重拉（setTags → resetImages）会清空图片墙并 ds.clearSelection()，把用户正在打标的
-             * 这批选中图片丢掉，弹窗里的勾选态也随之失真（老师报过的「编辑/删除会整页刷新」）。
+             * 这批选中图片丢掉，弹窗里的勾选态也随之失真（实测过的「编辑/删除会整页刷新」）。
              * newName 传 null 表示这个标签已被删除。 */
             const patchCardsTag = (tagId, newName) => {
                 tagId = String(tagId);

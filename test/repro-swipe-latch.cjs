@@ -15,7 +15,7 @@ function run(file, moves, label){
   const ev=(t,x,y)=>new w.PointerEvent(t,{bubbles:true,cancelable:true,pointerId:7,pointerType:'touch',clientX:x,clientY:y,view:w});
   const mk=(t,x,y)=>{const e=ev(t,x,y);Object.defineProperty(e,'pageX',{value:x});Object.defineProperty(e,'pageY',{value:y});return e;};
   const canvas=v.canvas;
-  // ==== 阿罗娜的"松闩"补丁（从外面松开 Viewer 的 'switched' 闩锁）====
+  // ==== "松闩"补丁（从外面松开 Viewer 的 'switched' 闩锁）====
   let inV=false,lastA=null,swA=null;
   w.document.addEventListener('pointerdown',(e)=>{ inV=!!e.target.closest('.viewer-container'); lastA=null; },true);
   w.document.addEventListener('pointermove',()=>{

@@ -47,4 +47,4 @@ console.log('滚动后 menuOpen:', window.eval('typeof context.isMenuOpen === "f
 // 紧接着点别的图片（这一瞬间菜单还在淡出、屏幕上还看得见）
 img.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
 console.log(`\n结果：viewer 打开次数=${window.__viewerOpened}  冒泡到 document 的点击=${window.__pageClicks}`);
-console.log(window.__viewerOpened === 0 && window.__pageClicks === 0 ? '✅ 没点穿（新行为）' : '❌ 点穿了：预览被打开（这就是老师遇到的 bug）');
+console.log(window.__viewerOpened === 0 && window.__pageClicks === 0 ? '✅ 没点穿（新行为）' : '❌ 点穿了：预览被打开（这就是实测遇到的 bug）');

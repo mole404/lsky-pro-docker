@@ -61,7 +61,7 @@
     /* 【2026-10-08】补按下态。菜单项原来只有 :hover/:focus 一处高亮来源：
         - iOS 触摸会补发合成 mouseover ⇒ 还能亮（另叠一层浏览器默认的 tap 灰块，见下面 .dropdown-context 那条），
         - 安卓触摸**没有 hover 阶段** ⇒ 全程没有任何强调色，点完菜单就关，用户看不清选中了哪一项。
-       :active 在 touchstart 即成立（早于 click），两个平台都能在按下的一瞬间给出反馈。 */
+       :active 在 touchstart 即成立（早于 click），两个平台都能在按下的一瞬间给出按压响应。 */
     li > a:hover, li > a:focus, li > a:active,
     .dropdown-submenu:hover > a, .dropdown-submenu > a:active {
         color: #ffffff;
@@ -165,7 +165,7 @@
     color: #ffffff;
 }
 
-/* 【2026-10-08 老师真机定位后的最终写法】关闭菜单的淡出改用 **CSS transition**，
+/* 【2026-10-08 真机定位后的最终写法】关闭菜单的淡出改用 **CSS transition**，
    而不是 jQuery 的 fadeOut。证据：同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`
    （含带回调版本）都能看到淡出，而代码里的 `fadeOut(260)` 调用后元素状态一个都没变 ——
    jQuery 的动画靠自己的计时器推进，时长太短（260ms ≈ 15 帧）叠上主线程忙时会被整段跳过，
@@ -210,7 +210,7 @@
 .dropdown-context .submenu-back > a > i {
     margin-right: 7px;
 }
-/* fork：去掉右键 / 长按菜单左上角的气泡尖角（老师要求，电脑端 + 手机端一致）。
+/* fork：去掉右键 / 长按菜单左上角的气泡尖角（要求，电脑端 + 手机端一致）。
    尖角就是这两条伪元素画出来的（上面一条深色描边 + 下面一条面板色叠出「箭头」）。
    用 content: none 让伪元素根本不生成 —— 只少这一个装饰；菜单的尺寸 / 圆角 / 阴影 /
    定位 / 滚动关闭行为一个字都没动。

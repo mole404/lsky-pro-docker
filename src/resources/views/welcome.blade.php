@@ -13,7 +13,7 @@
             <div class="container mx-auto px-5 sm:px-10 md:px-10 lg:px-10 xl:px-10 2xl:px-60 flex items-center gap-3 justify-between">
                 <div class="flex min-w-0 flex-1 justify-start items-center">
                     {{-- fork 2026-10-09：品牌区补上 LOGO 图案（与侧栏/登录页同一张图）。
-                         尺寸经手 28 → 32 → 30，老师最终定回 **28px**（= w-7 h-7，产物里有这档工具类，
+                         尺寸经手 28 → 32 → 30，最终定回 **28px**（= w-7 h-7，产物里有这档工具类，
                          不必再走 inline style）；站名保持 18px（text-lg）。
                          顶栏高 56px、右侧按钮 h-10=40px ⇒ 28px 的图案不会把顶栏撑高。
                          窄屏仍由 min-w-0 + truncate 吃掉剩余宽度（图标 shrink-0），不与右侧那组抢位。 --}}

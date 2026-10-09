@@ -113,7 +113,7 @@ services:
     container_name: lsky-pro
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8089:8089"                 # 宿主端口:容器端口（WEB_PORT）
+      - "127.0.0.1:8089:8089"                 # 主机端口:容器端口（WEB_PORT）
     volumes:
       - $PWD/lsky-pro/data:/var/www/html      # 站点数据全在这个目录里（$PWD = 你执行 compose 时所在的目录）
     environment:

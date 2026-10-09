@@ -1,7 +1,7 @@
 name: Delete image tag (manual)
 
 # 手动删除 GHCR 上某个镜像 tag（连同承载它的那个 package version）。
-# 本机 token 没有 packages 权限（本地操作会 401），所以只能在这里用 GITHUB_TOKEN。
+# 本地 token 没有 packages 权限（本地操作会 401），所以只能在这里用 GITHUB_TOKEN。
 # 只影响该 tag 自身；sha-<commit> 快照与 latest 各自是独立的 version，不受影响。
 on:
   workflow_dispatch:

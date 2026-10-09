@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 class TrustProxies extends Middleware
 {
     /**
-     * 只信任真实入口（宿主 nginx —— 127.0.0.1:8089 这一跳）。
+     * 只信任真实入口（主机 nginx —— 127.0.0.1:8089 这一跳）。
      *
      * 上游默认写的是 '*'，等于信任所有转发头。而外层 nginx 用的是
      * $proxy_add_x_forwarded_for（追加而不是覆盖），客户端自己带的
