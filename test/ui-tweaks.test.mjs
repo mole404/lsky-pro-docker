@@ -126,7 +126,13 @@ console.log('\n[游客首页] 外观切换归位 / 站名可见 / 登录整块�
         welcome.includes(':floating-theme-switch="false"') && welcome.includes('<x-theme-switch />'));
     check('顶栏那行仍在「公告 / 策略 / 登录注册」之前渲染外观切换（顺序：主题 → 公告 → 策略 → 账号）',
         welcome.indexOf('<x-theme-switch />') < welcome.indexOf("@includeWhen($_is_notice"));
-    check('站名不再白字白底（text-white 已去掉）', ! welcome.includes('text-white') && welcome.includes('text-ink text-xl truncate'));
+    check('站名不再白字白底（text-white 已去掉），且品牌区成了 flex 行（LOGO + 站名）',
+        ! welcome.includes('text-white') && welcome.includes('min-w-0 text-ink text-lg'));
+    check('顶栏品牌区带 LOGO 图案（static/lsky-logo.png + assetVersion 版本串；28px = w-7 h-7，与 56px 顶栏相称）',
+        welcome.includes("asset('static/lsky-logo.png')") && welcome.includes("assetVersion('static/lsky-logo.png')")
+        && /<img[^>]*class="w-7 h-7 shrink-0 select-none"/.test(welcome));
+    check('顶栏站名保持 18px（text-lg），大小写死不改字体档位',
+        welcome.includes('class="flex items-center gap-2 min-w-0 text-ink text-lg"'));
     check('登录 = 强调色实心整块按钮（ls-btn-primary + h-10），不是只染文字',
         /class="ls-btn ls-btn-primary h-10 px-4">登录<\/a>/.test(welcome));
     check('窄屏适配：标题 min-w-0 flex-1 + 右侧 shrink-0，间距手机 2 / 桌面 4',
@@ -141,12 +147,41 @@ console.log('\n[登录页] 品牌区 = LOGO 图案（透明底）+ 站名，整�
 {
     check('application-logo 组件带 LOGO 图案（static/lsky-logo.png，与侧栏同一个文件 + assetVersion 版本串）',
         appLogo.includes("asset('static/lsky-logo.png')") && appLogo.includes("assetVersion('static/lsky-logo.png')"));
-    check('图案与文字用一个 inline-flex + items-center + justify-center 的容器居中（gap 3）',
-        appLogo.includes('inline-flex items-center justify-center gap-3'));
+    check('图案与文字居中容器：gap 2（8px；2026-10-09 晚从 gap-3 收窄，老师要求「缩小与左边 logo 的间距」）',
+        appLogo.includes('inline-flex items-center justify-center gap-2'));
     check('站名仍在组件里（读取 AppName 配置）', appLogo.includes('ConfigKey::AppName'));
-    check('6 个 auth 页统一传「只给文字用的类」，不再塞固定宽高（w-20 h-20 会把整块撑歪）',
-        authPages.every(([, src]) => src.includes('<x-application-logo class="text-ink-2 text-4xl" />'))
+    check('6 个 auth 页统一传「只给文字用的类」（text-3xl=30px，2026-10-09 晚从 36px 降下来）',
+        authPages.every(([, src]) => src.includes('<x-application-logo class="text-ink-2 text-3xl" />'))
         && authPages.every(([, src]) => ! src.includes('w-20 h-20')));
+    // 2026-10-09：外层 leading-none 把行盒压成 1em（36px 字号 ⇒ 行盒 36px），而这套字体的行框要
+    //   ascent+descent ≈ 41px，truncate 的 overflow:hidden 就把英文 descender 的尾端切掉
+    //   （本机静态复现：改前墨迹底溢出盒底 ≈1px、'y' 尾被平切；改后余量 ≈2.5px、不再裁）。
+    //   修法只能是 inline style —— 产物 app.css 里没有 leading-tight / leading-snug / leading-normal。
+    check('品牌文字那层给了 inline line-height:1.4 + 上下 2px padding（修 "Lsky Pro" 的 y 被截断）',
+        /truncate[^>]*style="line-height:\s*1\.4;\s*padding:\s*2px 0/.test(appLogo));
+    // 注意：注释里会提到 leading-tight 之类的名字（解释为什么不用），所以只扫 class 属性
+    check('没有改用 Tailwind 的行高类（产物里没有那些类，加了也不生效）',
+        ! /class="[^"]*leading-(tight|snug|normal)/.test(appLogo));
+    // 行框高度随字体走：Windows(Segoe UI) ≈1.33em、Linux 无头 fallback ≈1.14em
+    // ⇒ 1.2 在 Windows 上仍差一点（老师 2026-10-09 真机反馈「还是有一点被遮住」）。
+    check('行高给到覆盖 Windows 字体行框的档位（≥1.4em，不再只是"Linux 上够用"）',
+        /line-height:\s*1\.[4-9]/.test(appLogo));
+}
+
+// ---------------------------------------------------------------- 9 后台「关于」（2026-10-09）
+console.log('\n[后台] 关于：品牌行（LOGO + 站名）+ 版本行 + Forked By');
+{
+    const aboutBlock = setting.slice(setting.indexOf('关于'), setting.indexOf('Forked By'));
+    check('第一行 = LOGO 图案 + 站名（读站点配置、不写死；与登录页同一张图）',
+        aboutBlock.includes("asset('static/lsky-logo.png')") && aboutBlock.includes('ConfigKey::AppName'));
+    check('关于页 LOGO = 26px（inline style，比原来 +10%；产物里没有 26px 对应的工具类）',
+        /style="width:26px;height:26px"/.test(aboutBlock));
+    check('关于页 LOGO 与站名的间隙收到 gap-1（4px），不再用 gap-2(8px)',
+        aboutBlock.includes('justify-center gap-1 pt-2') && ! aboutBlock.includes('justify-center gap-2 pt-2'));
+    check('第二行版本 + commit 原样保留在同一行',
+        /\{\{ \$version \}\}@if\(\$commit\) <span class="text-ink-2 font-mono">\{\{ \$commit \}\}<\/span>@endif/.test(setting));
+    check('第三行 By → Forked By，作者名仍读 $author（没写死）',
+        setting.includes('Forked By {{ $author }}') && ! setting.includes('>By {{ $author }}'));
 }
 
 // ---------------------------------------------------------------- 第八批（2026-10-05）
@@ -217,6 +252,14 @@ console.log('\n[顶栏/登录页] 两个胶囊居中 + 所有宽度竖向居中'
     check('登录页卡片：所有宽度都竖向居中（去掉 sm: 限制）+ 上下留白 py-6',
         authCard.includes('flex flex-col justify-center items-center py-6')
         && ! authCard.includes('sm:justify-center') && ! authCard.includes('pt-6 sm:pt-0'));
+    // 2026-10-09：绝对定位的 LOGO 向上溢出不进 scrollable overflow region ⇒ 窗口变矮时它被裁掉、
+    // 而且滚不到，要等卡片自己都放不下才出滚动条（中间 ~157px 死区）。修法是容器上下对称留空间：
+    // 卡片仍精确居中，但更早出滚动条、且滚到顶时 LOGO 完整可见。
+    check('登录卡片：上下对称给 LOGO 预留了空间（品牌块高 46px + 间距 24px = 4.375rem）',
+        /padding-top:\s*calc\(1\.5rem \+ 4\.375rem\)/.test(authCard)
+        && /padding-bottom:\s*calc\(1\.5rem \+ 4\.375rem\)/.test(authCard));
+    check('预留空间必须上下对称（只加一边会把卡片推偏，破坏几何居中）',
+        ! /\bpadding-top:\s*calc\(1\.5rem \+ 4\.9rem\);(?![\s\S]{0,200}?padding-bottom:)/.test(authCard));
 }
 
 console.log('\n[工具栏] 断点 lg→xl + 永不折行');

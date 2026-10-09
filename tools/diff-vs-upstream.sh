@@ -296,6 +296,11 @@ src/app/Http/Controllers/Admin/ImageController.php
 #     自检脚本：tools/check-tag-integrity.php）
 src/app/Services/UserService.php
 src/app/Http/Controllers/Admin/UserController.php
+
+# [11 文案（2026-10-09 UI 迭代）：注册页「姓名」标签改成「昵称」]
+#   src/lang/zh_CN.json（__('Name') 全站只有注册页 auth/register.blade.php 用这一处，改它不影响别处；
+#     个人资料页那行「姓名」是硬编码，改在 src/resources/views/user/dashboard.blade.php 里 —— 该文件本就在 [5] 段内）
+src/lang/zh_CN.json
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单
