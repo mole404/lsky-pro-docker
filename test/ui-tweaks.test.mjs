@@ -126,7 +126,11 @@ console.log('\n[游客首页] 外观切换归位 / 站名可见 / 登录整块�
         welcome.includes(':floating-theme-switch="false"') && welcome.includes('<x-theme-switch />'));
     check('顶栏那行仍在「公告 / 策略 / 登录注册」之前渲染外观切换（顺序：主题 → 公告 → 策略 → 账号）',
         welcome.indexOf('<x-theme-switch />') < welcome.indexOf("@includeWhen($_is_notice"));
-    check('站名不再白字白底（text-white 已去掉）', ! welcome.includes('text-white') && welcome.includes('text-ink text-xl truncate'));
+    check('站名不再白字白底（text-white 已去掉），且品牌区成了 flex 行（LOGO + 站名）',
+        ! welcome.includes('text-white') && welcome.includes('min-w-0 text-ink text-xl'));
+    check('顶栏品牌区带 LOGO 图案（static/lsky-logo.png + assetVersion 版本串，28px 与侧栏同档）',
+        welcome.includes("asset('static/lsky-logo.png')") && welcome.includes("assetVersion('static/lsky-logo.png')")
+        && /<img[^>]*class="w-7 h-7 shrink-0 select-none"/.test(welcome));
     check('登录 = 强调色实心整块按钮（ls-btn-primary + h-10），不是只染文字',
         /class="ls-btn ls-btn-primary h-10 px-4">登录<\/a>/.test(welcome));
     check('窄屏适配：标题 min-w-0 flex-1 + 右侧 shrink-0，间距手机 2 / 桌面 4',
@@ -147,6 +151,27 @@ console.log('\n[登录页] 品牌区 = LOGO 图案（透明底）+ 站名，整�
     check('6 个 auth 页统一传「只给文字用的类」，不再塞固定宽高（w-20 h-20 会把整块撑歪）',
         authPages.every(([, src]) => src.includes('<x-application-logo class="text-ink-2 text-4xl" />'))
         && authPages.every(([, src]) => ! src.includes('w-20 h-20')));
+    // 2026-10-09：外层 leading-none 把行盒压成 1em（36px 字号 ⇒ 行盒 36px），而这套字体的行框要
+    //   ascent+descent ≈ 41px、墨迹底落在盒顶下 42.5px，truncate 的 overflow:hidden 就把英文
+    //   descender 切掉了（线上实测："Lsky Pro" 的 y 下半截）。修法只能是 inline style ——
+    //   产物 app.css 里没有 leading-tight / leading-snug / leading-normal 这些类。
+    check('品牌文字那层给了 inline line-height:1.2（修 "Lsky Pro" 的 y 被截断）',
+        /truncate[^>]*style="line-height:\s*1\.2/.test(appLogo));
+    // 注意：注释里会提到 leading-tight 之类的名字（解释为什么不用），所以只扫 class 属性
+    check('没有改用 Tailwind 的行高类（产物里没有那些类，加了也不生效）',
+        ! /class="[^"]*leading-(tight|snug|normal)/.test(appLogo));
+}
+
+// ---------------------------------------------------------------- 9 后台「关于」（2026-10-09）
+console.log('\n[后台] 关于：品牌行（LOGO + 站名）+ 版本行 + Forked By');
+{
+    const aboutBlock = setting.slice(setting.indexOf('关于'), setting.indexOf('Forked By'));
+    check('第一行 = LOGO 图案 + 站名（读站点配置、不写死；与登录页同一张图）',
+        aboutBlock.includes("asset('static/lsky-logo.png')") && aboutBlock.includes('ConfigKey::AppName'));
+    check('第二行版本 + commit 原样保留在同一行',
+        /\{\{ \$version \}\}@if\(\$commit\) <span class="text-ink-2 font-mono">\{\{ \$commit \}\}<\/span>@endif/.test(setting));
+    check('第三行 By → Forked By，作者名仍读 $author（没写死）',
+        setting.includes('Forked By {{ $author }}') && ! setting.includes('>By {{ $author }}'));
 }
 
 // ---------------------------------------------------------------- 第八批（2026-10-05）
