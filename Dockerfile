@@ -222,8 +222,8 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
     printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
-        "context_js_md5=e885e4b78abd47ad042af5877ed95140" \
-        "images_blade_md5=f578d1b804ee3674febe5397614ece85" \
+        "context_js_md5=30f2feb6eaa5f6fa6de79b9f87bb70ef" \
+        "images_blade_md5=7a7c1785d82e0615a4c091c92394e130" \
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
