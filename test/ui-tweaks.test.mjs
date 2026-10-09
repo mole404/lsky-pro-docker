@@ -152,9 +152,9 @@ console.log('\n[登录页] 品牌区 = LOGO 图案（透明底）+ 站名，整�
         authPages.every(([, src]) => src.includes('<x-application-logo class="text-ink-2 text-4xl" />'))
         && authPages.every(([, src]) => ! src.includes('w-20 h-20')));
     // 2026-10-09：外层 leading-none 把行盒压成 1em（36px 字号 ⇒ 行盒 36px），而这套字体的行框要
-    //   ascent+descent ≈ 41px、墨迹底落在盒顶下 42.5px，truncate 的 overflow:hidden 就把英文
-    //   descender 切掉了（线上实测："Lsky Pro" 的 y 下半截）。修法只能是 inline style ——
-    //   产物 app.css 里没有 leading-tight / leading-snug / leading-normal 这些类。
+    //   ascent+descent ≈ 41px，truncate 的 overflow:hidden 就把英文 descender 的尾端切掉
+    //   （本机静态复现：改前墨迹底溢出盒底 ≈1px、'y' 尾被平切；改后余量 ≈2.5px、不再裁）。
+    //   修法只能是 inline style —— 产物 app.css 里没有 leading-tight / leading-snug / leading-normal。
     check('品牌文字那层给了 inline line-height:1.2（修 "Lsky Pro" 的 y 被截断）',
         /truncate[^>]*style="line-height:\s*1\.2/.test(appLogo));
     // 注意：注释里会提到 leading-tight 之类的名字（解释为什么不用），所以只扫 class 属性
