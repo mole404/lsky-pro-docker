@@ -252,6 +252,14 @@ console.log('\n[顶栏/登录页] 两个胶囊居中 + 所有宽度竖向居中'
     check('登录页卡片：所有宽度都竖向居中（去掉 sm: 限制）+ 上下留白 py-6',
         authCard.includes('flex flex-col justify-center items-center py-6')
         && ! authCard.includes('sm:justify-center') && ! authCard.includes('pt-6 sm:pt-0'));
+    // 2026-10-09：绝对定位的 LOGO 向上溢出不进 scrollable overflow region ⇒ 窗口变矮时它被裁掉、
+    // 而且滚不到，要等卡片自己都放不下才出滚动条（中间 ~157px 死区）。修法是容器上下对称留空间：
+    // 卡片仍精确居中，但更早出滚动条、且滚到顶时 LOGO 完整可见。
+    check('登录卡片：上下对称给 LOGO 预留了空间（LOGO 54.4px + 间距 24px = 4.9rem）',
+        /padding-top:\s*calc\(1\.5rem \+ 4\.9rem\)/.test(authCard)
+        && /padding-bottom:\s*calc\(1\.5rem \+ 4\.9rem\)/.test(authCard));
+    check('预留空间必须上下对称（只加一边会把卡片推偏，破坏几何居中）',
+        ! /\bpadding-top:\s*calc\(1\.5rem \+ 4\.9rem\);(?![\s\S]{0,200}?padding-bottom:)/.test(authCard));
 }
 
 console.log('\n[工具栏] 断点 lg→xl + 永不折行');
