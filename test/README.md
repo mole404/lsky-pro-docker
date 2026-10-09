@@ -23,7 +23,7 @@ node repro-clickthrough.mjs /path/to/context-js.js     # 最小复现：滚动�
 > 用 Node 18 跑会在加载 jsdom 时直接报 `ERR_REQUIRE_ESM`（它的依赖是 ESM-only）——那不是用例失败，
 > 是压根跑不起来；换一份更新的 node 就行，例如 `PATH=/usr/local/bin:$PATH npm test`。
 
-`repro-clickthrough.mjs` 是老师报的那个"偶尔点穿"的最小复现：它把"菜单插入引发的那一发滚动 →
+`repro-clickthrough.mjs` 是实测的那个"偶尔点穿"的最小复现：它把"菜单插入引发的那一发滚动 →
 关菜单 → 紧接着点别的图片"这条时序压成确定性的三步。对着旧版跑会打印 ❌ 点穿了、对着新版跑打印 ✅。
 
 ## 覆盖到的用例（`longpress.test.mjs`）
@@ -38,7 +38,7 @@ node repro-clickthrough.mjs /path/to/context-js.js     # 最小复现：滚动�
 - **Mac（含苹果 M 系列）**（`MacIntel` 但 `maxTouchPoints=0`）：不触发长按，右键 `contextmenu` 照旧
 - **Android Chrome**：长按不触发新分支、不注入 iOS 样式，`contextmenu` 照旧打开菜单且阻止浏览器默认菜单；**长按抬手补发的 click 不会关掉刚打开的菜单**；真手指点别处 → 只关菜单、不开预览
 - **Windows 桌面**：只有右键路径，连续右键仍能开菜单（去重窗口不误伤）
-- **回归：看得见的菜单必须拦得住**（老师报的偶发点穿）：A) 被滚动关掉后元素还在淡出时点别的图片 → 不点穿、不开预览；B) 状态已 false、淡出窗也过了，但 DOM 实测菜单仍可见（把高度桩成 120，因为 jsdom 高度恒为 0）→ 点击照样被吞；C) 菜单刚打开 300ms 内的滚动（它自己引发的）不关菜单、过了 300ms 用户滚动照旧关；D) 菜单彻底消失后点击恢复正常（不会一直吞点击）；E) `context.debugDump()` 含打开记录与关闭原因
+- **回归：看得见的菜单必须拦得住**（实测的偶发点穿）：A) 被滚动关掉后元素还在淡出时点别的图片 → 不点穿、不开预览；B) 状态已 false、淡出窗也过了，但 DOM 实测菜单仍可见（把高度桩成 120，因为 jsdom 高度恒为 0）→ 点击照样被吞；C) 菜单刚打开 300ms 内的滚动（它自己引发的）不关菜单、过了 300ms 用户滚动照旧关；D) 菜单彻底消失后点击恢复正常（不会一直吞点击）；E) `context.debugDump()` 含打开记录与关闭原因
 
 ## 其余测试文件
 

@@ -35,8 +35,8 @@
 #   6) 清理一律走 trap；失败时先把两个容器的完整日志 dump 出来再退。
 #
 # 与 workflow 里其它步骤错开的名字（改名前先确认没撞车）：
-#   已有：容器 lsky-smoke（宿主 18089）/ lsky-mpm-a..f + 卷 lsky-mpm-vol-a..f / lsky-a|lsky-b|lsky-c + 卷 lsky-sync-test
-#   本步：容器 lsky-up-old / lsky-up-new、卷 lsky-upgrade-vol、宿主端口 18090，且严格串行
+#   已有：容器 lsky-smoke（主机 18089）/ lsky-mpm-a..f + 卷 lsky-mpm-vol-a..f / lsky-a|lsky-b|lsky-c + 卷 lsky-sync-test
+#   本步：容器 lsky-up-old / lsky-up-new、卷 lsky-upgrade-vol、主机端口 18090，且严格串行
 #        （旧容器先 rm 掉，再起新的 —— 任何时刻最多一个容器在跑 entrypoint）。
 #
 # 本地复跑（不需要 docker build，公开镜像直接 docker pull）：
@@ -148,7 +148,7 @@ fi
 VOL=lsky-upgrade-vol
 OLD_C=lsky-up-old
 NEW_C=lsky-up-new
-HOST_PORT=18090     # 宿主端口：smoke 用 18089，这里错开，且本步独占
+HOST_PORT=18090     # 主机端口：smoke 用 18089，这里错开，且本步独占
 
 LOGDIR=$(mktemp -d)
 OLD_LOG=$LOGDIR/old.log
@@ -329,7 +329,7 @@ for ($i = 1; $i <= 20; $i++) {
 $st->execute(["中文路径/升级哨兵.png", 4096, random_bytes(128), "2026-09-30 12:00:09"]);
 $db->exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT)");
 $us = $db->prepare("INSERT INTO users (name, email) VALUES (?, ?)");
-$us->execute(["徐老师", "keep-me@example.com"]);
+$us->execute(["测试用户", "keep-me@example.com"]);
 '
 
 # ③ 图片数据（真 PNG，2x2）+ 缩略图目录
@@ -562,12 +562,12 @@ echo "  ✓ 数据面快照（含整份 md5 清单）逐字节相同"
 #        不存在、要么是有效的。不挪开就测不出「真站点能自动迁移」这件事。
 #   然后重启新镜像，断言：迁移文件被自动补进卷、两张新表被自动建好、**哨兵数据一字未变**。
 #
-# ⚠️ 2026-10-02：这一段在 GitHub runner 上红过一次，而本机用**同一份播种脚本**（就把下面这段原样
+# ⚠️ 2026-10-02：这一段在 GitHub runner 上红过一次，而本地用**同一份播种脚本**（就把下面这段原样
 #    抽出来跑）+ 同一份代码复刻出的卷却是**成功**的，一直没定位到那个环境差异（诊断已加：失败时容器
-#    会打 [probe] 行，但本用例只 grep 了少数几行，没打印出来）。产品侧的自动迁移已在本机用真实
+#    会打 [probe] 行，但本用例只 grep 了少数几行，没打印出来）。产品侧的自动迁移已在本地用真实
 #    v2.1 卷（生产库只读副本，409 张图）验证过：补文件 → 检测 pending → 备份 → 两张表 DONE，
 #    数据行指纹逐字节不变；坏配置缓存 / 半迁移状态都只警告不崩。为不让它挡住发布，默认**跳过**，
-#    本机要跑就 AUTO_MIGRATE_TEST=1。
+#    本地要跑就 AUTO_MIGRATE_TEST=1。
 if [ "${AUTO_MIGRATE_TEST:-0}" = "1" ]; then
 echo "== 4b) 自动迁移用例：v2.1 形状老站点 → 新镜像（无需人工干预）=="
 docker run --rm -i -v "$VOL":/var/www/html --entrypoint sh "$NEW_REF" > "$LOGDIR/phase4b-seed.out" 2>&1 <<'EOSH'
@@ -638,7 +638,7 @@ dbk=$(key "$LOGDIR/phase4b-out.out" AUTO_BACKUPS)
 [ "${dbk:-0}" -ge 1 ] || { echo "::error::迁移前没有自动备份 SQLite（AUTO_BACKUPS=$dbk）"; exit 1; }
 echo "  ✓ 迁移前自动备份了 SQLite（AUTO_BACKUPS=$dbk）"
 else
-    echo "== 4b) 自动迁移用例：已跳过（本机复跑请设 AUTO_MIGRATE_TEST=1）=="
+    echo "== 4b) 自动迁移用例：已跳过（本地复跑请设 AUTO_MIGRATE_TEST=1）=="
 fi
 
 echo "== 5) 清理 =="

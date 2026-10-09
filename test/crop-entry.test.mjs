@@ -1,7 +1,7 @@
 /*
  * 「编辑图片（裁剪）」入口与规则的静态契约测试（不需要浏览器）
  *
- * 背景：老师要的是「看图器里能裁图」，且入口不止一处 —— 看图器工具栏、选中单张时的操作条、
+ * 背景：目标是「看图器里能裁图」，且入口不止一处 —— 看图器工具栏、选中单张时的操作条、
  * 右键/长按菜单都要有「编辑图片」；只有 jpg/jpeg/png 给入口；导出格式跟随原图
  * （png → PNG 无损、jpg/jpeg → JPEG q0.95）；不设长边上限；结果作为**新图**上传、不改原图。
  * 这个文件把上面这些决定钉住，避免以后被人「顺手」改回去（真机行为仍需人工验收）。
@@ -52,7 +52,7 @@ console.log('\n[1] Cropper.js v1.6.3 已 vendored 且被 blade 正确引入');
 console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
 {
     // ① 看图器工具栏（自定义 toolbar 必须把要用的内置按钮照抄，否则它们会消失）
-    // 注意：+ / − （zoom-in / zoom-out）已按老师要求去掉，原位换成自定义的「全屏」键。
+    // 注意：+ / − （zoom-in / zoom-out）已按要求去掉，原位换成自定义的「全屏」键。
     const builtins = ['one-to-one', 'reset', 'prev', 'play', 'next', 'rotate-left', 'rotate-right', 'flip-horizontal', 'flip-vertical'];
     const toolbarStart = code.indexOf('toolbar: {');
     // 注意：不能拿第一个 '},' 当结尾 —— crop 那行自己的结尾就是 `},`（它现在排在最前）。
@@ -135,7 +135,7 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
 }
 
 // ---------------------------------------------------------------- 3. 规则
-console.log('\n[3] 老师拍板的规则被钉住');
+console.log('\n[3] 拍板的规则被钉住');
 {
     check('只允许 jpg/jpeg/png', /const SUPPORTED = \['jpg', 'jpeg', 'png'\]/.test(code));
     check('png → image/png（无损）', /isPng \? 'image\/png' : 'image\/jpeg'/.test(code));
@@ -247,7 +247,7 @@ console.log('\n[6] 看图器：全屏观感 / 打开不漏重排 / 缩略图条�
         && /document\.addEventListener\(ev, flashFullscreenUI, \{capture: true, passive: true\}\)/.test(code)
         && /const scheduleFsHide = \(\) => \{[\s\S]{0,300}setTimeout\(\(\) => document\.documentElement\.classList\.remove\('ls-fs-ui'\), FS_UI_MS\)/.test(code)
         && /const FS_UI_MS = \d+;/.test(code));
-    check('④ 不再给图片墙加左侧内边距（上一版加过 18px，老师否掉了，已回退）',
+    check('④ 不再给图片墙加左侧内边距（上一版加过 18px，否掉了，已回退）',
         !/#images-scroll \{ padding-left: 18px; \}/.test(blade));
     check('② 全屏状态挂/去 html.ls-viewer-fs（与按钮图标在同一处同步）',
         /syncFullscreenIcon[\s\S]{0,600}classList\.toggle\('ls-viewer-fs', on\)/.test(code));
@@ -278,11 +278,11 @@ console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失
         && /dsBox\.selfSelect = ! inArea/.test(code)
         && /dsBox\.selfSelect[\s\S]{0,800}ds\.clearSelection\(\)[\s\S]{0,200}ds\.addSelection\(el\)/.test(code)
         && /bindOperates\(\)/.test(code.slice(code.indexOf('dsBox.selfSelect &&'), code.indexOf('dsBox.selfSelect &&') + 900)));
-    // 2026-10-08：老师定「框选只在电脑端生效」（手机上拖框会和滚页面手势打架）。
+    // 2026-10-08：定「框选只在电脑端生效」（手机上拖框会和滚页面手势打架）。
     // 契约：mousemove 里必须先判 utils.isMobile() 再更新框 —— 只让框不再长大，不动 mousedown 那一发
     //（库的点选正是靠按下时的点状框），否则手机端连点选都没了。
     // 2026-10-08 追加：只按 utils.isMobile()（= 移动 UA **且 screen.width < 768**）判断会漏 ——
-    // iPad 这类宽屏 iOS 设备上它直接返回 false（老师实测「手机端滑动页面仍会触发框选」）。
+    // iPad 这类宽屏 iOS 设备上它直接返回 false（实测「手机端滑动页面仍会触发框选」）。
     // 所以必须同时有第二道与设备无关的闸：本页最近发生过触摸（touchJustNow）。
     check('⑨ 手机端不拖框：mousemove 里同时有 utils.isMobile() 与「最近发生过触摸」两道守卫',
         /addEventListener\('mousemove',[\s\S]{0,900}utils\.isMobile\(\) \|\| touchJustNow\(\)[\s\S]{0,120}return;[\s\S]{0,200}dsBox\.x1 = e\.clientX/.test(code));
@@ -292,7 +292,7 @@ console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失
         && /touchend', \(\) => \{ lastTouchAt = Date\.now\(\); \}, \{capture: true, passive: true\}/.test(code)
         && /const touchJustNow = \(\) => \(Date\.now\(\) - lastTouchAt\) < TOUCH_GRACE_MS/.test(code));
     // 2026-10-08 追加（真机根因）：光挡住「我们自己扩框」不够 —— 真机上库会被 touchstart 启动、自己画蓝框
-    //（老师截图：蓝框出现但图选不上）。所以必须从库的判据下手。read ds.min.js: start(e) 里
+    //（实测：蓝框出现但图选不上）。所以必须从库的判据下手。read ds.min.js: start(e) 里
     // `_canInteract(e) && (isInteracting = !0, ..., publish("Interaction:start"))` —— 状态在 publish 之前
     // 就置上，回调里 break 来不及；且这条路径发 "Interaction:start"，订阅名 predragstart 收不到。
     check('⑩ 手机端不让库启动触摸交互：包装 _canInteract，touch 来源一律返回 false 且保留原函数',

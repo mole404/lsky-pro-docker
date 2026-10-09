@@ -50,7 +50,7 @@ const IMAGE = {
     id: 7, filename: 'beach.jpg', origin_name: 'IMG_0001.HEIC', url: 'https://i.example.com/beach.jpg',
     thumb_url: 'https://i.example.com/beach-thumb.jpg', width: 4000, height: 3000, size: 2048,
     mimetype: 'image/jpeg', md5: 'abcdef', sha1: '123456', permission: 0, uploaded_ip: '1.2.3.4',
-    created_at: '2026-09-01 10:00:00', album: { name: '旧相册' }, strategy: { name: '本机' }, links: {},
+    created_at: '2026-09-01 10:00:00', album: { name: '旧相册' }, strategy: { name: '本地' }, links: {},
 };
 
 // boot 的选项：

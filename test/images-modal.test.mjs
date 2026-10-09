@@ -2,7 +2,7 @@
  * 图片页「详细信息 / 移动到相册」改成居中卡片弹窗、以及「相册列表」从右侧抽屉搬进弹窗后的
  * 回归测试（纯静态断言，不需要浏览器）
  *
- * 背景：这两项原来是画进右侧抽屉 #drawer 的；老师要求换成复用 x-modal 的居中卡片弹窗。
+ * 背景：这两项原来是画进右侧抽屉 #drawer 的；要求换成复用 x-modal 的居中卡片弹窗。
  * 后续又一次改造：连「相册列表」也从抽屉搬进了 #album-switch-modal，抽屉整块删除。
  * 这个文件把这两次改动的契约钉住：
  *   1. 三个新弹窗的钩子都在，且没有任何一项再走抽屉（抽屉的 markup / JS / 无限加载容器一个不剩）
@@ -163,7 +163,7 @@ console.log('\n[相册弹窗] 标题/搜索/行内分区（44px 切换区 + 常�
         && (itemTpl.match(/data-id="__id__"/g) || []).length === 2
         && (itemTpl.match(/data-json='__json__'/g) || []).length === 2);
     // 「按钮常显」断言在**按钮自己**的类上，不扫整块模板：
-    // 行容器上的 overflow-hidden 是必需的（把按钮的方形 hover 底色裁进行圆角，修老师反馈的
+    // 行容器上的 overflow-hidden 是必需的（把按钮的方形 hover 底色裁进行圆角，修实测的
     // 「选中当前相册后、悬浮删除按钮时蓝框缺角」），扫整块模板会把它误判成「按钮被藏起来」。
     const actionButtonClasses = actionsPart.match(/class="(?:update|delete)[^"]*"/g) || [];
     check('两个操作按钮 44×44（h-11 w-11）+ 无障碍标签，且常显（按钮自己的类里没有 hidden / group-hover）',

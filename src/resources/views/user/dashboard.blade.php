@@ -212,7 +212,7 @@
                     if (! (infoH > 0) || ! (lRect.top > 0) || ! (sRect.top > 0)) { return; }
                     // 列表「上方」占掉的高度（卡片头 + 「共 N 个可用」）+ 卡片底部内边距。
                     // ⚠ 不能用 (卡片底边 − 列表底边) 那一项：卡片是 grid item，会被拉伸到与右侧同高，
-                    //    这一项里含「被拉伸出来的空白」——列表一被限高它就跟着变大 → 自反馈把 maxHeight 压成 0（本地量到过 0px）。
+                    //    这一项里含「被拉伸出来的空白」——列表一被限高它就跟着变大 → 自我放大把 maxHeight 压成 0（本地量到过 0px）。
                     var padB = parseFloat(getComputedStyle(list.parentElement).paddingBottom) || 0;
                     var chrome = (lRect.top - sRect.top) / z + padB;
                     if (! (chrome > 0)) { return; }

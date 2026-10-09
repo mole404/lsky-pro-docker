@@ -285,12 +285,12 @@ fi
 # zz-lsky-hardening.ini（文件名 zz- 前缀 → conf.d 里排最后 → 覆盖前面所有同名项），
 # 并支持用环境变量 PHP_MEMORY_LIMIT 在**运行期**渲染进去：在 compose 里改一个 env 就能回
 # 128M/256M，**不用重建镜像**（与上面 MPM / 端口两段完全同一套路：临时文件 + mv、失败只警告）。
-# 默认 64M 的理由：本机（1 vCPU / 965MB）内存是瓶颈；Lsky 单请求实际远用不到 64M，
+# 默认 64M 的理由：面向低内存环境（1 vCPU / 965MB），内存是瓶颈；Lsky 单请求实际远用不到 64M，
 # 需要做大图处理/批量时用 PHP_MEMORY_LIMIT 临时抬高即可。
 # 脏值处理原则同上：只忽略这一项并警告，绝不让容器启动失败。
 # ⚠ 注意：post_max_size 与 upload_max_filesize 都已调到 **512M**（见 docker-php-upload.ini）
 #   —— 前者是「整个请求体」上限（控制台里显示的那条），后者才是「单个上传文件」的上限。
-#   但宿主 nginx 的 client_max_body_size 仍是 100m ⇒ 真要传 >100MB 的图，nginx 侧也得放宽（属另一个服务，未经老师允许不要动）。
+#   但主机 nginx 的 client_max_body_size 仍是 100m ⇒ 真要传 >100MB 的图，nginx 侧也得放宽（属另一个服务，未经允许不要动）。
 #   处理大图若撞到 64M 内存上限，用 PHP_MEMORY_LIMIT 抬高（或调低上面那两个上传上限）。
 PHP_DEF_MEMORY_LIMIT=64M
 PHP_HARDENING_INI=/usr/local/etc/php/conf.d/zz-lsky-hardening.ini
@@ -555,7 +555,7 @@ elif [ ! -f "$VOLUME_MARKER" ] || [ "$(cat "$IMAGE_MARKER" 2>/dev/null)" != "$(c
     #
     # --exclude=./.code-revision 是必须的：版本标记既是「卷里的代码已同步到这一版」的标志，
     # 就绝不能跟着 tar 流一起写进卷。tar 是流式的 —— 标记一被写进卷，归档还没解完（磁盘满 /
-    # OOM / 宿主重启）卷里就已经是「新标记 + 半套代码」；下次启动会判定同版本而永远跳过同步，
+    # OOM / 主机重启）卷里就已经是「新标记 + 半套代码」；下次启动会判定同版本而永远跳过同步，
     # 缺文件导致的 500 再也不会自愈。所以标记只在下面归档解完包之后由 cp 显式写一次。
     ( cd /var/www/lsky && tar cf - \
         --exclude=./.env \

@@ -45,7 +45,7 @@ ARG PHP_EXT_INSTALLER_VERSION=2.12.0
 # F15：基镜像钉 digest —— 上游重推 tag（同 tag 指向新内容）时，构建出来的仍是同一份东西。
 # 两个阶段用的**不是**同一个基镜像（builder = cli，runtime = apache），各自钉自己的。
 # 更新方法（改 PHP_VERSION / DEBIAN_RELEASE 时必须一并更新，否则构建会因 manifest 不匹配而失败）：
-#   1) 取 token（本机没有 docker，别用 docker manifest）：
+#   1) 取 token（构建机没有 docker，别用 docker manifest）：
 #      curl -s 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/php:pull'
 #      -> 取返回 JSON 里的 .token
 #   2) 读 digest（tag 换成要查的那个）：
@@ -123,7 +123,7 @@ RUN printf '%s\n' \
 # 改了不更新这行 md5 就构建失败。
 # 这几个文件以后只要被改动（哪怕手滑），构建就会红 —— md5 必须随改动同步更新。
 RUN printf '%s\n' \
-        '1087b3697db7d075b83199fe764d89a6  ./config/convention.php' \
+        'dcc6b370414cf329b7902cdd85f33d2f  ./config/convention.php' \
         '881fdbaed19ef39027783f093448875d  ./routes/web.php' \
         'c1ab546f3e7f5237c1d45435171858ce  ./routes/auth.php' \
         '06c38d587ac188750af34aaf224a239d  ./app/Services/ImageService.php' \
@@ -167,9 +167,9 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 # 改 src/ 里这三个文件后必须同步更新这里的 md5（故意做成"改了不更新就构建失败"），
 # 并重新生成 patches/ios-longpress.patch（tools/diff-vs-upstream.sh）。
 RUN printf '%s\n' \
-        'e885e4b78abd47ad042af5877ed95140  ./public/js/context-js/context-js.js' \
-        'e885e4b78abd47ad042af5877ed95140  ./resources/js/context-js.js' \
-        'f578d1b804ee3674febe5397614ece85  ./resources/views/user/images.blade.php' \
+        '30f2feb6eaa5f6fa6de79b9f87bb70ef  ./public/js/context-js/context-js.js' \
+        '30f2feb6eaa5f6fa6de79b9f87bb70ef  ./resources/js/context-js.js' \
+        '7a7c1785d82e0615a4c091c92394e130  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -222,8 +222,8 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
     printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
-        "context_js_md5=e885e4b78abd47ad042af5877ed95140" \
-        "images_blade_md5=f578d1b804ee3674febe5397614ece85" \
+        "context_js_md5=30f2feb6eaa5f6fa6de79b9f87bb70ef" \
+        "images_blade_md5=7a7c1785d82e0615a4c091c92394e130" \
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
@@ -277,7 +277,7 @@ RUN sed -i \
 
 # ---------------------------------------------------------------------------
 # F23：Apache 版本号外泄 —— 关掉 Server 头里的精确版本与页脚签名。
-#   实测（2026-09-30，本机 docker run 已发布镜像）：响应头 `Server: Apache/2.4.68 (Debian)`。
+#   实测（2026-09-30，docker run 已发布镜像）：响应头 `Server: Apache/2.4.68 (Debian)`。
 #   （同一次探测还看到 `X-Powered-By: PHP/8.3.35` —— 那条由下面的 PHP ini 加固负责。）
 #   ServerTokens Prod  → Server 头只发 "Apache"（不带版本 / 模块 / OS）；
 #   ServerSignature Off → 错误页与目录列表不再追加 "Apache/2.4.68 (Debian) Server at …" 页脚
@@ -308,22 +308,22 @@ RUN printf '%s\n' \
 # 不能依赖"从基镜像继承"。CI 里也加了 ftp 的硬断言。
 #
 # opcache（测试版收紧，先量后改）：原值 memory_consumption=128 / max_accelerated_files=10000。
-#   实测（2026-10-01，本机真容器 Apache 进程内 opcache_get_status）：
+#   实测（2026-10-01，真容器内 Apache 进程 opcache_get_status）：
 #     · 真实负载（安装页 + 登录/注册/首页等通跑一轮）预热集合 = 827 个脚本 / 已用 25.0MB；
 #     · 全树编译（把 /var/www/lsky 下 10842 个 .php 全部塞进缓存）上限 = 9949 个脚本 / 255.9MB
 #       （在 256MB 上限处被截断 —— 这是"理论上限"，没有任何单次请求会走到）。
 #   真实使用约 25MB，故 memory_consumption 收到 64（≈实测 2.6 倍，且不低于 64）：
-#   够用又有余量，比原来的 128 省 64MB 共享内存（本机 965MB，内存是瓶颈）。
+#   够用又有余量，比原来的 128 省 64MB 共享内存（面向低内存环境，内存是瓶颈）。
 #   max_accelerated_files 保持 10000 —— 已远超实测预热集合（827）的 12 倍；哈希表本身只占 KB 级，
 #   调低没有收益、调高没有意义（64MB 的脚本缓存也装不下全树）。这组值下 opcache 不会因容量不足频繁重启。
 #   validate_timestamps 保持 1（显式写死，防基镜像默认变化）：单机热更新靠它 —— 卷里代码一改，
 #   带 mtime 校验的请求就会重新编译；关掉它换镜像后要重启容器才生效。
-# 上传/表单上限（2026-10-05 按老师要求调整）—— ⚠ 这段注释必须写在 RUN 之前：
+# 上传/表单上限（2026-10-05 调整）—— ⚠ 这段注释必须写在 RUN 之前：
 #   `RUN ... && \` 续行链里插 `#` 不是注释、是命令的一部分 → `syntax error: unexpected end of file`（本仓踩过，见教训 34）
 #   · post_max_size 100M → **512M**（它是「整个请求体」的上限，控制台/系统设置里
 #     「POST 数据最大限制」显示的就是它）
-#   · upload_max_filesize 100M → **512M**（2026-10-05 老师追加：单个上传文件的上限也抬到 512M；它必须 ≤ post_max_size）
-#   · max_execution_time 维持原来的 **600S 不动**（老师 2026-10-05 拍板：不要改成 300；CLI 下 ini_get 恒为 0，只有 Web 侧吃这个值）
+#   · upload_max_filesize 100M → **512M**（2026-10-05 追加：单个上传文件的上限也抬到 512M；它必须 ≤ post_max_size）
+#   · max_execution_time 维持原来的 **600S 不动**（2026-10-05 定：不要改成 300；CLI 下 ini_get 恒为 0，只有 Web 侧吃这个值）
 RUN apt-get update && \
     apt-get install -y gettext && \
     apt-get clean && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/*  && \
@@ -356,7 +356,7 @@ RUN apt-get update && \
 
 # ---------------------------------------------------------------------------
 # F23：PHP ini 加固 —— 关掉「版本号外泄」与「错误直出」。
-#   实测（2026-09-30，本机 docker run 已发布镜像）：响应头带 `X-Powered-By: PHP/8.3.35`。
+#   实测（2026-09-30，docker run 已发布镜像）：响应头带 `X-Powered-By: PHP/8.3.35`。
 #   官方 php 镜像**不带 php.ini**（只有 php.ini-production/-development 两个样本），于是
 #   PHP 编译期的默认值直接生效：expose_php=1、display_errors=1。
 #     expose_php=0     → 不再发 X-Powered-By（少给扫描器一条精确版本情报）；
@@ -447,7 +447,7 @@ EXPOSE ${WEB_PORT}
 EXPOSE ${HTTPS_PORT}
 
 # F10：健康检查。原来没有 —— 「Apache 进程还在」不代表站点还活着（卷同步失败的容器进程照样在）。
-# 探本机 http://127.0.0.1:${WEB_PORT}/：shell 形式下 ${WEB_PORT} 是**运行期**由 ENV 展开的，
+# 探本地 http://127.0.0.1:${WEB_PORT}/：shell 形式下 ${WEB_PORT} 是**运行期**由 ENV 展开的，
 # 所以 compose/`-e WEB_PORT=xxxx` 换了端口也照样探对端口（不用改这里）。
 # curl -f：HTTP 状态 ≥400 或连不上都算失败（非 0 退出 = unhealthy）；302/200 都算健康
 # —— 未安装状态下 / 会 302 去安装页，登录后首页也可能 302，这两种都不该被判定为病态。

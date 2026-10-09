@@ -181,7 +181,7 @@ console.log('\n[A. 静态] 标签落点：详情行 / 卡片角标 / 批量打�
 
 console.log('\n[A. 静态] 标签窗口：标签本身的新建 / 重命名 / 删除（与打标同一个窗口）');
 {
-    check('右上角标签下拉里已经不再有「标签管理」入口（老师要求去掉）',
+    check('右上角标签下拉里已经不再有「标签管理」入口（要求去掉）',
         ! blade.includes('id="tag-manage-open"'));
     check('只剩一个窗口：旧的 tag-manage-modal / content / 三个模板都删干净了',
         ! blade.includes('tag-manage-modal') && ! blade.includes('tag-manage-content')
@@ -286,7 +286,7 @@ console.log('\n[A. 静态] 「显示图片标签」开关 + 框选修复');
         && /wrap\.style\.left = \(ar\.left \/ z\)/.test(blade));
     check('禁掉图片原生拖拽（-webkit-user-drag + dragstart 兜底）—— 否则拖动会「锁定不释放」',
         blade.includes('-webkit-user-drag: none') && /\$photos\.on\('dragstart'/.test(blade));
-    check('（已按老师要求回滚）点图片本身照旧参与勾选：不做任何「单击回滚」，小圆勾 click 全平台生效',
+    check('（已按要求回滚）点图片本身照旧参与勾选：不做任何「单击回滚」，小圆勾 click 全平台生效',
         ! blade.includes('pressCircle') && ! blade.includes('pressMoved')
         && /\$photos\.on\('click', '\.image-selector', function \(\) \{\s*ds\.toggleSelection/.test(blade));
     check('标签管理窗口版式：新建行在列表之前、条目行 overflow-hidden、副标题只留已选数量',
@@ -328,7 +328,7 @@ const IMAGE = {
     id: 7, filename: 'beach.jpg', origin_name: 'IMG_0001.HEIC', url: 'https://i.example.com/beach.jpg',
     thumb_url: 'https://i.example.com/beach-thumb.jpg', width: 4000, height: 3000, size: 2048,
     mimetype: 'image/jpeg', md5: 'abcdef', sha1: '123456', uploaded_ip: '1.2.3.4',
-    created_at: '2026-09-01 10:00:00', album: { name: '旧相册' }, strategy: { name: '本机' }, links: {},
+    created_at: '2026-09-01 10:00:00', album: { name: '旧相册' }, strategy: { name: '本地' }, links: {},
     tags: [{ id: 11, name: '风景' }],
 };
 
@@ -672,7 +672,7 @@ console.log('\n[B. 行为] 标签管理：不带选中图片打开（只改标�
     const { $, calls, t } = boot({ swalConfirmed: true });
     await sleep(20);
 
-    // 没选中图片时打开窗口的入口只剩右键菜单（工具栏按钮此时会 return false；下拉入口按老师要求已删）
+    // 没选中图片时打开窗口的入口只剩右键菜单（工具栏按钮此时会 return false；下拉入口按要求已删）
     t.ds._sel = [];
     const itemMenu = calls.attaches.find((a) => a.selector === '.images-item');
     itemMenu.options.data.find((d) => d && d.text === '标签管理').action(null);

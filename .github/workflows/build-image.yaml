@@ -11,7 +11,7 @@ on:
   push:
     branches:
       - master
-      # 测试版分支（老师用来先把改动放上分支验证，master 保持 = 线上稳定版）：
+      # 测试版分支（用来先把改动放上分支验证，master 保持 = 线上稳定版）：
       # 分支构建**只产出不可变的 sha-<commit> 镜像**，绝不动 :latest ——
       # 由下面的「Promote verified image to latest」步骤用 `if: … github.ref == 'refs/heads/master'`
       # 把关（否则分支一推就把线上在用的 latest 顶成测试版）。
@@ -236,7 +236,7 @@ jobs:
             echo "is_test_build=false" >> "$GITHUB_OUTPUT"
           fi
 
-          # ---- 构建平台（老师 2026-10-07 定）--------------------------------------
+          # ---- 构建平台（2026-10-07 定）--------------------------------------
           #   master（正式版）  = linux/amd64,linux/arm64 —— 正式版必须两种架构都能用；
           #   其它分支/试构建   = linux/amd64（测试版不烧 arm64 的时间）。
           #   QEMU 已在 build job 里 setup（docker/setup-qemu-action），所以 arm64 走模拟构建。
@@ -325,7 +325,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # 只推不可变 tag；latest 由最后的 Promote 步骤在自证通过后才指过来。
-      # 平台策略（2026-10-07 老师定）：正式版（master）必须同时支持 amd64 + arm64；
+      # 平台策略（2026-10-07 定）：正式版（master）必须同时支持 amd64 + arm64；
       #   测试版分支只出 amd64（arm64 走 QEMU 模拟，白烧一半时间）。
       # 具体值由 Resolve 步骤算成 steps.pin.outputs.platforms（见那里注释），这里不写死。
       - name: Build and push (multi-platform per ref)
@@ -443,7 +443,7 @@ jobs:
           fi
           echo "blade md5 校验通过：$BLADE_ACTUAL"
 
-          # 长按阈值必须是 250ms（老师要求 500 -> 250）
+          # 长按阈值必须是 250ms（要求 500 -> 250）
           if ! echo "$REPORT" | grep -q 'LONG_PRESS_DELAY = 250'; then
             echo "::error::补丁里的长按阈值不是 250ms"
             exit 1
@@ -571,7 +571,7 @@ jobs:
             echo "::error::PHP memory_limit 不是 64M（读到：$(cat /tmp/php-memlimit.txt 2>/dev/null)）—— 检查 zz-lsky-hardening.ini 与 entrypoint 的 PHP_MEMORY_LIMIT 渲染"
             exit 1
           fi
-          # ② post_max_size 与 upload_max_filesize 必须都是 512M（2026-10-05 老师指定）
+          # ② post_max_size 与 upload_max_filesize 必须都是 512M（2026-10-05 指定）
           docker exec lsky-smoke sh -c 'php -r "echo ini_get(\"post_max_size\");"' > /tmp/php-postmax.txt 2>&1 || true
           echo "容器里 post_max_size 生效值：$(cat /tmp/php-postmax.txt 2>/dev/null)"
           if [ "$(cat /tmp/php-postmax.txt 2>/dev/null)" != "512M" ]; then
@@ -1009,7 +1009,7 @@ jobs:
       #   脚本单独放在 tools/upgrade-test.sh —— 本地可以原样复跑（见脚本头部的用法注释），
       #   所以不存在「workflow 里抄一份、本地跑的是另一份」的漂移。
       #   名字/端口与其它步骤全错开：容器 lsky-up-old / lsky-up-new、卷 lsky-upgrade-vol、
-      #   宿主端口 18090（smoke 用 18089），且严格串行（旧容器先 rm 再起新的）。
+      #   主机端口 18090（smoke 用 18089），且严格串行（旧容器先 rm 再起新的）。
       # ------------------------------------------------------------------
       - name: Verify real upgrade from previous image (data byte-identical)
         env:
@@ -1027,7 +1027,7 @@ jobs:
         # 试构建（手动指定 php_version 且与 Dockerfile 默认不同）只保留不可变 tag，不动 latest：
         # 免得"还没定案的版本"变成线上 `docker compose pull` 的目标。
         # 只有 master 上的构建才许动 latest：分支构建（现在 push: test/* 也会触发）绝不能把线上
-        # 拉取目标改掉 —— 否则推一次测试版分支就把老师线上在用的 :latest 偷偷顶成测试版。
+        # 拉取目标改掉 —— 否则推一次测试版分支就把线上在用的 :latest 偷偷顶成测试版。
         # 分支构建只产出不可变的 :sha-<commit>（由构建步骤推送），要测就显式按 sha tag 拉。
         if: steps.pin.outputs.is_test_build != 'true' && github.ref == 'refs/heads/master'
         run: |
@@ -1036,7 +1036,7 @@ jobs:
           PIN="${{ steps.pin.outputs.pin }}"
 
           # ================= 版本号 tag（X.Y.Z）=================
-          # 目的（老师 2026-10-03 定）：
+          # 目的（2026-10-03 定）：
           #   · `latest` 永远 = master 最新正式版；
           #   · 同时每个正式版都留一个**不可变**的版本号 tag，日后能靠它拉回旧正式版；
           #   · **无论如何都不能靠版本号拉到 test 分支的镜像** —— 这不是靠约定，而是结构保证：

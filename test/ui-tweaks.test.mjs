@@ -1,5 +1,5 @@
 /**
- * 2026-10-05 那批 UI / 文案修正的结构回归网（老师报的 8 件事）。
+ * 2026-10-05 那批 UI / 文案修正的结构回归网（实测的 8 件事）。
  *
  * 覆盖：
  *   1~3  单位大小写（用户初始容量 / 总容量 / 最大文件大小）
@@ -9,7 +9,7 @@
  *   7    游客首页：外观切换排进顶栏、站名不再白字白底、登录按钮整块强调色、窄屏适配
  *   8    登录/注册等页：品牌区 = LOGO 图案 + 站名，整体居中
  *
- * 这些都是「读文件断言」，不跑浏览器 —— 视觉/几何的最终判据仍以真机截图为准。
+ * 这些都是「读文件断言」，不跑浏览器 —— 视觉/几何的最终判据仍以真机实测为准。
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -147,7 +147,7 @@ console.log('\n[登录页] 品牌区 = LOGO 图案（透明底）+ 站名，整�
 {
     check('application-logo 组件带 LOGO 图案（static/lsky-logo.png，与侧栏同一个文件 + assetVersion 版本串）',
         appLogo.includes("asset('static/lsky-logo.png')") && appLogo.includes("assetVersion('static/lsky-logo.png')"));
-    check('图案与文字居中容器：gap 2（8px；2026-10-09 晚从 gap-3 收窄，老师要求「缩小与左边 logo 的间距」）',
+    check('图案与文字居中容器：gap 2（8px；2026-10-09 晚从 gap-3 收窄，要求「缩小与左边 logo 的间距」）',
         appLogo.includes('inline-flex items-center justify-center gap-2'));
     check('站名仍在组件里（读取 AppName 配置）', appLogo.includes('ConfigKey::AppName'));
     check('6 个 auth 页统一传「只给文字用的类」（text-3xl=30px，2026-10-09 晚从 36px 降下来）',
@@ -155,7 +155,7 @@ console.log('\n[登录页] 品牌区 = LOGO 图案（透明底）+ 站名，整�
         && authPages.every(([, src]) => ! src.includes('w-20 h-20')));
     // 2026-10-09：外层 leading-none 把行盒压成 1em（36px 字号 ⇒ 行盒 36px），而这套字体的行框要
     //   ascent+descent ≈ 41px，truncate 的 overflow:hidden 就把英文 descender 的尾端切掉
-    //   （本机静态复现：改前墨迹底溢出盒底 ≈1px、'y' 尾被平切；改后余量 ≈2.5px、不再裁）。
+    //   （本地静态复现：改前墨迹底溢出盒底 ≈1px、'y' 尾被平切；改后余量 ≈2.5px、不再裁）。
     //   修法只能是 inline style —— 产物 app.css 里没有 leading-tight / leading-snug / leading-normal。
     check('品牌文字那层给了 inline line-height:1.4 + 上下 2px padding（修 "Lsky Pro" 的 y 被截断）',
         /truncate[^>]*style="line-height:\s*1\.4;\s*padding:\s*2px 0/.test(appLogo));
@@ -163,7 +163,7 @@ console.log('\n[登录页] 品牌区 = LOGO 图案（透明底）+ 站名，整�
     check('没有改用 Tailwind 的行高类（产物里没有那些类，加了也不生效）',
         ! /class="[^"]*leading-(tight|snug|normal)/.test(appLogo));
     // 行框高度随字体走：Windows(Segoe UI) ≈1.33em、Linux 无头 fallback ≈1.14em
-    // ⇒ 1.2 在 Windows 上仍差一点（老师 2026-10-09 真机反馈「还是有一点被遮住」）。
+    // ⇒ 1.2 在 Windows 上仍差一点（2026-10-09 真机实测「还是有一点被遮住」）。
     check('行高给到覆盖 Windows 字体行框的档位（≥1.4em，不再只是"Linux 上够用"）',
         /line-height:\s*1\.[4-9]/.test(appLogo));
 }
@@ -182,6 +182,8 @@ console.log('\n[后台] 关于：品牌行（LOGO + 站名）+ 版本行 + Forke
         /\{\{ \$version \}\}@if\(\$commit\) <span class="text-ink-2 font-mono">\{\{ \$commit \}\}<\/span>@endif/.test(setting));
     check('第三行 By → Forked By，作者名仍读 $author（没写死）',
         setting.includes('Forked By {{ $author }}') && ! setting.includes('>By {{ $author }}'));
+    check('第三行补 2px 上间距（mt-0.5），令第二、三行视觉行距与第一、二行一致',
+        setting.includes('text-center pb-2 text-sm text-ink-2 mt-0.5'));
 }
 
 // ---------------------------------------------------------------- 第八批（2026-10-05）
@@ -265,7 +267,7 @@ console.log('\n[顶栏/登录页] 两个胶囊居中 + 所有宽度竖向居中'
 console.log('\n[工具栏] 断点 lg→xl + 永不折行');
 {
     const imgs = read('resources', 'views', 'user', 'images.blade.php');
-    check('桌面那排开关断点抬到 xl（<1408 走「⋯」菜单，正是老师要的语义）',
+    check('桌面那排开关断点抬到 xl（<1408 走「⋯」菜单，正是需要的语义）',
         imgs.includes('flex-row hidden xl:flex') && imgs.includes('block xl:hidden')
         && ! imgs.includes('flex-row hidden lg:flex') && ! imgs.includes('block lg:hidden'));
     const nowrap = (imgs.match(/class="whitespace-nowrap[^"]*"[^>]*>(?:移动到相册|移出当前相册|标签管理|详细信息|重命名|删除|取消选择)</g) || []).length;
@@ -277,7 +279,7 @@ console.log('\n[镜像上限] post_max_size 512M（upload_max_filesize 与 max_e
 {
     check('Dockerfile：post_max_size 与 upload_max_filesize 都是 512M（都抬到 512M；前者是请求体、后者是单文件）',
         dockerfile.includes("echo 'post_max_size = 512M;'") && dockerfile.includes("echo 'upload_max_filesize = 512M;'"));
-    check('Dockerfile：max_execution_time 维持 600S（老师 2026-10-05 拍板不动，别写成 300）',
+    check('Dockerfile：max_execution_time 维持 600S（2026-10-05 拍板不动，别写成 300）',
         dockerfile.includes("echo 'max_execution_time = 600S;'") && ! dockerfile.includes("echo 'max_execution_time = 300"));
     check('构建期自证：真读回 post_max_size（不是只 grep 文件）',
         dockerfile.includes('post_max_size 自证失败') && dockerfile.includes('ini_get("post_max_size")'));
@@ -334,22 +336,22 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
             /class="mb-3 flex justify-between[^"]*gap-4"/.test(read('resources', 'views', 'admin', f, 'index.blade.php')));
     }
 
-    // 默认头像：造型保持原样（同一个头 + 同一个身体圆），只整体等比放大 —— 老师说「格式可以了、但头像样式变了」
+    // 默认头像：造型保持原样（同一个头 + 同一个身体圆），只整体等比放大 —— 说「格式可以了、但头像样式变了」
     const svg = fs.readFileSync(path.join(SRC, 'public', 'static', 'default-avatar.svg'), 'utf8');
-    check('default-avatar.svg：保持老师要的那一版原样（头 cy34 r16 + 身体 cy84 r28、无 transform、无椭圆、不缩放）',
+    check('default-avatar.svg：保持需要的那一版原样（头 cy34 r16 + 身体 cy84 r28、无 transform、无椭圆、不缩放）',
         svg.includes('<circle cx="48" cy="34" r="16"') && svg.includes('<circle cx="48" cy="84" r="28"')
         && svg.includes('clip-path="url(#avatar-clip)"')
         && ! svg.includes('transform=') && ! svg.includes('<ellipse'));
     // 注意：断言前必须先剥掉 Blade 注释 —— 注释里解释「别用 -top-0.5」正好会命中下面这条否定断言
     const navNoCmt = nav.replace(/\{\{--[\s\S]*?--\}\}/g, '');
-    check('头像保持几何居中：img 不许有任何垂直偏移（-top-0.5 已被老师否决，2026-10-05 终裁）',
+    check('头像保持几何居中：img 不许有任何垂直偏移（-top-0.5 已否决，2026-10-05 终裁）',
         navNoCmt.includes('absolute inset-0 h-7 w-7 rounded-full object-cover')
         && ! navNoCmt.includes('-top-0.5') && ! navNoCmt.includes('translate-y'));
     check('头像 img 仍是 28×28 铺满（不靠 transform / 负偏移放大或位移尺寸）',
         ! nav.includes('scale-150') && ! nav.includes('-top-2 -left-2'));
 }
 
-// ---------------------------------------------------------------- 2026-10-08 手机端菜单项的按下反馈
+// ---------------------------------------------------------------- 2026-10-08 手机端菜单项的按下响应
 {
     // 背景：菜单项原来只有 :hover/:focus 一处高亮来源，全仓没有 :active。
     //   iOS 触摸会补发合成 mouseover ⇒ 还能亮（另叠一层浏览器默认的 tap 灰块，于是「闪两下」）；
@@ -368,7 +370,7 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     check('CSS 也带版本串（原来是裸 link，iOS 会吃启发式缓存 ⇒ 改了看不到）',
         /asset\('css\/context-js\/context-js\.css'\)\s*\}\}\?v=\{\{\s*\\App\\Utils::assetVersion\('css\/context-js\/context-js\.css'\)/.test(imagesBlade));
     const ctxJs = read('public', 'js', 'context-js', 'context-js.js');
-    // 2026-10-08 终稿（老师定的最终参数）：关闭**一律不停住**，只按设备给淡出时长 ——
+    // 2026-10-08 终稿（最终参数）：关闭**一律不停住**，只按设备给淡出时长 ——
     //   电脑 120ms；手机/平板（iOS + 安卓统一）320ms。不再分层级、不再分 iOS/安卓。
     check('关闭参数：电脑 DESKTOP_FADE=120、手机 TOUCH_FADE=320，且**不停住**（代码里不应有 hold）',
         Number(ctxJs.match(/const DESKTOP_FADE = (\d+);/)[1]) === 120
@@ -382,7 +384,7 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         ! /SUB_FADE_ANDROID|SUB_FADE_IOS|MAIN_FADE|LEAF_CLOSE_FADE|lastLeafTapFade|isIOSUA|inSubmenu/.test(ctxJs));
     check('诊断已全部撤除（没有 ?dbg 打点残留）',
         ! /dbg-ctx|DBG_ON|dbgSid/.test(ctxJs) && ! /\?dbg=1/.test(ctxJs));
-    // 2026-10-08 终稿：一级的**淡出时长与二级一致**（老师：一级太长，和二级一致就好）；
+    // 2026-10-08 终稿：一级的**淡出时长与二级一致**（一级太长，和二级一致就好）；
     // 只有 hold（停顿）继续分层级。所以代码里不应再有 MAIN_FADE 这类"一级专属 fade"常量。
     check('点二级项后不「先退回一级」：叶子项路径跳过即时 exitSubmenuInplace，改用延时收尾',
         /const leafClose = \(Date\.now\(\) - lastLeafTapAt\) < LEAF_FADE_WINDOW;/.test(ctxJs)

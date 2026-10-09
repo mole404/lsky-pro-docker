@@ -19,11 +19,11 @@ README.md
 # vendor 只排 composer 那一份（src/vendor）——**不能用 `**/vendor`**：
 # 那会连 src/public/fonts/vendor/@fortawesome/fontawesome-free/webfa-*.{woff2,woff,ttf,eot,svg}
 # 一起排掉，而那是 public/css/fontawesome.css 真正 @font-face 引的字体，必须随镜像发货，
-# 排掉前端图标就全空了（本机用 moby patternmatcher 的等价实现跑真实文件树验证过）。
+# 排掉前端图标就全空了（本地用 moby patternmatcher 的等价实现跑真实文件树验证过）。
 src/vendor
 **/node_modules
 
-# 开发机的 .env（里面有本机的 DB / APP_KEY）。镜像构建期是 Dockerfile 自己
+# 开发机的 .env（里面有本地的 DB / APP_KEY）。镜像构建期是 Dockerfile 自己
 # `copy('.env.example', '.env')`，运行期由卷 + entrypoint 管，绝不该从开发机带进来。
 **/.env
 
@@ -46,7 +46,7 @@ src/storage/framework/testing/*
 src/storage/framework/views/*.php
 src/bootstrap/cache/*.php
 
-# 开发机的 Laravel 日志：里面是本机的绝对路径与错误栈，绝不该随 COPY src/ 烤进镜像。
+# 开发机的 Laravel 日志：里面是本地的绝对路径与错误栈，绝不该随 COPY src/ 烤进镜像。
 # 写法与上面 framework/* 同理：`*` 会把 storage/logs/.gitignore 占位也排掉（目录就没了），
 # 而 Laravel 运行期必须能往这个目录写日志 —— 所以紧跟一条 `!` 把占位文件留下，保住目录。
 src/storage/logs/*

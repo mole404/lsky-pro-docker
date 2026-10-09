@@ -143,7 +143,7 @@
         let $picker = $('#picker');
         let queue = []; // 文件队列
 
-        // 「上传全部」只在队列里还有待上传文件时才出现（老师要求：空队列时别显示这个按钮）
+        // 「上传全部」只在队列里还有待上传文件时才出现（要求：空队列时别显示这个按钮）
         const syncQueueActions = () => {
             const hasPending = Object.values(queue).some((item) => item.status !== UPLOAD_SUCCESS);
             $('#upload-all').toggleClass('hidden', !hasPending);

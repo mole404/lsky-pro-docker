@@ -18,7 +18,7 @@
  *       紧接着那发 click 撞上关闭逻辑，整个菜单直接消失。
  * 处理：(a) 在 document 的**捕获阶段**装一层菜单守卫 —— 只关菜单、并吞掉这一发事件；
  *       (b) 触摸设备（(hover: none)）改成点击展开/收起二级菜单，有鼠标的设备继续用 hover；
- *       另外支持滚动/缩放/Esc 关闭菜单（都是老师要的"收得优雅"）。
+ *       另外支持滚动/缩放/Esc 关闭菜单（都是需要的"收得优雅"）。
  *
  * 隔离性：长按分支只在 iPad/iPhone/iPod（含 iPadOS 伪装成 Mac）上返回真，Android/Windows 继续走
  * contextmenu 原路径，长按相关代码一行都不执行。菜单守卫是通用行为，但其中"点击展开二级菜单"
@@ -48,10 +48,10 @@ window.context = window.context || (function () {
     //   * 逻辑关闭仍是**立即**的（menuVisible 立刻置 false）；
     //   * 但淡出时长与 menuClosingUntil 一起延长，menuOnScreen() 的 DOM 兜底 +
     //     menuClosingUntil 保证这段时间的点击继续被吞 ⇒ 不会把「点穿」放回来。
-    // 【2026-10-08 终稿·老师定】关闭菜单：**一律不停住**，只按设备给一个淡出时长 ——
+    // 【2026-10-08 终稿】关闭菜单：**一律不停住**，只按设备给一个淡出时长 ——
     //   电脑：120ms；手机/平板（iOS + 安卓统一）：320ms。
     // 历史包袱说明：中间版本按「层级（一级/二级）×平台（电脑/iOS/安卓）」分了多档 hold+fade，
-    // 老师最终定为"不分层级、不分 iOS/安卓，只分电脑和手机"⇒ 这里收敛成两个常量。
+    // 最终定为"不分层级、不分 iOS/安卓，只分电脑和手机"⇒ 这里收敛成两个常量。
     // 淡出由 CSS transition 驱动（见 .context-fading），不受 jQuery 跳帧影响，所以时长可以放心用。
     const DESKTOP_FADE = 120;       // 电脑：不停地直接淡出 120ms
     const TOUCH_FADE = 320;         // 手机/平板：不停地直接淡出 320ms
@@ -300,7 +300,7 @@ window.context = window.context || (function () {
             + ' background: transparent !important; }'
             // 主菜单版（与下面二级菜单那份同一套 arming 机制，见 armMenuHoverGuard）：
             // 长按弹出的主菜单同样会顶在手指底下，真机触摸的粘滞 hover 会把手指底下那一项当成 hover 目标
-            // → 弹出瞬间那项就跳高亮（老师截图里的「复制图片」）。这里连 li 一起关指针事件：
+            // → 弹出瞬间那项就跳高亮（实测里的「复制图片」）。这里连 li 一起关指针事件：
             // 只关 a 的话，主题里的 `.dropdown-submenu:hover > a` 仍会因为 li 被 hover 而给「复制链接」上色。
             // 另外 hover 那套是「底色 + 文字变白」两件一起上（见 context-js.less 的 li>a:hover），
             // 所以文字色也一并还原 —— 万一 :hover/:focus 还是粘住了，那一项也保持原样，不会变成白底白字。
@@ -308,7 +308,7 @@ window.context = window.context || (function () {
             // ⚠ color / background-color 这两条强制覆盖只准落在「真正的菜单项」(`> li > a`) 上，不能落在 li 层：
             //   标题是 `> li.nav-header`，自带灰色（.nav-header{color:var(--lsky-text-3)}），
             //   被 `color:inherit` 压成面板继承来的近黑（--lsky-text）→ 守卫窗口内「图片操作」黑一下、
-            //   窗口一过又弹回灰色 = 老师看到的闪烁；
+            //   窗口一过又弹回灰色 = 实测看到的闪烁；
             //   同理分隔线 `> li.divider` 有自己的底色，也会被 `background-color:transparent` 打掉又弹回来。
             // 防误触真正的关键是 li 上的 pointer-events:none（配合 a 上那份），把强制换色的声明收窄到 a
             // 不会削弱任何一层守卫：li 层原本也不需要靠换色来防误触。
@@ -327,7 +327,7 @@ window.context = window.context || (function () {
 
     // ===== 诊断（fork 新增）=====
     // 常驻记录“与菜单有关”的事件：开、关（含原因）、以及菜单牵涉到的点击判定。
-    // 万一现场还出问题，老师说一句 context.debugDump() 就能把证据拿出来，不用再猜。
+    // 万一现场还出问题，可执行 context.debugDump() 就能把证据拿出来，不用再猜。
     function describeNode(node) {
         if (! node || ! node.tagName) {
             return String(node);
@@ -407,12 +407,12 @@ window.context = window.context || (function () {
             exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
         }
         // 【2026-10-08】点中二级菜单里的叶子项时**不能**在这里即时收子菜单 ——
-        // 那会让用户看到"先返回一级菜单、再整个消失"（老师报的观感）。改成延到淡出之后
+        // 那会让用户看到"先返回一级菜单、再整个消失"（实测的观感）。改成延到淡出之后
         // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
         // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 
-        // 【2026-10-08 老师真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
-        // 证据：老师在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
+        // 【2026-10-08 真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
+        // 证据：在同一台电脑上手动 `$('.dropdown-context').fadeOut(500)`（含带回调的版本）都能看到淡出，
         // 而代码里 `fadeOut(260)` 被调用后元素状态**一个都没变** —— jQuery 的动画依赖它自己的计时器推进，
         // 时长短（260ms ≈ 15 帧）+ 主线程忙时会被整段跳过，表现就是"啪"一下没了。
         // 改成 CSS transition：浏览器合成器驱动，主线程再忙也能看到渐变；时长也不再敏感。
@@ -460,7 +460,7 @@ window.context = window.context || (function () {
     const SUBMENU_GUARD = 350;      // 二级菜单「就地替换」后这段毫秒内，触摸点击一律吞掉（防按住误选）
     const SUBMENU_ARM_MS = 420;     // 二级菜单刚弹出的这段毫秒内，先别接受指针指向（防那一下高亮跳色）
     const MENU_ARM_MS = 420;        // 主菜单（长按弹出）同理：弹出后这段时间内的项不接受指针指向
-    const MENU_ARM_TAIL_MS = 260;   // 抬手之后再压这么多毫秒 —— 老师原话「手抬起来的那一瞬间留冗余」，
+    const MENU_ARM_TAIL_MS = 260;   // 抬手之后再压这么多毫秒 —— 口径「手抬起来的那一瞬间留冗余」，
                                     // 与二级菜单那份抬手冗余同一个数（见 armMenuHoverGuard / touchend）
 
     function viewportSize() {
@@ -646,7 +646,7 @@ window.context = window.context || (function () {
         $('.dropdown-context').removeClass('submenu-arming');
     }
 
-    // 主菜单版（同一套机制，老师要求「复用到长按弹出的主菜单」）：
+    // 主菜单版（同一套机制，要求「复用到长按弹出的主菜单」）：
     // 主菜单弹在手指底下时，那一项会被浏览器判成 hover 目标 → 弹出瞬间跳高亮，功能和以前一样、就是看着脏。
     // 做法与二级菜单那份一致：挂 .menu-arming（里面的项不接受指针事件 + hover 底色压平），
     // 抬手后由 touchend 再续 MENU_ARM_TAIL_MS —— 窗口跟着手势走，不是弹出时定死的一个定时器。
@@ -829,7 +829,7 @@ window.context = window.context || (function () {
                 }
 
                 // 防误触（必须排在父项处理与「返回」之前）：真机触摸带粘滞 :hover，二级菜单会先于
-                // 抬手出现，抬手那发合成 click 就落在菜单项上（老师实测点「复制链接」被判成「Url」，
+                // 抬手出现，抬手那发合成 click 就落在菜单项上（实测点「复制链接」被判成「Url」，
                 // 按住久一点（实测 700ms）也照样中招 —— 所以判据是「同一根手指那一发」而不是时长）。
                 // 判据：这次 click 属于「打开二级菜单的那次手指按下」→ 一律吞掉，什么都不做。
 
@@ -888,7 +888,7 @@ window.context = window.context || (function () {
                     armSubmenuHoverGuard(260);      // 抬手后再压 260ms，抬手那一刻也不会跳色
                 }
 
-                // 主菜单同理（老师原话：「只要给我手抬起来的那一瞬间留冗余就够」）——
+                // 主菜单同理（口径：「只要手抬起来的那一瞬间留冗余就够」）——
                 // 判据同样是「这一发手指就是打开主菜单的那一发」，按住再久也不会在抬手那一刻跳色。
                 if (armedMenuGestureId && armedMenuGestureId === touchGestureId
                     && $('.dropdown-context:not(.dropdown-context-sub)').length) {
@@ -997,7 +997,7 @@ window.context = window.context || (function () {
         installMenuGuard();
 
         // 【2026-10-08】点中菜单里的叶子项（如「复制链接 → Url」）：记一笔，并给这一项定格高亮。
-        //   * 记时刻 ⇒ closeMenus 据此跳过"先退回一级菜单"那一步（老师 2026-10-08 的要求）；
+        //   * 记时刻 ⇒ closeMenus 据此跳过"先退回一级菜单"那一步（2026-10-08 的要求）；
         //   * 定格高亮（.context-pressed）⇒ 手指抬起后它继续亮着随菜单淡出，而不是瞬间就没了。
         // 注意判据必须挂在 **li** 上、而不是 `li > a`：实测（CDP 捕获真实点击的 target）点「Url」时
         // target 是那个 <li>（`<a>` 只占其中一部分高度，padding 区域点下去 target 就是 li）。
