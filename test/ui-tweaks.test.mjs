@@ -128,9 +128,11 @@ console.log('\n[游客首页] 外观切换归位 / 站名可见 / 登录整块�
         welcome.indexOf('<x-theme-switch />') < welcome.indexOf("@includeWhen($_is_notice"));
     check('站名不再白字白底（text-white 已去掉），且品牌区成了 flex 行（LOGO + 站名）',
         ! welcome.includes('text-white') && welcome.includes('min-w-0 text-ink text-lg'));
-    check('顶栏品牌区带 LOGO 图案（static/lsky-logo.png + assetVersion 版本串；32px，与 56px 顶栏相称）',
+    check('顶栏品牌区带 LOGO 图案（static/lsky-logo.png + assetVersion 版本串；30px，与 56px 顶栏相称）',
         welcome.includes("asset('static/lsky-logo.png')") && welcome.includes("assetVersion('static/lsky-logo.png')")
-        && /<img[^>]*class="w-8 h-8 shrink-0 select-none"/.test(welcome));
+        && /<img[^>]*style="width:30px;height:30px"/.test(welcome));
+    check('顶栏站名保持 18px（text-lg），大小写死不改字体档位',
+        welcome.includes('class="flex items-center gap-2 min-w-0 text-ink text-lg"'));
     check('登录 = 强调色实心整块按钮（ls-btn-primary + h-10），不是只染文字',
         /class="ls-btn ls-btn-primary h-10 px-4">登录<\/a>/.test(welcome));
     check('窄屏适配：标题 min-w-0 flex-1 + 右侧 shrink-0，间距手机 2 / 桌面 4',
