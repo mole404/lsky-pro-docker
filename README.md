@@ -9,7 +9,14 @@
 ---
 
 **本仓库镜像地址：`ghcr.io/mole404/lsky-pro-docker:latest`**  
-**最新版 `3.6.1`**  
+**最新版 `3.6.2`**  
+
+<details>
+<summary>📢 <b>3.6.2 修复更新 (2026-10-09)</b></summary>
+  
+### 更新内容：
+**细节优化**：修复多处 UI 瑕疵，完善排版和显示效果。 
+</details>
 
 <details>
 <summary>📢 <b>3.6.1 修复更新 (2026-10-09)</b></summary>
