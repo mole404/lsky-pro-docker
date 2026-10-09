@@ -127,10 +127,10 @@ console.log('\n[游客首页] 外观切换归位 / 站名可见 / 登录整块�
     check('顶栏那行仍在「公告 / 策略 / 登录注册」之前渲染外观切换（顺序：主题 → 公告 → 策略 → 账号）',
         welcome.indexOf('<x-theme-switch />') < welcome.indexOf("@includeWhen($_is_notice"));
     check('站名不再白字白底（text-white 已去掉），且品牌区成了 flex 行（LOGO + 站名）',
-        ! welcome.includes('text-white') && welcome.includes('min-w-0 text-ink text-xl'));
-    check('顶栏品牌区带 LOGO 图案（static/lsky-logo.png + assetVersion 版本串，28px 与侧栏同档）',
+        ! welcome.includes('text-white') && welcome.includes('min-w-0 text-ink text-lg'));
+    check('顶栏品牌区带 LOGO 图案（static/lsky-logo.png + assetVersion 版本串；32px，与 56px 顶栏相称）',
         welcome.includes("asset('static/lsky-logo.png')") && welcome.includes("assetVersion('static/lsky-logo.png')")
-        && /<img[^>]*class="w-7 h-7 shrink-0 select-none"/.test(welcome));
+        && /<img[^>]*class="w-8 h-8 shrink-0 select-none"/.test(welcome));
     check('登录 = 强调色实心整块按钮（ls-btn-primary + h-10），不是只染文字',
         /class="ls-btn ls-btn-primary h-10 px-4">登录<\/a>/.test(welcome));
     check('窄屏适配：标题 min-w-0 flex-1 + 右侧 shrink-0，间距手机 2 / 桌面 4',
@@ -155,11 +155,15 @@ console.log('\n[登录页] 品牌区 = LOGO 图案（透明底）+ 站名，整�
     //   ascent+descent ≈ 41px，truncate 的 overflow:hidden 就把英文 descender 的尾端切掉
     //   （本机静态复现：改前墨迹底溢出盒底 ≈1px、'y' 尾被平切；改后余量 ≈2.5px、不再裁）。
     //   修法只能是 inline style —— 产物 app.css 里没有 leading-tight / leading-snug / leading-normal。
-    check('品牌文字那层给了 inline line-height:1.2（修 "Lsky Pro" 的 y 被截断）',
-        /truncate[^>]*style="line-height:\s*1\.2/.test(appLogo));
+    check('品牌文字那层给了 inline line-height:1.4 + 上下 2px padding（修 "Lsky Pro" 的 y 被截断）',
+        /truncate[^>]*style="line-height:\s*1\.4;\s*padding:\s*2px 0/.test(appLogo));
     // 注意：注释里会提到 leading-tight 之类的名字（解释为什么不用），所以只扫 class 属性
     check('没有改用 Tailwind 的行高类（产物里没有那些类，加了也不生效）',
         ! /class="[^"]*leading-(tight|snug|normal)/.test(appLogo));
+    // 行框高度随字体走：Windows(Segoe UI) ≈1.33em、Linux 无头 fallback ≈1.14em
+    // ⇒ 1.2 在 Windows 上仍差一点（老师 2026-10-09 真机反馈「还是有一点被遮住」）。
+    check('行高给到覆盖 Windows 字体行框的档位（≥1.4em，不再只是"Linux 上够用"）',
+        /line-height:\s*1\.[4-9]/.test(appLogo));
 }
 
 // ---------------------------------------------------------------- 9 后台「关于」（2026-10-09）
@@ -168,6 +172,10 @@ console.log('\n[后台] 关于：品牌行（LOGO + 站名）+ 版本行 + Forke
     const aboutBlock = setting.slice(setting.indexOf('关于'), setting.indexOf('Forked By'));
     check('第一行 = LOGO 图案 + 站名（读站点配置、不写死；与登录页同一张图）',
         aboutBlock.includes("asset('static/lsky-logo.png')") && aboutBlock.includes('ConfigKey::AppName'));
+    check('关于页 LOGO = 26px（inline style，比原来 +10%；产物里没有 26px 对应的工具类）',
+        /style="width:26px;height:26px"/.test(aboutBlock));
+    check('关于页 LOGO 与站名的间隙收到 gap-1（4px），不再用 gap-2(8px)',
+        aboutBlock.includes('justify-center gap-1 pt-2') && ! aboutBlock.includes('justify-center gap-2 pt-2'));
     check('第二行版本 + commit 原样保留在同一行',
         /\{\{ \$version \}\}@if\(\$commit\) <span class="text-ink-2 font-mono">\{\{ \$commit \}\}<\/span>@endif/.test(setting));
     check('第三行 By → Forked By，作者名仍读 $author（没写死）',
