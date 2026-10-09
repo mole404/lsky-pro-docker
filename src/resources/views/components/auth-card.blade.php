@@ -10,13 +10,14 @@
      「上」溢出的部分不进入 scrollable overflow region（只有向下/向右的溢出能滚到），所以页面要等
      卡片自己都放不下（视口高 < 卡片高 + py-6×2）才出滚动条，中间有约 157px 的死区。
      修法：容器上下各留出「LOGO 块高 + 间距」的空间（上下**对称** ⇒ 卡片依旧精确居中，几何不变）：
-       ① 视口不够高时立刻出滚动条（比原来早 157px）
+       ① 视口不够高时立刻出滚动条（比原来早 2×预留量）
        ② 滚到顶时 LOGO 顶距容器顶正好 24px（py-6 那点呼吸感），完整可见
-     LOGO 块高 = max(图标 40px, 文字行盒 36px×1.4 + 上下各 2px padding) = 54.4px，**与系统字体无关**
-     （行高按 em 折算成固定 px，不像字形度量那样随字体走）；间距 = 1.5rem(24px) ⇒ 共 78.4px = 4.9rem。
-     ⚠ 若改了品牌组件的字号 / 行高 / 图标尺寸，要同步改这两个 calc 里的 4.9rem。 --}}
+     LOGO 块高 = max(图标 40px, 文字行盒 **30px**×1.4 + 上下各 2px padding = 46px) = 46px，**与系统字体无关**
+     （行高按 em 折算成固定 px，不像字形度量那样随字体走）；间距 = 1.5rem(24px) ⇒ 共 70px = 4.375rem。
+     ⚠ 品牌组件改了字号 / 行高 / padding / 图标尺寸 / gap，都要同步改这两个 calc 里的 4.375rem
+       （2026-10-09 晚字号 36→30px 时刚同步过一次：4.9rem → 4.375rem）。 --}}
 <div class="min-h-screen ls-zoom-minh-screen flex flex-col justify-center items-center py-6 bg-bg px-4"
-     style="padding-top: calc(1.5rem + 4.9rem); padding-bottom: calc(1.5rem + 4.9rem)">
+     style="padding-top: calc(1.5rem + 4.375rem); padding-bottom: calc(1.5rem + 4.375rem)">
     <div class="relative w-full flex flex-col items-center">
         <div class="absolute flex justify-center" style="left: 0; right: 0; bottom: 100%; margin-bottom: 1.5rem;">
             {{ $logo }}

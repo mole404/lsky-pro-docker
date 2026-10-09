@@ -128,9 +128,9 @@ console.log('\n[游客首页] 外观切换归位 / 站名可见 / 登录整块�
         welcome.indexOf('<x-theme-switch />') < welcome.indexOf("@includeWhen($_is_notice"));
     check('站名不再白字白底（text-white 已去掉），且品牌区成了 flex 行（LOGO + 站名）',
         ! welcome.includes('text-white') && welcome.includes('min-w-0 text-ink text-lg'));
-    check('顶栏品牌区带 LOGO 图案（static/lsky-logo.png + assetVersion 版本串；30px，与 56px 顶栏相称）',
+    check('顶栏品牌区带 LOGO 图案（static/lsky-logo.png + assetVersion 版本串；28px = w-7 h-7，与 56px 顶栏相称）',
         welcome.includes("asset('static/lsky-logo.png')") && welcome.includes("assetVersion('static/lsky-logo.png')")
-        && /<img[^>]*style="width:30px;height:30px"/.test(welcome));
+        && /<img[^>]*class="w-7 h-7 shrink-0 select-none"/.test(welcome));
     check('顶栏站名保持 18px（text-lg），大小写死不改字体档位',
         welcome.includes('class="flex items-center gap-2 min-w-0 text-ink text-lg"'));
     check('登录 = 强调色实心整块按钮（ls-btn-primary + h-10），不是只染文字',
@@ -147,11 +147,11 @@ console.log('\n[登录页] 品牌区 = LOGO 图案（透明底）+ 站名，整�
 {
     check('application-logo 组件带 LOGO 图案（static/lsky-logo.png，与侧栏同一个文件 + assetVersion 版本串）',
         appLogo.includes("asset('static/lsky-logo.png')") && appLogo.includes("assetVersion('static/lsky-logo.png')"));
-    check('图案与文字用一个 inline-flex + items-center + justify-center 的容器居中（gap 3）',
-        appLogo.includes('inline-flex items-center justify-center gap-3'));
+    check('图案与文字居中容器：gap 2（8px；2026-10-09 晚从 gap-3 收窄，老师要求「缩小与左边 logo 的间距」）',
+        appLogo.includes('inline-flex items-center justify-center gap-2'));
     check('站名仍在组件里（读取 AppName 配置）', appLogo.includes('ConfigKey::AppName'));
-    check('6 个 auth 页统一传「只给文字用的类」，不再塞固定宽高（w-20 h-20 会把整块撑歪）',
-        authPages.every(([, src]) => src.includes('<x-application-logo class="text-ink-2 text-4xl" />'))
+    check('6 个 auth 页统一传「只给文字用的类」（text-3xl=30px，2026-10-09 晚从 36px 降下来）',
+        authPages.every(([, src]) => src.includes('<x-application-logo class="text-ink-2 text-3xl" />'))
         && authPages.every(([, src]) => ! src.includes('w-20 h-20')));
     // 2026-10-09：外层 leading-none 把行盒压成 1em（36px 字号 ⇒ 行盒 36px），而这套字体的行框要
     //   ascent+descent ≈ 41px，truncate 的 overflow:hidden 就把英文 descender 的尾端切掉
@@ -255,9 +255,9 @@ console.log('\n[顶栏/登录页] 两个胶囊居中 + 所有宽度竖向居中'
     // 2026-10-09：绝对定位的 LOGO 向上溢出不进 scrollable overflow region ⇒ 窗口变矮时它被裁掉、
     // 而且滚不到，要等卡片自己都放不下才出滚动条（中间 ~157px 死区）。修法是容器上下对称留空间：
     // 卡片仍精确居中，但更早出滚动条、且滚到顶时 LOGO 完整可见。
-    check('登录卡片：上下对称给 LOGO 预留了空间（LOGO 54.4px + 间距 24px = 4.9rem）',
-        /padding-top:\s*calc\(1\.5rem \+ 4\.9rem\)/.test(authCard)
-        && /padding-bottom:\s*calc\(1\.5rem \+ 4\.9rem\)/.test(authCard));
+    check('登录卡片：上下对称给 LOGO 预留了空间（品牌块高 46px + 间距 24px = 4.375rem）',
+        /padding-top:\s*calc\(1\.5rem \+ 4\.375rem\)/.test(authCard)
+        && /padding-bottom:\s*calc\(1\.5rem \+ 4\.375rem\)/.test(authCard));
     check('预留空间必须上下对称（只加一边会把卡片推偏，破坏几何居中）',
         ! /\bpadding-top:\s*calc\(1\.5rem \+ 4\.9rem\);(?![\s\S]{0,200}?padding-bottom:)/.test(authCard));
 }

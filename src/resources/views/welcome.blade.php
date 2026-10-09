@@ -13,13 +13,13 @@
             <div class="container mx-auto px-5 sm:px-10 md:px-10 lg:px-10 xl:px-10 2xl:px-60 flex items-center gap-3 justify-between">
                 <div class="flex min-w-0 flex-1 justify-start items-center">
                     {{-- fork 2026-10-09：品牌区补上 LOGO 图案（与侧栏/登录页同一张图）。
-                         调过两轮（老师反馈）：图案先 28 → 32px，再定 **30px**（产物 app.css 里没有 30px
-                         对应的工具类 ⇒ 走 inline style，跟关于页 26px 同一手法）；站名保持 18px（text-lg）。
-                         顶栏高 56px、右侧按钮 h-10=40px ⇒ 30px 的图案不会把顶栏撑高。
+                         尺寸经手 28 → 32 → 30，老师最终定回 **28px**（= w-7 h-7，产物里有这档工具类，
+                         不必再走 inline style）；站名保持 18px（text-lg）。
+                         顶栏高 56px、右侧按钮 h-10=40px ⇒ 28px 的图案不会把顶栏撑高。
                          窄屏仍由 min-w-0 + truncate 吃掉剩余宽度（图标 shrink-0），不与右侧那组抢位。 --}}
                     <a href="{{ route('/') }}" class="flex items-center gap-2 min-w-0 text-ink text-lg">
                         <img src="{{ asset('static/lsky-logo.png') . '?v=' . \App\Utils::assetVersion('static/lsky-logo.png') }}"
-                             alt="" width="30" height="30" decoding="async" style="width:30px;height:30px" class="shrink-0 select-none">
+                             alt="" width="28" height="28" decoding="async" class="w-7 h-7 shrink-0 select-none">
                         <span class="min-w-0 truncate">{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</span>
                     </a>
                 </div>
