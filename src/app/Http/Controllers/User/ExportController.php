@@ -13,12 +13,12 @@ use App\Support\StreamedZipWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Http\StreamedResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use League\Flysystem\Filesystem;
+use Symfony\Component\HttpFoundation\StreamedResponse as SymfonyStreamedResponse;
 
 /**
  * 用户端「批量导出」：把自己账号下的图片按筛选条件流式打包成一个 zip 直接下载。
@@ -89,7 +89,7 @@ class ExportController extends Controller
     /**
      * 流式导出。响应头之后就一路往外写 zip 字节，不再有任何“整体缓冲”。
      */
-    public function export(Request $request): Response|StreamedResponse
+    public function export(Request $request): Response|SymfonyStreamedResponse
     {
         /** @var User $user */
         $user = Auth::user();
@@ -105,6 +105,16 @@ class ExportController extends Controller
         if ($denied === 'full') {
             return $this->text('当前有其他用户正在导出，请稍后再试', 429);
         }
+
+        // 占位是在「流真正开始写」之前拿的，而释放只发生在流回调里 —— 所以这一段里要是出了岔子
+        // （异常、致命错误、类型错误……），流回调永远不会跑，占位就没人还，用户被自己那笔占位
+        // 挡在门外直到心跳过期。这里用 shutdown 兜底：没开流就还占位。
+        $streamStarted = false;
+        register_shutdown_function(static function () use (&$streamStarted, $userId) {
+            if (! $streamStarted) {
+                ExportConcurrency::release($userId);
+            }
+        });
 
         $query = $this->filtered($request);
         $total = (clone $query)->count();
@@ -135,7 +145,10 @@ class ExportController extends Controller
             'X-Accel-Buffering'   => 'no',
         ];
 
-        return response()->stream(function () use ($query, $zip64, $userId, $total, $filters, $started) {
+        return response()->stream(function () use ($query, $zip64, $userId, $total, $filters, $started, &$streamStarted) {
+            // 流真的开始往外写了：撤掉上面那个「没开流就还占位」的兜底
+            $streamStarted = true;
+
             $state = [
                 'ok'          => 0,
                 'failed'      => 0,
