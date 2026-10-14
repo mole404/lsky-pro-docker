@@ -305,6 +305,17 @@ jobs:
           npm ci --no-audit --no-fund
           npm test
 
+      # 导出用的流式 zip writer（src/app/Support/StreamedZipWriter.php）是自实现的 —— 运行镜像里
+      # 没有 ext-zip，所以它是零依赖的纯 PHP，自带的测试脚本能在官方 php:8.3-cli 镜像里直接跑。
+      # 放构建之前：这个文件被谁改坏了就该早点红，不用白等十几分钟构建。
+      # 镜像指纹与 Dockerfile 里 PHP_CLI_IMAGE_DIGEST 保持一致（同一个 tag，不引入浮动引用）。
+      - name: Zip writer tests (streamed export)
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/w" -w /w \
+            php:8.3-cli-bookworm@sha256:4687aec76c4a895b68b91bcd5e48f1ba7a3dea120f6de50bba7e1a93af5372dd \
+            bash -c 'set -euo pipefail; { cat src/app/Support/StreamedZipWriter.php; tail -n +2 test/php/zip-writer.test.php; } | php /dev/stdin'
+
       # 说明（本次「Node 20 弃用」清扫的覆盖面）：下面 docker/* 系列与上面的 actions/checkout
       # 都核对过 —— 它们钉的 commit SHA 就是各自**最新 release** 指向的 commit，且 action.yml 里
       # 是 runs.using: node24，不会再触发 Node.js 20 弃用警告，故保持不变（不为动而动）。
