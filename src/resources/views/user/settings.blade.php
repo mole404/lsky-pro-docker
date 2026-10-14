@@ -81,6 +81,25 @@
         <div class="mt-6 overflow-hidden sm:rounded-md shadow-card">
             <div class="px-3 py-4 bg-surface sm:p-6">
                 <p class="mb-3 font-semibold text-lg text-ink">批量导出</p>
+                @php
+                    // 下拉选项先在服务端拼好（含每项的数量），前端只负责渲染与交互
+                    $albumOptions = [['v' => '0', 't' => '未分类 ('.$uncategorizedNum.')']];
+                    foreach (Auth::user()->albums as $album) {
+                        $albumOptions[] = ['v' => (string) $album->id, 't' => $album->name.' ('.$album->image_num.')'];
+                    }
+
+                    $tagOptions = [];
+                    foreach (Auth::user()->tags as $tag) {
+                        $tagOptions[] = ['v' => (string) $tag->id, 't' => $tag->name.' ('.($tagCounts[$tag->id] ?? 0).')'];
+                    }
+
+                    $strategyOptions = [];
+                    if (Auth::user()->group) {
+                        foreach (Auth::user()->group->strategies as $strategy) {
+                            $strategyOptions[] = ['v' => (string) $strategy->id, 't' => $strategy->name.' ('.($strategyCounts[$strategy->id] ?? 0).')'];
+                        }
+                    }
+                @endphp
                 {{-- 控件的 name 就是导出接口的参数名，空值不传 ⇒ 该维度不限 --}}
                 <div id="export-filters" class="grid grid-cols-6 gap-6">
                     <div class="col-span-6">
@@ -88,49 +107,51 @@
                     </div>
 
                     <div class="col-span-6 sm:col-span-3">
-                        <label for="export-album-ids" class="block text-sm font-medium text-ink">相册</label>
-                        <x-select id="export-album-ids" name="album_ids[]" multiple size="6">
-                            <option value="0">未分类 ({{ $uncategorizedNum }})</option>
-                            @foreach(Auth::user()->albums as $album)
-                                <option value="{{ $album->id }}">{{ $album->name }} ({{ $album->image_num }})</option>
-                            @endforeach
-                        </x-select>
+                        <span class="block text-sm font-medium text-ink">相册</span>
+                        {{-- 自绘多选下拉：选项数据在 script[type=application/json] 里，交互由内联脚本渲染 --}}
+                        <div id="export-dropdown-albums" class="export-dropdown" data-name="album_ids[]" data-placeholder="全部相册">
+                            <script type="application/json" class="export-dropdown-options">@json($albumOptions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS)</script>
+                        </div>
                     </div>
 
                     <div class="col-span-6 sm:col-span-3">
-                        <label for="export-tag-ids" class="block text-sm font-medium text-ink">标签</label>
-                        @if(Auth::user()->tags->isEmpty())
-                            <p class="mt-1 text-sm text-ink-2">暂无标签</p>
-                        @else
-                            <x-select id="export-tag-ids" name="tag_ids[]" multiple size="6">
-                                @foreach(Auth::user()->tags as $tag)
-                                    <option value="{{ $tag->id }}">{{ $tag->name }} ({{ $tagCounts[$tag->id] ?? 0 }})</option>
-                                @endforeach
-                            </x-select>
-                        @endif
+                        <span class="block text-sm font-medium text-ink">标签</span>
+                        <div id="export-dropdown-tags" class="export-dropdown" data-name="tag_ids[]" data-placeholder="选择标签" data-empty-label="暂无标签">
+                            <script type="application/json" class="export-dropdown-options">@json($tagOptions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS)</script>
+                        </div>
                     </div>
 
                     <div class="col-span-6 sm:col-span-3">
-                        <label for="export-strategy-ids" class="block text-sm font-medium text-ink">存储策略</label>
-                        @if(Auth::user()->group && Auth::user()->group->strategies->isNotEmpty())
-                            <x-select id="export-strategy-ids" name="strategy_ids[]" multiple size="6">
-                                @foreach(Auth::user()->group->strategies as $strategy)
-                                    <option value="{{ $strategy->id }}">{{ $strategy->name }} ({{ $strategyCounts[$strategy->id] ?? 0 }})</option>
-                                @endforeach
-                            </x-select>
-                        @else
-                            <p class="mt-1 text-sm text-ink-2">暂无策略</p>
-                        @endif
+                        <span class="block text-sm font-medium text-ink">存储策略</span>
+                        <div id="export-dropdown-strategies" class="export-dropdown" data-name="strategy_ids[]" data-placeholder="全部策略" data-empty-label="暂无策略">
+                            <script type="application/json" class="export-dropdown-options">@json($strategyOptions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS)</script>
+                        </div>
                     </div>
 
-                    <div class="col-span-6 sm:col-span-3">
-                        <label for="export-date-from" class="block text-sm font-medium text-ink">上传日期（起）</label>
-                        <x-input type="date" id="export-date-from" name="date_from"/>
+                    <div class="col-span-6">
+                        <span class="block text-sm font-medium text-ink">上传日期</span>
+                        {{-- 月历：data-days 是「有图的日子 → 张数」，前端据此标出哪几天存过图片；
+                             两个 date 输入是表单真值来源（区间由月历写入），平时隐藏。
+                             属性里的 JSON 只能走 json_encode()：@json 输出裸引号，会在第一个引号处截断属性，
+                             浏览器只读到 "{" ⇒ 月历标记会静默失效（实测） --}}
+                        <div id="export-calendar"
+                             data-days="{{ json_encode($dayCounts) }}"
+                             data-from="#export-date-from"
+                             data-to="#export-date-to"></div>
+                        <div id="export-date-quick" class="flex items-center gap-2 mt-2">
+                            <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="today">今天</button>
+                            <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="week">本周</button>
+                            <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="month">本月</button>
+                            <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="year">今年</button>
+                            <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="clear">不选日期</button>
+                        </div>
+                        <input type="date" id="export-date-from" name="date_from" class="ls-input mt-1 hidden">
+                        <input type="date" id="export-date-to" name="date_to" class="ls-input mt-1 hidden">
+                        <p id="export-date-summary" class="mt-1 text-sm text-ink-2"></p>
                     </div>
 
-                    <div class="col-span-6 sm:col-span-3">
-                        <label for="export-date-to" class="block text-sm font-medium text-ink">上传日期（止）</label>
-                        <x-input type="date" id="export-date-to" name="date_to"/>
+                    <div class="col-span-6">
+                        <p id="export-preview-summary" class="text-sm font-medium text-ink"></p>
                     </div>
 
                     <div class="col-span-6 text-sm text-ink-2">
@@ -143,7 +164,7 @@
                     </div>
                 </div>
                 <div class="px-4 py-3 text-right sm:px-6">
-                    <x-button type="button" id="export-submit">打包下载</x-button>
+                    <x-button type="button" id="export-submit">导出</x-button>
                 </div>
             </div>
         </div>
@@ -306,6 +327,918 @@
                         $button.prop('disabled', false);
                     });
                 });
+            })();
+        </script>
+    @endpush
+
+    @push('scripts')
+        <script>
+/* Export filter multi-select dropdown - zero dependency, native DOM only.
+ *
+ * MOUNT CONTRACT (one block per filter group; already in the markup):
+ *   A div carrying class "export-dropdown" plus:
+ *     data-name          e.g. "album_ids[]"
+ *     data-placeholder   e.g. "全部相册"
+ *     data-empty-label   optional, e.g. "暂无标签"
+ *   Inside that div, a JSON payload element selected by
+ *   ".export-dropdown-options" whose text is the choice list, e.g.
+ *   [{"v":"0","t":"未分类 (415)"},{"v":"1","t":"素材 (6)"}].
+ *
+ * OUTPUT CONTRACT (what a collector walking "#export-filters select, input"
+ * can rely on):
+ *   - one hidden input per selected value, rebuilt on every change:
+ *       <input type="hidden" name="{data-name}" value="{v}">
+ *     Living in .export-dropdown-values inside the block. An empty selection
+ *     emits nothing at all, so an untouched filter disappears from the query.
+ *   - the visible checkboxes deliberately carry no name attribute, so a
+ *     collector must skip nameless inputs - "if (!f.name) continue;" - or it
+ *     will append an empty query key.
+ *   - every selection change (including "nothing selected" again) dispatches
+ *     one CustomEvent named 'export:filters-changed' on document.
+ *
+ * Optional extra attribute:
+ *   data-summary-full="1" - keep the trailing " (123)" count in the trigger
+ *   summary instead of stripping it.
+ *
+ * Public surface: window.LskyExportDropdown = { init, summary }. Nothing else
+ * is added to global scope and nothing outside #export-filters is touched.
+ */
+(function () {
+  'use strict';
+
+  var EVENT_NAME = 'export:filters-changed';
+
+  /* @pure:begin */
+  /*
+   * Pure block: no DOM, no window, no closure over outer variables. It is
+   * sliced out verbatim by selfcheck.mjs and evaluated stand-alone.
+   */
+
+  // Parse the embedded options payload. Accepts a JSON string or an already
+  // parsed value shaped [{ "v": "...", "t": "..." }]. Returns [] rather than
+  // throwing on malformed input, and skips entries with no usable value.
+  function pdParseOptions(raw) {
+    if (raw === null || raw === undefined) return [];
+    var data = raw;
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch (err) {
+        return [];
+      }
+    }
+    if (!Array.isArray(data)) return [];
+    var out = [];
+    for (var i = 0; i < data.length; i++) {
+      var item = data[i];
+      if (!item || typeof item !== 'object') continue;
+      if (item.v === null || item.v === undefined) continue;
+      var value = String(item.v);
+      var text = (item.t === null || item.t === undefined) ? value : String(item.t);
+      out.push({ v: value, t: text });
+    }
+    return out;
+  }
+
+  // Trigger summary uses the bare option name: a trailing " (123)" row count
+  // is dropped so the line stays short. "相册 (旧)" is left untouched.
+  function pdDisplayName(text) {
+    var s = (text === null || text === undefined) ? '' : String(text);
+    return s.replace(/\s*\(\d+\)\s*$/, '');
+  }
+
+  // Trigger summary line.
+  //   total 0          -> emptyLabel (falling back to placeholder)
+  //   nothing selected -> placeholder
+  //   1 or 2 selected  -> the names joined by a full-width comma
+  //   3+ selected      -> first two names + " 等 n 项"
+  function pdSummaryText(names, opts) {
+    var o = opts || {};
+    var placeholder = (o.placeholder === null || o.placeholder === undefined) ? '' : String(o.placeholder);
+    var emptyLabel = (o.emptyLabel === null || o.emptyLabel === undefined) ? '' : String(o.emptyLabel);
+    var total = (typeof o.total === 'number') ? o.total : 0;
+    var list = names || [];
+    if (total <= 0) return emptyLabel.length ? emptyLabel : placeholder;
+    var n = list.length;
+    if (n <= 0) return placeholder;
+    var first = String(list[0]);
+    if (n === 1) return first;
+    var second = String(list[1]);
+    if (n === 2) return first + '、' + second;
+    return first + '、' + second + ' 等 ' + n + ' 项';
+  }
+  /* @pure:end */
+
+  // Fire the change signal consumed by any external summary / collector.
+  function dispatchChanged() {
+    var evt;
+    try {
+      evt = new CustomEvent(EVENT_NAME);
+    } catch (err) {
+      evt = document.createEvent('CustomEvent');
+      evt.initCustomEvent(EVENT_NAME, false, false, null);
+    }
+    document.dispatchEvent(evt);
+  }
+
+  function make(tag, className) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    return node;
+  }
+
+  // Build one block. Idempotent: a block carrying data-initialized="1" is left
+  // alone, so repeated init() calls never duplicate the widget.
+  function build(container) {
+    if (!container || container.getAttribute('data-initialized') === '1') return false;
+    container.setAttribute('data-initialized', '1');
+
+    var fieldName = container.getAttribute('data-name') || '';
+    var placeholder = container.getAttribute('data-placeholder') || '';
+    var emptyLabel = container.getAttribute('data-empty-label') || '';
+    var keepCount = container.getAttribute('data-summary-full') === '1';
+
+    var payload = container.querySelector('script.export-dropdown-options');
+    var options = pdParseOptions(payload ? payload.textContent : null);
+    var disabled = options.length === 0;
+
+    // The panel is absolutely positioned below the trigger, so the block has
+    // to be the positioning context.
+    container.style.position = 'relative';
+    container.style.marginTop = '0.25rem';
+
+    // --- trigger: looks like a text input ---
+    var trigger = make('div', 'ls-input cursor-pointer flex items-center justify-between');
+    trigger.setAttribute('role', 'button');
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    if (disabled) {
+      trigger.setAttribute('aria-disabled', 'true');
+      trigger.style.opacity = '0.5';
+      trigger.style.cursor = 'not-allowed';
+    } else {
+      trigger.setAttribute('tabindex', '0');
+    }
+
+    var summary = make('span', 'export-dropdown-summary truncate');
+    summary.style.flex = '1 1 auto';
+    summary.style.minWidth = '0';
+
+    var caret = make('span', 'text-ink-2');
+    caret.style.flexShrink = '0';
+    caret.style.marginLeft = '0.5rem';
+    caret.setAttribute('aria-hidden', 'true');
+    caret.textContent = '▾';
+
+    // .ls-input sets display:block, and the utility that flips it back to flex
+    // is emitted after .ls-input in the built stylesheet. Pin it inline so the
+    // summary/caret layout holds whatever the source order turns out to be.
+    trigger.style.display = 'flex';
+
+    trigger.appendChild(summary);
+    trigger.appendChild(caret);
+
+    // --- panel: pinned under the trigger, scrolled past 16rem ---
+    var panel = make('div', 'rounded-md shadow-card bg-surface border p-2 overflow-y-auto');
+    panel.style.position = 'absolute';
+    panel.style.left = '0';
+    panel.style.right = '0';
+    panel.style.top = '100%';
+    panel.style.marginTop = '0.25rem';
+    panel.style.zIndex = '30';
+    panel.style.maxHeight = '16rem';
+    panel.style.display = 'none';
+    panel.style.borderColor = 'var(--lsky-border, #e9ecf0)';
+    panel.setAttribute('role', 'listbox');
+    panel.setAttribute('aria-multiselectable', 'true');
+
+    var boxes = [];
+
+    function addRow(opt) {
+      var row = make('label', 'flex items-center gap-2 cursor-pointer text-sm');
+      row.style.padding = '0.375rem 0.5rem';
+      row.style.borderRadius = '0.375rem';
+      row.addEventListener('mouseenter', function () {
+        row.style.background = 'var(--lsky-surface-2, #fafbfc)';
+      });
+      row.addEventListener('mouseleave', function () {
+        row.style.background = '';
+      });
+
+      var box = make('input', 'w-5 h-5');
+      box.type = 'checkbox';
+      box.value = opt.v;
+      box.setAttribute('data-label', opt.t);
+
+      var text = make('span', 'truncate');
+      text.style.minWidth = '0';
+      text.textContent = opt.t;
+
+      row.appendChild(box);
+      row.appendChild(text);
+      panel.appendChild(row);
+      boxes.push(box);
+    }
+
+    for (var i = 0; i < options.length; i++) addRow(options[i]);
+
+    // --- hidden inputs mirroring the selection ---
+    var values = make('div', 'export-dropdown-values');
+
+    function rebuildValues() {
+      while (values.firstChild) values.removeChild(values.firstChild);
+      for (var j = 0; j < boxes.length; j++) {
+        if (!boxes[j].checked) continue;
+        var hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = fieldName;
+        hidden.value = boxes[j].value;
+        values.appendChild(hidden);
+      }
+    }
+
+    function selectedNames() {
+      var names = [];
+      for (var k = 0; k < boxes.length; k++) {
+        if (!boxes[k].checked) continue;
+        var raw = boxes[k].getAttribute('data-label') || boxes[k].value;
+        names.push(keepCount ? raw : pdDisplayName(raw));
+      }
+      return names;
+    }
+
+    function renderSummary() {
+      var names = selectedNames();
+      summary.textContent = pdSummaryText(names, {
+        placeholder: placeholder,
+        emptyLabel: emptyLabel,
+        total: options.length
+      });
+      if (names.length === 0) {
+        summary.classList.remove('text-ink');
+        summary.classList.add('text-ink-2');
+      } else {
+        summary.classList.remove('text-ink-2');
+        summary.classList.add('text-ink');
+      }
+    }
+
+    function sync() {
+      rebuildValues();
+      renderSummary();
+      dispatchChanged();
+    }
+
+    function openPanel() {
+      if (disabled) return;
+      panel.style.display = 'block';
+      trigger.setAttribute('aria-expanded', 'true');
+      container.setAttribute('data-open', '1');
+    }
+
+    function closePanel() {
+      panel.style.display = 'none';
+      trigger.setAttribute('aria-expanded', 'false');
+      container.removeAttribute('data-open');
+    }
+
+    function togglePanel() {
+      if (panel.style.display === 'block') closePanel();
+      else openPanel();
+    }
+
+    function isOpen() {
+      return panel.style.display === 'block';
+    }
+
+    // Toggling the trigger opens/closes; it must not be treated as an
+    // outside click by the document listener below.
+    trigger.addEventListener('click', function (event) {
+      event.preventDefault();
+      if (!disabled) togglePanel();
+    });
+
+    trigger.addEventListener('keydown', function (event) {
+      var key = event.key;
+      if (key === 'Enter' || key === ' ' || key === 'Spacebar') {
+        event.preventDefault();
+        if (!disabled) togglePanel();
+      } else if (key === 'Escape') {
+        closePanel();
+      }
+    });
+
+    // Row clicks toggle the checkbox through the wrapping <label> and keep the
+    // panel open, which is what multi-select needs.
+    panel.addEventListener('change', function () {
+      sync();
+    });
+
+    document.addEventListener('click', function (event) {
+      if (isOpen() && !container.contains(event.target)) closePanel();
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && isOpen()) closePanel();
+    });
+
+    // The embedded JSON payload element stays in place; it renders as nothing.
+    container.appendChild(trigger);
+    container.appendChild(panel);
+    container.appendChild(values);
+
+    renderSummary();
+    rebuildValues();
+    return true;
+  }
+
+  function init(root) {
+    var scope = root || document;
+    var nodes = scope.querySelectorAll('.export-dropdown');
+    var built = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      if (build(nodes[i])) built++;
+    }
+    return built;
+  }
+
+  // Debug helper: current trigger text for a block (element or element id).
+  function summary(target) {
+    var container = target;
+    if (typeof container === 'string') container = document.getElementById(container);
+    if (!container || !container.querySelector) return '';
+    var node = container.querySelector('.export-dropdown-summary');
+    return node ? node.textContent : '';
+  }
+
+  window.LskyExportDropdown = {
+    init: init,
+    summary: summary
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      init(document);
+    });
+  } else {
+    init(document);
+  }
+})();
+
+        </script>
+        <script>
+/* Export date filter: single-month calendar + quick range buttons.
+ *
+ * Zero dependency (native DOM only). No library, no build step.
+ *
+ * Mount contract (all selectors are configurable through data attributes):
+ *   #export-calendar[data-days][data-from][data-to]  calendar host
+ *   #export-date-quick  [data-quick]                 quick range buttons
+ *   data-from / data-to                              the two <input type=date>
+ *   #export-date-summary                             human readable summary
+ *
+ * Image counts: data-days is a JSON object { "Y-m-d": count }. An empty object
+ * (or invalid JSON) is tolerated: the calendar still works and every day stays
+ * clickable, only the per-day count badges are absent.
+ *
+ * Any range change (including clear) dispatches on document:
+ *   new CustomEvent('export:filters-changed', { detail: { from, to } })
+ *
+ * Public API: window.LskyExportCalendar = { init(), setRange(from, to), clear(), state() }
+ */
+(function () {
+  'use strict';
+
+  // #region pure-date-helpers
+  // Pure date helpers: no DOM, no globals, no side effects. selfcheck.mjs
+  // extracts this exact region and asserts behaviour against it.
+  function pad2(n) {
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  // Local 'Y-m-d'. Never use toISOString(): that returns UTC and would shift
+  // the day by one for positive UTC offsets.
+  function formatLocalDate(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function parseYmd(s) {
+    if (typeof s !== 'string') return null;
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return null;
+    var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function addDays(d, n) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  }
+
+  // Monday-first column index of a Date: 0 = Monday ... 6 = Sunday.
+  function mondayIndex(d) {
+    return (d.getDay() + 6) % 7;
+  }
+
+  // Weeks for one month (month = 1..12, Monday-first). Returns an array of
+  // weeks; each week is 7 cells. A cell is null (padding) or { day, ymd }.
+  function monthGrid(year, month) {
+    var lead = mondayIndex(new Date(year, month - 1, 1));
+    var daysInMonth = new Date(year, month, 0).getDate();
+    var cells = [];
+    var i, day;
+    for (i = 0; i < lead; i++) cells.push(null);
+    for (day = 1; day <= daysInMonth; day++) {
+      cells.push({ day: day, ymd: formatLocalDate(new Date(year, month - 1, day)) });
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+    var weeks = [];
+    for (i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+    return weeks;
+  }
+
+  // Inclusive range stats between two 'Y-m-d' bounds (either may be null).
+  // Returns { days, photos }: calendar days in the range and the summed image
+  // count of every day that has data. Reversed bounds are sorted first.
+  function rangeOf(daysMap, from, to) {
+    var a = parseYmd(from);
+    var b = parseYmd(to);
+    if (!a || !b) return { days: 0, photos: 0 };
+    if (a > b) { var swap = a; a = b; b = swap; }
+    var map = daysMap || {};
+    var days = 0, photos = 0;
+    var cur = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+    while (cur <= b) {
+      days += 1;
+      var n = Number(map[formatLocalDate(cur)]);
+      if (isFinite(n) && n > 0) photos += n;
+      cur = addDays(cur, 1);
+    }
+    return { days: days, photos: photos };
+  }
+
+  // Quick range boundaries. kind is one of today|week|month|year|clear and
+  // today is a local 'Y-m-d' string. Returns [from, to]; clear yields [null, null].
+  // week / month / year all end at today and start at the period boundary.
+  function quickRange(kind, today) {
+    var t = parseYmd(today);
+    if (!t) return [null, null];
+    var y = t.getFullYear(), m = t.getMonth();
+    switch (kind) {
+      case 'today':
+        return [today, today];
+      case 'week':
+        return [formatLocalDate(addDays(t, -mondayIndex(t))), today];
+      case 'month':
+        return [formatLocalDate(new Date(y, m, 1)), today];
+      case 'year':
+        return [formatLocalDate(new Date(y, 0, 1)), today];
+      default:
+        return [null, null];
+    }
+  }
+  // #endregion pure-date-helpers
+
+  // ---- presentation constants (inline styles only, see CSS note below) ----
+  // The theme does not expose the utility classes for grid gaps, hover or
+  // disabled opacity, so every one of those is written as an inline style.
+  var ACCENT = '#2563eb';
+  var ACCENT_TINT = 'rgba(37, 99, 235, 0.14)';
+  var ACCENT_HOVER = 'rgba(37, 99, 235, 0.08)';
+  var ACCENT_RING = 'rgba(37, 99, 235, 0.55)';
+
+  var WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+  var current = null;
+
+  // Parse data-days defensively; anything unusable degrades to "no counts".
+  function toDaysMap(raw) {
+    var out = {};
+    if (!raw) return out;
+    var obj;
+    try { obj = JSON.parse(raw); } catch (e) { return out; }
+    if (!obj || typeof obj !== 'object') return out;
+    for (var k in obj) {
+      if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(k)) continue;
+      var n = Number(obj[k]);
+      if (isFinite(n) && n > 0) out[k] = n;
+    }
+    return out;
+  }
+
+  // Latest 'Y-m-d' key, or null. ISO strings sort lexicographically.
+  function latestYmd(map) {
+    var best = null;
+    for (var k in map) {
+      if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+      if (best === null || k > best) best = k;
+    }
+    return best;
+  }
+
+  function el(tag, attrs, css, text) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      for (var a in attrs) {
+        if (Object.prototype.hasOwnProperty.call(attrs, a)) node.setAttribute(a, attrs[a]);
+      }
+    }
+    if (css) node.style.cssText = css;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function createInstance(root) {
+    var daysMap = toDaysMap(root.getAttribute('data-days'));
+    var hasData = Object.keys(daysMap).length > 0;
+
+    var fromInput = document.querySelector(root.getAttribute('data-from') || '#export-date-from');
+    var toInput = document.querySelector(root.getAttribute('data-to') || '#export-date-to');
+    var summaryEl = document.getElementById('export-date-summary');
+    var quickRoot = document.getElementById('export-date-quick');
+
+    var from = null, to = null;
+    var view; // { year, month } month shown in the grid
+
+    // Default view: the most recent month that has images, else this month.
+    var seedYmd = latestYmd(daysMap);
+    var seed = seedYmd ? parseYmd(seedYmd) : new Date();
+    view = { year: seed.getFullYear(), month: seed.getMonth() + 1 };
+
+    // ---- skeleton (rebuilt once; the grid is repainted on every change) ----
+    root.innerHTML = '';
+
+    var header = el('div', null,
+      'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;');
+    var prevBtn = el('button', { type: 'button', 'data-nav': '-1', 'aria-label': '上一月' },
+      'background:transparent;border:0;padding:2px 10px;border-radius:6px;font-size:16px;line-height:1;',
+      '\u2039');
+    prevBtn.className = 'cursor-pointer text-ink-2';
+    var titleEl = el('span', { 'data-title': '' }, null, '');
+    titleEl.className = 'text-sm font-medium text-ink';
+    var nextBtn = el('button', { type: 'button', 'data-nav': '1', 'aria-label': '下一月' },
+      'background:transparent;border:0;padding:2px 10px;border-radius:6px;font-size:16px;line-height:1;',
+      '\u203a');
+    nextBtn.className = 'cursor-pointer text-ink-2';
+    header.appendChild(prevBtn);
+    header.appendChild(titleEl);
+    header.appendChild(nextBtn);
+
+    var weekRow = el('div', null, 'display:grid;grid-template-columns:repeat(7,1fr);gap:4px;');
+    weekRow.className = 'grid';
+    for (var i = 0; i < WEEKDAY_LABELS.length; i++) {
+      var label = el('div', null, 'text-align:center;font-size:11px;line-height:2;', WEEKDAY_LABELS[i]);
+      label.className = 'text-ink-2';
+      weekRow.appendChild(label);
+    }
+
+    var grid = el('div', null,
+      'display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:2px;');
+    grid.className = 'grid';
+
+    var hint = el('div', null, 'font-size:11px;line-height:1.6;margin-top:4px;color:currentColor;opacity:.6;',
+      '有数字的日期表示当天存过图片');
+    hint.className = 'text-ink-2';
+
+    var footer = el('div', null, 'display:flex;align-items:center;justify-content:flex-end;margin-top:4px;');
+    var customBtn = el('button', { type: 'button', 'data-custom': '' },
+      'background:transparent;border:0;padding:0;', '自定义日期');
+    customBtn.className = 'cursor-pointer text-sm text-ink-2';
+    footer.appendChild(customBtn);
+
+    root.appendChild(header);
+    root.appendChild(weekRow);
+    root.appendChild(grid);
+    root.appendChild(hint);
+    root.appendChild(footer);
+
+    function todayYmd() {
+      return formatLocalDate(new Date());
+    }
+
+    function dayCell(ymd, day) {
+      var clickable = hasData ? !!daysMap[ymd] : true;
+      var isEdge = (from !== null && ymd === from) || (to !== null && ymd === to);
+      var inRange = from !== null && to !== null && ymd >= from && ymd <= to;
+
+      var node = document.createElement('div');
+      node.setAttribute('data-ymd', ymd);
+      node.setAttribute('data-clickable', clickable ? '1' : '0');
+      node.setAttribute('data-selected', isEdge ? '1' : '0');
+      node.setAttribute('role', 'button');
+
+      var css = 'position:relative;height:32px;border-radius:6px;display:flex;' +
+        'align-items:center;justify-content:center;font-size:13px;line-height:1;' +
+        'user-select:none;transition:background .12s ease;';
+      var baseBg = 'transparent';
+      if (isEdge) {
+        css += 'background:' + ACCENT + ';color:#fff;font-weight:600;';
+        baseBg = ACCENT;
+      } else if (inRange) {
+        css += 'background:' + ACCENT_TINT + ';';
+        baseBg = ACCENT_TINT;
+      } else if (clickable) {
+        css += 'cursor:pointer;';
+      } else {
+        css += 'opacity:.3;cursor:default;';
+      }
+      node.dataset.baseBg = baseBg;
+      node.style.cssText = css;
+
+      if (!isEdge && ymd === todayYmd()) {
+        node.style.boxShadow = 'inset 0 0 0 1px ' + ACCENT_RING;
+      }
+      if (clickable) node.setAttribute('tabindex', '0');
+
+      node.appendChild(el('span', null, null, String(day)));
+
+      if (hasData && daysMap[ymd] > 0) {
+        var badge = el('span', null,
+          'position:absolute;right:3px;bottom:1px;font-size:10px;line-height:1;',
+          String(daysMap[ymd]));
+        badge.className = 'text-ink-2';
+        if (isEdge) badge.style.color = 'rgba(255,255,255,.85)';
+        node.appendChild(badge);
+      }
+      return node;
+    }
+
+    function paint() {
+      titleEl.textContent = view.year + '年' + view.month + '月';
+      var weeks = monthGrid(view.year, view.month);
+      grid.innerHTML = '';
+      for (var w = 0; w < weeks.length; w++) {
+        for (var c = 0; c < weeks[w].length; c++) {
+          var cell = weeks[w][c];
+          if (!cell) { grid.appendChild(document.createElement('div')); continue; }
+          grid.appendChild(dayCell(cell.ymd, cell.day));
+        }
+      }
+    }
+
+    function writeInputs() {
+      if (fromInput) fromInput.value = from || '';
+      if (toInput) toInput.value = to || '';
+    }
+
+    function writeSummary() {
+      if (!summaryEl) return;
+      var text;
+      if (!from && !to) {
+        text = '未选择日期（= 不过滤日期）';
+      } else if (from && !to) {
+        text = from + ' 之后';
+      } else if (!from && to) {
+        text = to + ' 之前';
+      } else {
+        var r = rangeOf(daysMap, from, to);
+        text = from + ' ~ ' + to + '，共 ' + r.days + ' 天';
+        if (hasData) text += '（含 ' + r.photos + ' 张图）';
+      }
+      summaryEl.textContent = text;
+    }
+
+    function getState() {
+      return { from: from, to: to };
+    }
+
+    function emit() {
+      try {
+        document.dispatchEvent(new CustomEvent('export:filters-changed', { detail: getState() }));
+      } catch (e) { /* CustomEvent unsupported: nothing to do */ }
+    }
+
+    function commit(moveView) {
+      if (moveView && from) {
+        var d = parseYmd(from);
+        if (d) view = { year: d.getFullYear(), month: d.getMonth() + 1 };
+      }
+      writeInputs();
+      paint();
+      writeSummary();
+      emit();
+    }
+
+    function applyRange(f, t, moveView) {
+      from = parseYmd(f) ? f : null;
+      to = parseYmd(t) ? t : null;
+      if (from && to && from > to) { var s = from; from = to; to = s; }
+      commit(!!moveView);
+    }
+
+    // Click progression: 1st click = start, 2nd click = end (sorted),
+    // 3rd click restarts with a fresh start.
+    function pickDay(ymd) {
+      if (from === null && to === null) {
+        from = ymd;
+        to = null;
+      } else if (from !== null && to === null) {
+        if (ymd < from) { to = from; from = ymd; } else { to = ymd; }
+      } else {
+        from = ymd;
+        to = null;
+      }
+      commit(false);
+    }
+
+    function shiftMonth(delta) {
+      var m = view.month - 1 + delta;
+      var y = view.year + Math.floor(m / 12);
+      m = ((m % 12) + 12) % 12;
+      view = { year: y, month: m + 1 };
+      paint();
+    }
+
+    function toggleCustom() {
+      if (!fromInput || !toInput) return;
+      if (fromInput.classList.contains('hidden')) {
+        fromInput.classList.remove('hidden');
+        toInput.classList.remove('hidden');
+        customBtn.textContent = '收起';
+      } else {
+        fromInput.classList.add('hidden');
+        toInput.classList.add('hidden');
+        customBtn.textContent = '自定义日期';
+      }
+    }
+
+    function closestFrom(target, selector) {
+      if (!target || !target.closest) return null;
+      return target.closest(selector);
+    }
+
+    grid.addEventListener('click', function (e) {
+      var cell = closestFrom(e.target, '[data-ymd]');
+      if (!cell) return;
+      var ymd = cell.getAttribute('data-ymd');
+      if (hasData && !daysMap[ymd]) return;
+      pickDay(ymd);
+    });
+
+    grid.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      var cell = closestFrom(e.target, '[data-ymd]');
+      if (!cell) return;
+      var ymd = cell.getAttribute('data-ymd');
+      if (hasData && !daysMap[ymd]) return;
+      e.preventDefault();
+      pickDay(ymd);
+    });
+
+    grid.addEventListener('mouseover', function (e) {
+      var cell = closestFrom(e.target, '[data-ymd]');
+      if (!cell) return;
+      if (cell.getAttribute('data-selected') === '1') return;
+      if (cell.getAttribute('data-clickable') === '0') return;
+      cell.style.background = ACCENT_HOVER;
+    });
+
+    grid.addEventListener('mouseout', function (e) {
+      var cell = closestFrom(e.target, '[data-ymd]');
+      if (!cell) return;
+      if (e.relatedTarget && cell.contains(e.relatedTarget)) return;
+      if (cell.getAttribute('data-selected') === '1') return;
+      cell.style.background = cell.dataset.baseBg || '';
+    });
+
+    root.addEventListener('click', function (e) {
+      var nav = closestFrom(e.target, '[data-nav]');
+      if (nav) {
+        shiftMonth(Number(nav.getAttribute('data-nav')) || 0);
+        return;
+      }
+      if (closestFrom(e.target, '[data-custom]')) toggleCustom();
+    });
+
+    if (quickRoot) {
+      quickRoot.addEventListener('click', function (e) {
+        var btn = closestFrom(e.target, '[data-quick]');
+        if (!btn) return;
+        var bounds = quickRange(btn.getAttribute('data-quick'), todayYmd());
+        applyRange(bounds[0], bounds[1], true);
+      });
+    }
+
+    function onInputChange() {
+      applyRange(
+        fromInput && fromInput.value ? fromInput.value : null,
+        toInput && toInput.value ? toInput.value : null,
+        false
+      );
+    }
+    if (fromInput) fromInput.addEventListener('change', onInputChange);
+    if (toInput) toInput.addEventListener('change', onInputChange);
+
+    // Initial render.
+    paint();
+    writeInputs();
+    writeSummary();
+
+    return {
+      root: root,
+      setRange: function (f, t) { applyRange(f, t, true); },
+      clear: function () { applyRange(null, null, false); },
+      state: getState,
+      refresh: function () { paint(); writeSummary(); }
+    };
+  }
+
+  // Idempotent: repeated calls return the instance bound to the host element.
+  function init() {
+    var root = document.getElementById('export-calendar');
+    if (!root) return null;
+    if (root.__lskyExportCalendar) return root.__lskyExportCalendar;
+    var inst = createInstance(root);
+    root.__lskyExportCalendar = inst;
+    current = inst;
+    return inst;
+  }
+
+  // Emit one baseline event so listeners can render the initial summary line.
+  function boot() {
+    var inst = init();
+    if (!inst) return;
+    try {
+      document.dispatchEvent(new CustomEvent('export:filters-changed', { detail: inst.state() }));
+    } catch (e) { /* ignore */ }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+  window.LskyExportCalendar = {
+    init: init,
+    setRange: function (from, to) { if (current) current.setRange(from, to); },
+    clear: function () { if (current) current.clear(); },
+    state: function () { return current ? current.state() : { from: null, to: null }; }
+  };
+})();
+
+        </script>
+    @endpush
+
+    @push('scripts')
+        <script>
+            // 筛选条件一变就刷新「共 N 张 / 约 X」的摘要（防抖 400ms，复用预检接口）
+            (function () {
+                const EXPORT_PREVIEW_URL = '{{ route('settings.export.preview') }}';
+                const $summary = $('#export-preview-summary');
+                if (! $summary.length) { return; }
+
+                let debounceTimer = null;
+                let requestSeq = 0;
+
+                const prettySize = (bytes) => {
+                    if (! bytes) { return '0 B'; }
+                    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                    let value = bytes;
+                    let index = 0;
+                    while (value >= 1024 && index < units.length - 1) { value /= 1024; index += 1; }
+                    return (index === 0 ? value : value.toFixed(value >= 100 ? 0 : 1)) + ' ' + units[index];
+                };
+
+                // 与导出用的是同一套参数名：控件 name → URLSearchParams，空值一律不传
+                const collectSearch = () => {
+                    const search = new URLSearchParams();
+                    $('#export-filters').find('select, input').each(function () {
+                        if (! this.name) { return; }
+                        const value = $(this).val();
+                        if (value === null || value === undefined || value === '') { return; }
+                        if (Array.isArray(value)) {
+                            const name = this.name;
+                            value.forEach(item => search.append(name, item));
+                            return;
+                        }
+                        search.append(this.name, value);
+                    });
+                    return search;
+                };
+
+                const refresh = () => {
+                    const seq = ++requestSeq;
+                    axios.get(EXPORT_PREVIEW_URL, {params: collectSearch()}).then(response => {
+                        // 只认最后一次请求的结果：先发后到的响应直接丢掉
+                        if (seq !== requestSeq) { return; }
+                        const data = response.data || {};
+                        if (data.busy) {
+                            $summary.text('已有导出任务在进行中，等它结束再导出');
+                            return;
+                        }
+                        $summary.text('共 ' + (parseInt(data.count, 10) || 0) + ' 张 / 约 ' + prettySize(parseInt(data.bytes, 10) || 0));
+                    }).catch(() => {
+                        if (seq === requestSeq) { $summary.text(''); }
+                    });
+                };
+
+                // 下拉与月历改完值都会派发这个事件
+                document.addEventListener('export:filters-changed', () => {
+                    window.clearTimeout(debounceTimer);
+                    debounceTimer = window.setTimeout(refresh, 400);
+                });
+
+                refresh();
             })();
         </script>
     @endpush

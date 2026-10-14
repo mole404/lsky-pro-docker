@@ -49,7 +49,21 @@ class UserController extends Controller
             ->groupBy('image_tag.tag_id')
             ->pluck('total', 'tag_id');
 
-        return view('user.settings', compact('uncategorizedNum', 'strategyCounts', 'tagCounts'));
+        // 每个上传日各有多少张：给导出卡片的月历用 —— 前端据此把「哪天存过图片」直接标出来，
+        // 用户不用去猜哪天空着。键是 Y-m-d（与 created_at 落库的应用时区一致），值是张数。
+        // 取日期的写法按驱动分流，避免 substr() 在 pgsql 上不存在：
+        $dayExpression = DB::connection()->getDriverName() === 'pgsql'
+            ? "to_char(created_at, 'YYYY-MM-DD')"
+            : 'substr(created_at, 1, 10)';
+
+        $dayCounts = DB::table('images')
+            ->where('user_id', $user->id)
+            ->selectRaw("{$dayExpression} as day, count(*) as total")
+            ->groupBy('day')
+            ->pluck('total', 'day')
+            ->toArray();
+
+        return view('user.settings', compact('uncategorizedNum', 'strategyCounts', 'tagCounts', 'dayCounts'));
     }
 
     public function update(UserSettingRequest $request): Response
