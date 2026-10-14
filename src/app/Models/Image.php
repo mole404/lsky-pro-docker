@@ -128,6 +128,43 @@ class Image extends Model
 
     public function scopeFilter(Builder $builder, Request $request)
     {
+        // 把 `foo[]=1&foo[]=2` 这类多选参数归一成「去重后的 int 列表」：
+        // 只接受 int 或纯数字字符串（`1a`、`abc`、数组嵌套等一律丢弃），并按需允许 0。
+        // 归一后为空数组时，下面的 when() 因为是假值会整段跳过 —— 这样既做到「不传/空 = 不加限制」，
+        // 也不会产生 whereIn([]) 这种恒假条件。
+        $intIds = static function ($value, bool $allowZero = false): array {
+            if (! is_array($value)) {
+                return [];
+            }
+
+            $ids = [];
+            foreach ($value as $item) {
+                if (is_int($item)) {
+                    $id = $item;
+                } elseif (is_string($item) && ctype_digit($item)) {
+                    $id = (int) $item;
+                } else {
+                    continue;
+                }
+
+                if ($id > 0 || ($allowZero && $id === 0)) {
+                    $ids[$id] = $id;
+                }
+            }
+
+            return array_values($ids);
+        };
+
+        // 日期参数校验：只认规范的 `Y-m-d`，且日历上真实存在（checkdate 会挡掉 2026-02-30 / 2026-13-01）。
+        // 任何其它形状（残缺、超范围、数组、null）都返回 null，调用点据此「忽略该条件」而不是抛异常。
+        $validDate = static function ($value): ?string {
+            if (! is_string($value) || ! preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $matches)) {
+                return null;
+            }
+
+            return checkdate((int) $matches[2], (int) $matches[3], (int) $matches[1]) ? $value : null;
+        };
+
         return $builder->when($request->query('order') ?: 'newest', function (Builder $builder, $order) {
             switch ($order) {
                 case 'earliest':
@@ -170,7 +207,17 @@ class Image extends Model
             });
         })->when((int) $request->query('album_id'), function (Builder $builder, $albumId) {
             $builder->where('album_id', $albumId);
-        }, function (Builder $builder) {
+        }, function (Builder $builder) use ($request) {
+            // fork 新增（只新增取值，不改既有取值的行为）：`album_id=all` 表示「全部相册」，
+            // 即不加任何相册约束。未传该参数时仍是原来的 whereNull('album_id')
+            // （图片列表页「未分类」视图的语义），数字取值仍然是等值匹配 —— 后两者一字未改。
+            // 需要这个显式哨兵的原因：导出侧「一个相册都不勾 = 导出全部图片」若走缺省分支，
+            // 会退化成「只导出未分类」；且 `album_ids[]` 的 whereIn 会被额外 AND 上 whereNull
+            // 而恒为空集（实测：未分类占多数时，只传 album_ids[]=1 而不加哨兵会取到 0 行）。
+            if ($request->query('album_id') === 'all') {
+                return;
+            }
+
             $builder->whereNull('album_id');
         })->when($request->query('tags'), function (Builder $builder, $tags) {
             // fork 新增：按标签筛选，参数形状 `tags[]=<id>&tags[]=<id>`。
@@ -188,6 +235,52 @@ class Image extends Model
                     $query->where('tags.id', (int) $tagId);
                 });
             }
+        })->when($intIds($request->query('tag_ids')), function (Builder $builder, array $tagIds) {
+            // fork 新增：`tag_ids[]` 是导出侧用的标签参数名（与新版 UI 的 album_ids[] / strategy_ids[]
+            // 命名对齐），语义与上面既有的 `tags[]` 完全一致 —— 传入的每一个标签都必须命中（AND）。
+            // 既有 `tags[]` 分支的行为一字未改；两者同时出现时各加一组 whereHas，仍然都是 AND。
+            foreach ($tagIds as $tagId) {
+                $builder->whereHas('tags', function (Builder $query) use ($tagId) {
+                    $query->where('tags.id', $tagId);
+                });
+            }
+        })->when($intIds($request->query('album_ids'), true), function (Builder $builder, array $albumIds) {
+            // fork 新增：相册多选，参数形状 `album_ids[]=<id>`；`0` 是「未分类」的哨兵值
+            // （album_id IS NULL），正值是具体相册。归一化后为空数组时整段被 when() 跳过，
+            // 即「不传 / 空 = 该维度不加任何限制」—— 与列表页 `album_id` 缺省时强制
+            // whereNull('album_id') 的语义**不同**，导出侧走本条、不要复用 `album_id`。
+            // 「未分类」与具体相册之间是 OR：必须包进闭包，否则 orWhereNull 会平铺进外层
+            // 查询，把自己的 OR 分支从 user_id / permission / 其它维度的条件里摘出去
+            // （keyword 那段有同类教训，见上）。
+            $builder->where(function (Builder $query) use ($albumIds) {
+                $classified = array_values(array_diff($albumIds, [0]));
+
+                if ($classified !== []) {
+                    $query->whereIn('album_id', $classified);
+                }
+
+                if (in_array(0, $albumIds, true)) {
+                    if ($classified === []) {
+                        $query->whereNull('album_id');
+                    } else {
+                        $query->orWhereNull('album_id');
+                    }
+                }
+            });
+        })->when($intIds($request->query('strategy_ids')), function (Builder $builder, array $strategyIds) {
+            // fork 新增：存储策略多选，参数形状 `strategy_ids[]=<id>`；维度内 OR（whereIn），
+            // 维度之间 AND。非正整数与非法值已在 $intIds 里剔除，不会退化成 whereIn([])。
+            $builder->whereIn('strategy_id', $strategyIds);
+        })->when($validDate($request->query('date_from')), function (Builder $builder, string $dateFrom) {
+            // fork 新增：上传日期区间下界（闭区间，含当日 00:00:00）。
+            // created_at 落库时用的就是应用时区（config/app.php 的 timezone = PRC）的本地时间，
+            // 所以这里直接按字面字符串比较，**不做任何时区换算**；SQLite/MySQL 下
+            // 'Y-m-d H:i:s' 的字面比较等价于时间先后比较。
+            $builder->where('created_at', '>=', "{$dateFrom} 00:00:00");
+        })->when($validDate($request->query('date_to')), function (Builder $builder, string $dateTo) {
+            // fork 新增：上传日期区间上界（闭区间，含当日 23:59:59）。两端各自独立生效。
+            // 非法日期已被 $validDate 归一成 null ⇒ when() 跳过该条件，请求不会因参数格式出错而 500。
+            $builder->where('created_at', '<=', "{$dateTo} 23:59:59");
         });
     }
 
