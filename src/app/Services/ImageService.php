@@ -274,7 +274,14 @@ class ImageService
         return $image;
     }
 
-    public function getAdapter(Strategy $strategy): FilesystemAdapter
+    /**
+     * 按策略构造 flysystem 适配器。
+     *
+     * $httpOptions 是给「能配超时的驱动」留的口子 —— 当前只落在 S3（AWS SDK 的 http 配置项
+     * connect_timeout / timeout）：批量导出这种长响应里，一张图卡住就会占住一个 worker，
+     * 需要靠超时把它掐掉。传空数组时行为与从前**完全一致**（其它驱动不受影响）。
+     */
+    public function getAdapter(Strategy $strategy, array $httpOptions = []): FilesystemAdapter
     {
         $configs = $strategy->configs;
         return match ($strategy->key) {
@@ -282,7 +289,7 @@ class ImageService
                 location: $configs->get(LocalOption::Root) ?: config('filesystems.disks.uploads.root')
             ),
             StrategyKey::S3 => new AwsS3V3Adapter(
-                client: new S3Client([
+                client: new S3Client(array_merge([
                     'credentials' => [
                         'key'    => $configs->get(S3Option::AccessKeyId),
                         'secret' => $configs->get(S3Option::SecretAccessKey)
@@ -290,7 +297,7 @@ class ImageService
                     'endpoint' => $configs->get(S3Option::Endpoint),
                     'region' => $configs->get(S3Option::Region),
                     'version' => '2006-03-01',
-                ]),
+                ], $httpOptions ? ['http' => $httpOptions] : [])),
                 bucket: $configs->get(S3Option::Bucket),
             ),
             StrategyKey::Oss => new OssAdapter(

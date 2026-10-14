@@ -118,15 +118,18 @@ RUN printf '%s\n' \
 # 拼成存储路径并由 Image::url() 原样拼成直链（全程无 rawurlencode），名字里带 ? 会让直链
 # 在 ? 处被截断成查询串 ⇒ 图片永远打不开（# 更彻底，请求都不会发出）。这些字符在正常
 # 文件名里不会出现，所以对正常文件名是恒等变换 —— 不改变现有命名结果与链接形态。
+# 批量导出（用户端）也落在这两个文件上：routes/web.php 的 settings 组新增三条导出路由
+# （preview 只查库报体积 / export 流式下载 / result 读本人最近一次结果）；ImageService::getAdapter()
+# 加了可选参数 $httpOptions（S3 的 connect/read 超时）—— 默认空数组 ⇒ 其它调用方行为与从前完全一致。
 # routes/auth.php 也是有意偏离（F23 防爆破）：给 login / register / forgot-password /
 # confirm-password 四个 POST 端点加了 throttle（详见文件内注释）。它同样被钉住，
 # 改了不更新这行 md5 就构建失败。
 # 这几个文件以后只要被改动（哪怕手滑），构建就会红 —— md5 必须随改动同步更新。
 RUN printf '%s\n' \
         'dcc6b370414cf329b7902cdd85f33d2f  ./config/convention.php' \
-        '881fdbaed19ef39027783f093448875d  ./routes/web.php' \
+        '8ac0ca67f2a4c700854cbdf73f3ae9d7  ./routes/web.php' \
         'c1ab546f3e7f5237c1d45435171858ce  ./routes/auth.php' \
-        '06c38d587ac188750af34aaf224a239d  ./app/Services/ImageService.php' \
+        'b9c7f419231b50a1eac5ad952439d581  ./app/Services/ImageService.php' \
     | md5sum -c -
 
 # 有意偏离上游的另一个文件：composer.lock。
