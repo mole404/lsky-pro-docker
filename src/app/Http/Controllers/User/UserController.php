@@ -10,6 +10,7 @@ use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -27,7 +28,28 @@ class UserController extends Controller
 
     public function settings(): View
     {
-        return view('user.settings');
+        /** @var User $user */
+        $user = Auth::user();
+
+        // 批量导出卡片的筛选项数量。全部是只读聚合查询、不写库、不做缓存：
+        // 图片数随时在变，设置页每次打开都要显示当下的真实数量。
+        // 归属一律限定在自己的图上（未分类 = album_id 为空）。
+        $uncategorizedNum = $user->images()->whereNull('album_id')->count();
+
+        $strategyCounts = DB::table('images')
+            ->where('user_id', $user->id)
+            ->selectRaw('strategy_id, count(*) as total')
+            ->groupBy('strategy_id')
+            ->pluck('total', 'strategy_id');
+
+        $tagCounts = DB::table('image_tag')
+            ->join('images', 'images.id', '=', 'image_tag.image_id')
+            ->where('images.user_id', $user->id)
+            ->selectRaw('image_tag.tag_id as tag_id, count(*) as total')
+            ->groupBy('image_tag.tag_id')
+            ->pluck('total', 'tag_id');
+
+        return view('user.settings', compact('uncategorizedNum', 'strategyCounts', 'tagCounts'));
     }
 
     public function update(UserSettingRequest $request): Response
