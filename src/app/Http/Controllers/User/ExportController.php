@@ -54,12 +54,16 @@ class ExportController extends Controller
      */
     public function preview(Request $request): JsonResponse
     {
+        /** @var User $user */
+        $user = Auth::user();
         $query = $this->filtered($request);
 
         return response()->json([
             'count' => (clone $query)->count(),
             // size 列的单位是 KB（实测 912230 ≈ 891MB）
             'bytes' => (int) round((float) (clone $query)->sum('size') * 1024),
+            // 已经有导出在跑就先说清楚：前端提示后不跳转，避免用户撞上 429 的纯文本页
+            'busy'  => ExportConcurrency::isActive($user->id),
         ]);
     }
 
@@ -70,8 +74,16 @@ class ExportController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
+        $result = Cache::get($this->resultKey($user->id));
 
-        return response()->json(Cache::get($this->resultKey($user->id)));
+        if (! is_array($result)) {
+            // 显式回一个 JSON 的 null。不能直接 response()->json(null)：Symfony 的 JsonResponse
+            // 会把 PHP 的 null 归一成 `{}`、把空数组归一成 `[]`，前端拿到空对象更容易被误当成
+            // 「有一条记录、只是字段全空」，从而显示一个 0 张的假结果。
+            return response()->json([], 200)->setContent('null');
+        }
+
+        return response()->json($result);
     }
 
     /**
@@ -307,6 +319,12 @@ class ExportController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
+
+        // 必须给 `album_id` 一个显式哨兵值：scopeFilter 在「没传 album_id」时会强制
+        // whereNull('album_id')（那是图片列表页「未分类」视图的语义）。导出侧若走缺省分支，
+        // 就只会导出未分类的那些图，而且 album_ids[] 的 whereIn 会被它 AND 成空集。
+        // 这里只改本次请求自己的一份 query，不影响别的调用方（它们也不会传这个值）。
+        $request->query->set('album_id', 'all');
 
         // reorder('id')：固定按主键升序取（chunkById 需要单调键），也顺带丢掉列表页的默认排序
         return $user->images()->filter($request)->reorder('id');

@@ -102,6 +102,15 @@ final class ExportConcurrency
         return count(self::read());
     }
 
+    /**
+     * 某个账号此刻是否有导出在进行。
+     * 设置页在跳转下载前用它先提示一句 —— 否则用户会直接撞到 429 的纯文本页。
+     */
+    public static function isActive(int $userId): bool
+    {
+        return isset(self::read()[$userId]);
+    }
+
     /** 全局并发上限 */
     public static function cap(): int
     {
