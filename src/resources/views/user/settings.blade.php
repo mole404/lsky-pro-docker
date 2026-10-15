@@ -160,7 +160,6 @@
                         <p>· 导出采用流式传输，导出期间请不要关闭或刷新页面，确保网络稳定。中途中断或网络波动需要重新导出，不支持断点续传。</p>
                         <p>· 同一账号同时只能有一个导出任务在进行。</p>
                         <p>· 图片较多时下载比较久，大批量导出请预留充足时间。中断后浏览器可能残留未完成的临时下载文件，请自行清理。</p>
-                        <p id="export-result" class="hidden mt-2 font-medium text-ink"></p>
                     </div>
                 </div>
                 <div class="px-4 py-3 text-right sm:px-6">
@@ -192,23 +191,27 @@
                 const EXPORT_CANCEL_URL = '{{ route('settings.export.cancel') }}';
                 const CSRF_TOKEN = '{{ csrf_token() }}';
 
-                const POLL_FIRST_MS = 2000;          // 头一次查结果：导出很快时不用干等
-                const POLL_INTERVAL = 5000;          // 常规轮询间隔
-                const POLL_MAX = 180;                // 最多轮询次数（够大包跑完）
+                const POLL_FIRST_MS = 1500;          // 头一次查：导出很快时不用干等
+                const POLL_INTERVAL = 2000;          // 常规轮询间隔（一次缓存读取，很轻）
+                const POLL_MAX = 900;                // 最多轮询次数（≈30 分钟，够大包跑完）
                 const CANCEL_POLL_INTERVAL = 1000;   // 点了取消后加密轮询，尽快看到「已中断」
                 const CANCEL_POLL_MAX = 30;
+                const STALL_MS = 8000;               // 发起后这么久还没见过自己的进度 ⇒ 当作没起来
                 const BUTTON_DISABLE_MS = 3000;      // 发起后按钮禁用时长
 
                 const $button = $('#export-submit');
-                const $result = $('#export-result');
 
-                // 展示中的那条结果是哪一次导出：轮询靠它区分「本次」与进页面时读到的旧记录
-                let lastStartedAt = null;
+                // 本次导出的标识：服务端把它写进结果记录，前端只认自己这一个。于是页面
+                // 不必在打开时读「上次的结果」来区分本次与上次 —— 历史结果一次都不会显示。
+                let run = null;
+                let frame = null;        // 下载用的隐藏 iframe（见 startDownload）
                 let pollTimer = null;
                 let pollCount = 0;
                 let pollInterval = POLL_INTERVAL;
                 let pollMax = POLL_MAX;
                 let exporting = false;   // 本次导出是否还在进行（决定取消按钮是否有意义）
+                let startedMs = 0;       // 发起时刻，用于判断这次任务有没有真的起来
+                let sawProgress = false; // 是否见过服务端上报的进度
 
                 // 控件 name 即接口参数名；空值一律不传（= 该维度不限）
                 const collectSearch = () => {
@@ -246,8 +249,6 @@
                     return '本次导出已完成：' + ok + ' 张（约 ' + formatSize(bytes) + '）';
                 };
 
-                const showResult = (text) => { $result.text(text).removeClass('hidden'); };
-
                 // 结果接口无记录时返回 null；这里再兜一层：字段全空的对象同样当作没有记录
                 const hasRecord = (data) => Boolean(data) && Boolean(
                     data.started_at || data.finished_at || data.total || data.ok || data.failed || data.bytes || data.aborted
@@ -268,26 +269,40 @@
                 const settle = (data) => {
                     exporting = false;
                     stopPolling();
-                    showResult(resultText(data));
+                    // 结果只出现在弹窗里：页面上不留任何「上次导出」的残影
                     resultDialog(data);
                 };
 
                 const pollOnce = () => {
                     axios.get(EXPORT_RESULT_URL).then(response => {
-                        const data = response.data;
-                        // 进页面时已有记录 ⇒ 只有 started_at 变了才是本次导出
-                        if (hasRecord(data) && (lastStartedAt === null || data.started_at !== lastStartedAt)) {
-                            lastStartedAt = data.started_at || lastStartedAt;
-                            settle(data);
+                        const data = response.data || {};
+                        const record = data.record;
+                        const progress = data.progress;
+
+                        // 只认 run 与本次一致的结果：历史记录、别人那笔都不会误报
+                        if (hasRecord(record) && record.run === run) {
+                            settle(record);
                             return;
                         }
+
+                        if (progress && progress.run === run) {
+                            sawProgress = true;
+                            updateBar(progress.done, progress.total, progress.bytes);
+                        } else if (! sawProgress && Date.now() - startedMs > STALL_MS) {
+                            // 发起后一直没见过自己的进度 ⇒ 这次导出压根没跑起来（被拒/出错）
+                            exporting = false;
+                            stopPolling();
+                            stallDialog();
+                            return;
+                        }
+
                         if (++pollCount >= pollMax) {
                             exporting = false;
                             stopPolling();
-                            showResult('导出仍在进行或结果暂不可查，稍后刷新本页查看');
                             timeoutDialog();
                             return;
                         }
+
                         schedulePoll(pollInterval);
                     }).catch(() => {
                         if (++pollCount >= pollMax) {
@@ -300,13 +315,34 @@
                     });
                 };
 
+                // 进度条：服务端每写一张图回报一次，这里把宽度推上去（不需要新接口）
+                const barHtml = (count, bytes) =>
+                    '<p>正在打包 <b>' + count + '</b> 张图片（约 ' + formatSize(bytes) + '）。</p>'
+                    + '<div style="margin-top:.75rem;height:.5rem;border-radius:9999px;background:rgba(0,0,0,.12);overflow:hidden">'
+                    + '<div id="export-bar" style="height:100%;width:0%;border-radius:9999px;background:#3085d6;transition:width .4s ease"></div>'
+                    + '</div>'
+                    + '<p id="export-bar-text" style="margin-top:.375rem;font-size:.875rem;opacity:.75">'
+                    + '已完成 0 / ' + count + ' 张（0%）</p>';
+
+                const updateBar = (done, total, bytes) => {
+                    const container = Swal.getHtmlContainer();
+                    if (! container) { return; }
+                    const bar = container.querySelector('#export-bar');
+                    const text = container.querySelector('#export-bar-text');
+                    const percent = total > 0 ? Math.max(0, Math.min(100, Math.round(done * 100 / total))) : 0;
+                    if (bar) { bar.style.width = percent + '%'; }
+                    if (text) {
+                        text.textContent = '已完成 ' + done + ' / ' + total + ' 张（' + percent + '%'
+                            + (bytes > 0 ? '，' + formatSize(bytes) : '') + '）';
+                    }
+                };
+
                 // 进行中：只有「取消导出」一个按钮 —— 导出期间页面被它占住，避免误操作打断
                 const progressDialog = (count, bytes) => {
                     Swal.fire(dialog({
                         title: '导出进行中',
-                        html: '<p>正在打包 <b>' + count + '</b> 张图片（约 ' + formatSize(bytes) + '）。</p>'
-                            + '<p style="margin-top:.5rem;font-size:.875rem;opacity:.75">打包期间请保持本页面开启。</p>',
-                        icon: 'info',
+                        html: barHtml(count, bytes),
+                        showLoading: true,
                         allowOutsideClick: false,
                         allowEscapeKey: false,
                         showConfirmButton: false,
@@ -316,6 +352,17 @@
                     })).then(result => {
                         if (result.dismiss === Swal.DismissReason.cancel && exporting) { cancelDialog(); }
                     });
+                };
+
+                // 发起后任务没起来（被拒/出错）：与其干等到超时，不如早点说清楚
+                const stallDialog = () => {
+                    Swal.fire(dialog({
+                        icon: 'warning',
+                        title: '导出没能开始',
+                        text: '服务端没有接到这次导出，请再试一次；若反复出现请稍后重试。',
+                        confirmButtonColor: '#3085d6',
+                        confirmButtonText: '知道了',
+                    }));
                 };
 
                 const resultDialog = (data) => {
@@ -343,12 +390,17 @@
 
                 // 取消：给服务端置个旗标，循环会在下一张图的边界停下（原生下载没法在客户端掐断）
                 const cancelDialog = () => {
-                    Swal.fire(dialog({
-                        title: '正在取消导出…',
-                        allowOutsideClick: false,
-                        allowEscapeKey: false,
-                        showConfirmButton: false,
-                    }));
+                    // 就地改标题：进度条留在原地继续显示，取消期间也看得见停在哪一张
+                    if (Swal.getPopup()) {
+                        Swal.update({title: '正在取消导出…', showCancelButton: false, showLoading: true});
+                    } else {
+                        Swal.fire(dialog({
+                            title: '正在取消导出…',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                            showConfirmButton: false,
+                        }));
+                    }
 
                     axios.post(EXPORT_CANCEL_URL, {_token: CSRF_TOKEN}).then(() => {
                         // 转去等那条「已中断」的结果记录
@@ -368,16 +420,23 @@
                     });
                 };
 
-                // 进页面时先展示上一次的导出结果；没有记录就什么都不显示
-                axios.get(EXPORT_RESULT_URL).then(response => {
-                    const data = response.data;
-                    if (! hasRecord(data)) { return; }
-                    lastStartedAt = data.started_at || null;
-                    showResult(resultText(data));
-                }).catch(() => {});
+                // 隐藏 iframe 下载：不替换当前页面（万一是错误响应，也只会落在这个看不见的框里），
+                // 大文件依旧由浏览器直接落盘、不经过内存。
+                const startDownload = (url) => {
+                    if (! frame) {
+                        frame = document.createElement('iframe');
+                        frame.style.display = 'none';
+                        frame.title = 'export-download';
+                        document.body.appendChild(frame);
+                    }
+                    frame.src = url;
+                };
 
                 $button.on('click', () => {
                     const search = collectSearch();
+                    // 本次导出的标识：服务端写进结果记录，轮询只认它
+                    run = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+                    search.append('run', run);
                     const query = search.toString();
                     $button.prop('disabled', true);
                     axios.get(EXPORT_PREVIEW_URL, {params: search}).then(response => {
@@ -412,10 +471,12 @@
                             // 按钮保持禁用一段时间，避免连点重复发起
                             window.setTimeout(() => $button.prop('disabled', false), BUTTON_DISABLE_MS);
 
-                            // 浏览器原生下载：大文件直接落盘，不经过内存
-                            window.location = EXPORT_URL + (query === '' ? '' : '?' + query);
+                            // 浏览器原生下载（隐藏 iframe）：大文件直接落盘、不经过内存
+                            startDownload(EXPORT_URL + (query === '' ? '' : '?' + query));
 
                             exporting = true;
+                            sawProgress = false;
+                            startedMs = Date.now();
                             pollCount = 0;
                             pollInterval = POLL_INTERVAL;
                             pollMax = POLL_MAX;
