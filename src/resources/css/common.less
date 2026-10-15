@@ -64,7 +64,7 @@ progress::-webkit-progress-value {
     }
 }
 
-// 气泡：默认在条上方；侧栏用 --below 变体（容器是 overflow-scroll，放下面才不会被裁）
+// 悬浮气泡：固定在条上方（放下面会盖住条下方那行说明文字）
 .ls-seg__tip {
     position: absolute;
     left: 50%;
@@ -89,11 +89,6 @@ progress::-webkit-progress-value {
     visibility: hidden;
     pointer-events: none;
     transition: opacity .14s ease;
-
-    &.ls-seg__tip--below {
-        bottom: auto;
-        top: calc(100% + 8px);
-    }
 
     .ls-seg:first-child & {
         left: 0;
