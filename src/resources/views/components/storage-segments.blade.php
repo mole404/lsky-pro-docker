@@ -41,8 +41,9 @@
             @endphp
             <div class="ls-seg" style="width: {{ round($width, 4) }}%; background: {{ $segment['color'] }}">
                 {{-- 气泡一律在条上方（侧栏放下方会盖住「已用/总量」那行字）；左右由内联的 min() 夹在条内 --}}
+                {{-- 夹取：上限不超过「条宽 − 气泡宽」，并用 max(0px, …) 兜底 —— 条比气泡还窄时 min() 会算出负数把气泡推到条外 --}}
                 <span class="ls-seg__tip"
-                      style="left: min({{ round($item['start'], 4) }}%, calc(100% - {{ $tipWidth }}px))">
+                      style="left: min({{ round($item['start'], 4) }}%, max(0px, calc(100% - {{ $tipWidth }}px)))">
                     <span class="ls-seg__tip-name">{{ $segment['name'] }}</span>
                     <span class="ls-seg__tip-num">{{ \App\Utils::formatSize($segment['kb'] * 1024) }} · {{ $segment['images'] }} 张 · {{ round($segment['share'], 1) }}%</span>
                 </span>

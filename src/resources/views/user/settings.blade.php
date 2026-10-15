@@ -1117,8 +1117,9 @@
     titleWrap.className = 'text-sm font-medium text-ink';
     var PICK_BTN_CSS = 'display:inline-flex;align-items:center;gap:3px;background:transparent;border:0;' +
       'padding:2px 5px;border-radius:6px;font:inherit;color:inherit;line-height:1.5;';
-    var PICK_CELL_CSS = 'background:transparent;border:0;padding:5px 2px;border-radius:6px;cursor:pointer;' +
-      'font-size:12.5px;line-height:1.35;color:inherit;';
+    // white-space:nowrap：否则 4 列布局里「10月/11月/12月」会被折成两行
+    var PICK_CELL_CSS = 'background:transparent;border:0;padding:5px 6px;border-radius:6px;cursor:pointer;' +
+      'font-size:12.5px;line-height:1.35;color:inherit;white-space:nowrap;';
     var PICK_PANEL_CSS = 'position:absolute;top:calc(100% + 4px);left:0;z-index:30;display:none;padding:6px;' +
       'border-radius:10px;background:var(--lsky-surface);border:1px solid var(--lsky-border);' +
       'box-shadow:var(--lsky-shadow-pop);gap:4px;';

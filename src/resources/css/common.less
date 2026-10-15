@@ -83,7 +83,7 @@ progress::-webkit-progress-value {
     flex-direction: column;
     gap: 1px;
     width: max-content;
-    max-width: var(--ls-tip-w);
+    max-width: min(var(--ls-tip-w), 100%);   // 条本身比气泡窄时，气泡跟着缩到条宽
     padding: 6px 9px;
     border-radius: 8px;
     background: var(--lsky-surface);
