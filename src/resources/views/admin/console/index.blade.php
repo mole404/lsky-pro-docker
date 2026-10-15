@@ -53,7 +53,7 @@
                     <span class="w-8 h-8 rounded-lg bg-brand-soft text-brand flex items-center justify-center shrink-0">
                         <i class="fas fa-server text-[13.5px]"></i>
                     </span>
-                    <p class="text-ink-2 text-[13px] truncate">占用储存</p>
+                    <p class="text-ink-2 text-[13px] truncate">占用存储</p>
                 </div>
                 <p class="mt-3 text-ink text-[21px] font-semibold tabular-nums truncate">
                     {{ \App\Utils::formatSize(\App\Models\Image::query()->sum('size') * 1024) }}

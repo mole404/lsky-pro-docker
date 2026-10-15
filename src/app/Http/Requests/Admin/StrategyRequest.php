@@ -63,10 +63,10 @@ class StrategyRequest extends FormRequest
                 'configs.root' => ['max:1000', function ($attribute, $value, $fail) {
                     if ($value) {
                         if (! is_dir($value)) {
-                            return $fail('储存路径不存在');
+                            return $fail('存储路径不存在');
                         }
                         if (! is_writeable($value)) {
-                            return $fail('储存路径没有写入权限');
+                            return $fail('存储路径没有写入权限');
                         }
                     }
                 }],
@@ -157,7 +157,7 @@ class StrategyRequest extends FormRequest
                 'configs.secret_access_key' => 'SecretAccessKey',
                 'configs.endpoint' => '连接地址',
                 'configs.region' => '区域',
-                'configs.bucket' => '储存桶名称',
+                'configs.bucket' => '存储桶名称',
             ],
             StrategyKey::Oss => [
                 'configs.access_key_id' => 'AccessKeyId',
@@ -170,7 +170,7 @@ class StrategyRequest extends FormRequest
                 'configs.secret_id' => 'SecretId',
                 'configs.secret_key' => 'SecretKey',
                 'configs.region' => '所属地域',
-                'configs.bucket' => '储存桶名称',
+                'configs.bucket' => '存储桶名称',
             ],
             StrategyKey::Kodo => [
                 'configs.access_key' => 'AccessKey',

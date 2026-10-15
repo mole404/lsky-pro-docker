@@ -16,6 +16,6 @@ final class OssOption
     /** @var string Endpoint */
     const Endpoint = 'endpoint';
 
-    /** @var string 储存桶名称 */
+    /** @var string 存储桶名称 */
     const Bucket = 'bucket';
 }

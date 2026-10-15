@@ -90,10 +90,10 @@ class ImageService
         $group = ! is_null($user) ? $user->group : Group::query()->where('is_guest', true)->first();
         // 组配置
         $configs = $group->configs;
-        // 储存策略
+        // 存储策略
         $strategies = $group->strategies()->get();
         if ($strategies->isEmpty()) {
-            throw new UploadException('没有可用的储存，请联系管理员。');
+            throw new UploadException('没有可用的存储，请联系管理员。');
         }
 
         $extension = strtolower($file->getClientOriginalExtension());
@@ -122,7 +122,7 @@ class ImageService
 
         $image->strategy_id = $strategy->id;
 
-        // 默认储存策略
+        // 默认存储策略
         if (! is_null($user)) {
             if (Utils::config(ConfigKey::IsUserNeedVerify) && ! $user->email_verified_at) {
                 throw new UploadException('账户未验证');
@@ -133,7 +133,7 @@ class ImageService
             }
 
             if ($file->getSize() / 1024 + $user->images()->sum('size') > $user->capacity) {
-                throw new UploadException('储存空间不足');
+                throw new UploadException('存储空间不足');
             }
 
             // 图片保存至默认相册(若有)

@@ -129,7 +129,7 @@ RUN printf '%s\n' \
         'dcc6b370414cf329b7902cdd85f33d2f  ./config/convention.php' \
         'c3d84e42370fea86239a8a076492a215  ./routes/web.php' \
         'c1ab546f3e7f5237c1d45435171858ce  ./routes/auth.php' \
-        'b9c7f419231b50a1eac5ad952439d581  ./app/Services/ImageService.php' \
+        'c0ea82b790494e247de943f75fa5d059  ./app/Services/ImageService.php' \
     | md5sum -c -
 
 # 有意偏离上游的另一个文件：composer.lock。

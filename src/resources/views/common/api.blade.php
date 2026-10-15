@@ -460,7 +460,7 @@
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap">strategy_id</td>
                             <td class="px-3 py-2 whitespace-nowrap">Integer</td>
-                            <td class="px-3 py-2 whitespace-nowrap">储存策略ID</td>
+                            <td class="px-3 py-2 whitespace-nowrap">存储策略ID</td>
                         </tr>
                         </tbody>
                     </table>

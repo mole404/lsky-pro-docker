@@ -8,9 +8,9 @@
     $capacityKb = (int) $user->capacity;
     $cards = [
         ['图片数量', $user->image_num, 'fa-images'],
-        ['使用储存', \App\Utils::formatSize($usedKb * 1024), 'fa-database'],
-        ['可用储存', \App\Utils::formatSize(($capacityKb - $usedKb) * 1024), 'fa-hdd'],
-        ['总储存', \App\Utils::formatSize($capacityKb * 1024), 'fa-server'],
+        ['使用存储', \App\Utils::formatSize($usedKb * 1024), 'fa-database'],
+        ['可用存储', \App\Utils::formatSize(($capacityKb - $usedKb) * 1024), 'fa-hdd'],
+        ['总存储', \App\Utils::formatSize($capacityKb * 1024), 'fa-server'],
     ];
     // 存储用量进度（capacity 单位是 KB；容量为 0 时不做除法）
     $usedPercent = $capacityKb > 0
@@ -78,7 +78,7 @@
                 <x-slot name="title">可使用的策略</x-slot>
                 <x-slot name="content">
                     @if($strategies->isEmpty())
-                        <x-no-data message="您所在的组还没有可用的储存策略，请联系管理员。" />
+                        <x-no-data message="您所在的组还没有可用的存储策略，请联系管理员。" />
                     @else
                         <p class="px-4 pt-3 text-ink-3 text-[13.5px]">共 {{ $strategies->count() }} 个可用</p>
                         {{-- 手机上不内滚（一列全展开，靠整页滚动即可）；≥md 与「我的信息」并排，才需要限高。

@@ -85,7 +85,7 @@
                 </dl>
                 <dl>
                     <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                        <dt class="text-sm font-medium text-ink-2">储存策略</dt>
+                        <dt class="text-sm font-medium text-ink-2">存储策略</dt>
                         <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__strategy_name__</dd>
                     </div>
                 </dl>

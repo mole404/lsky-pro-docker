@@ -468,8 +468,8 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
 // ---------------------------------------------------------------- 各策略占用百分比不再展示 + 「存储」文案
 /*
  * 口径：各存储策略不再统计/展示「占已用量的百分比」—— 仪表盘图例与悬浮气泡（仪表盘 + 侧栏同一组件）
- * 里的那一项都去掉；只有「存储用量」右上角那个总占用比例保留（唯一有用的一处）。文案上「储存用量」/
- * 「容量使用」统一成「存储用量」。
+ * 里的那一项都去掉；只有「存储用量」右上角那个总占用比例保留（唯一有用的一处）。文案上「存储用量」/
+ * 「容量使用」统一成「存储用量」；全仓旧词（储+存）一并扫掉，见本段末尾的全局断言。
  * 组件里的 share 仍要算：色段宽度 = 该策略占已用量比例 × 整条填充比例，少了它整条画不出来。
  */
 {
@@ -492,14 +492,27 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         /\{\{ \$usedPercent \}\}%/.test(dashboardBlade));
     check('组件的 share 仍在算宽度（别顺手把统计删了）',
         /\$usedPercent \* \$segment\['share'\] \/ 100/.test(segCmp));
-    check('仪表盘标题改「存储用量」（不留「储存用量」）',
-        dashboardBlade.includes('>存储用量</p>') && ! dashboardBlade.includes('储存用量'));
+    check('仪表盘标题 =「存储用量」', dashboardBlade.includes('>存储用量</p>'));
     check('侧栏标题改「存储用量」（不留「容量使用」）',
         sidebarBlade.includes('>存储用量</p>') && ! sidebarBlade.includes('容量使用'));
     check('侧栏「已用 / 总量」那行数字照旧保留',
         sidebarBlade.includes('class="used"') && sidebarBlade.includes('class="total"'));
     check('无障碍标签也跟着改词（存储用量按存储策略分布）',
         segCmp.includes('aria-label="存储用量按存储策略分布"'));
+    // 全局：全仓（src/ 下所有文本文件）不许再出现旧词 —— 用拼接写法，免得断言自己踩到自己
+    const oldWord = '储' + '存';
+    const offenders = [];
+    const walk = (dir) => {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (['node_modules', 'vendor', '.git'].includes(e.name)) continue;
+            const p = path.join(dir, e.name);
+            if (e.isDirectory()) { walk(p); continue; }
+            if (! /\.(blade\.php|php|js|mjs|less|css|md|json|ya?ml|sh|patch)$/.test(e.name)) continue;
+            if (fs.readFileSync(p, 'utf8').includes(oldWord)) offenders.push(path.relative(SRC, p));
+        }
+    };
+    walk(SRC);
+    check('全仓不再出现旧词（含注释/README，回潮会被抓住）', offenders.length === 0, offenders.join(', '));
 }
 
 // ---------------------------------------------------------------- 汇总

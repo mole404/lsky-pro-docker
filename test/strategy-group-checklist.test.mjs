@@ -1,5 +1,5 @@
 /**
- * 储存策略「选择角色组」多选的结构回归网（读文件断言，不跑浏览器）。
+ * 存储策略「选择角色组」多选的结构回归网（读文件断言，不跑浏览器）。
  *
  * 背景：这一栏原来是原生 <select multiple> —— 桌面必须按住 Ctrl/⌘ 点选，手机上几乎没法多选。
  * 现改成打勾清单（一行一个角色组，点一下勾上/取消），组多时框内滚动。
@@ -38,7 +38,7 @@ const css = read('public', 'css', 'common.css');
 // ---------------------------------------------------------------- 1 两页都换掉了
 console.log('\n[页面] 原生多选已全部退役');
 {
-    for (const [label, page] of [['新建储存策略', add], ['编辑储存策略', edit]]) {
+    for (const [label, page] of [['新建存储策略', add], ['编辑存储策略', edit]]) {
         const body = stripComments(page);
         check(`${label}：没有原生 <select multiple>（不再要 Ctrl/⌘ 点选）`,
             ! /<select\b[^>]*\bmultiple\b/.test(body) && ! body.includes('form-multiselect'),
