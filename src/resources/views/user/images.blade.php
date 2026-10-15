@@ -3198,8 +3198,17 @@
                 let open = false;
                 let suppressClickUntil = 0;
 
-                // 「屏幕上有菜单」的判据与 context-js 一致：只看元素实际可见性，不看任何内存状态
+                // 「屏幕上有菜单」的判据只看元素实际可见性，不看任何内存状态。
+                // checkVisibility 会把祖先的 display 一起算进来（例如「⋯」菜单在桌面端整块是 hidden 的，
+                // 用户根本看不到它，盾牌就不该出现）；老浏览器退回自己看 display/visibility。
                 const visible = (el) => {
+                    if (typeof el.checkVisibility === 'function') {
+                        return el.checkVisibility({
+                            visibilityProperty: true,
+                            opacityProperty: false,
+                            contentVisibilityAuto: true,
+                        });
+                    }
                     const cs = getComputedStyle(el);
                     return cs.display !== 'none' && cs.visibility !== 'hidden';
                 };
@@ -3225,10 +3234,15 @@
                     }
                 }).observe(document.body, {attributes: true, attributeFilter: ['style', 'class'], subtree: true});
 
-                // 兜底：真正要动手前再对一次状态（pointerdown 早于 mousedown / click，页面里那个框选处理器读的就是它）
+                // 兜底：真正要动手前再对一次状态（pointerdown 早于 mousedown / click，页面里那个框选处理器读的就是它），
+                // 外加窗口尺寸变化 —— 响应式断点会把某些菜单的整块容器藏掉，而面板自己的 style 不会变。
                 document.addEventListener('pointerdown', sync, true);
                 document.addEventListener('keydown', sync, true);
-                sync();
+                window.addEventListener('resize', sync);
+
+                // 刻意不在脚本执行时 sync() 一次：那一刻 Alpine 还没启动，面板既没有行内 display 也还没吃到
+                // x-cloak，会被误判成「菜单开着」→ 页面刚打开的那几十毫秒白白盖一层盾牌（点哪都被吃掉）。
+                // 初始状态就是「没有菜单」；Alpine 接管时给面板设 display:none 照样会触发下面的观察器。
 
                 // 走现有那条关闭路径：合成一发 click，冒泡到 document → Alpine 的 @click.outside 收菜单
                 const closeMenus = () => {

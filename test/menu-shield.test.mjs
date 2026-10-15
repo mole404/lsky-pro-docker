@@ -85,6 +85,9 @@ console.log('\n[行为] jsdom 跑页内那段 JS');
 {
     const m = blade.match(/\/\* MENU-SHIELD-BEGIN \*\/([\s\S]*?)\/\* MENU-SHIELD-END \*\//);
     check('页内那段 JS 有 BEGIN/END 标记（本用例靠它取代码）', !!m);
+    check('可见性判据：优先 checkVisibility（把祖先的 display 一起算），旧浏览器回退 display/visibility',
+        /typeof el\.checkVisibility === 'function'/.test(m[1])
+        && /cs\.display !== 'none' && cs\.visibility !== 'hidden'/.test(m[1]));
 
     const dom = new JSDOM(`<!DOCTYPE html><html><body>
         <div class="relative"><div class="ls-menu" style="display: none">菜单</div></div>
@@ -173,6 +176,51 @@ console.log('\n[行为] jsdom 跑页内那段 JS');
     await tick();
     check('时间窗过期（>700ms）后：点击不再被吞（不会一直吃掉用户的点击）',
         afterWindow.defaultPrevented === false);
+
+    // checkVisibility 分支 + resize 兜底：给 jsdom 缺的这个 API 打桩，模拟「菜单的整块容器被断点藏掉」
+    {
+        window.Element.prototype.checkVisibility = function () { return this.getAttribute('data-hidden') !== 'yes'; };
+        panel.style.display = 'block';
+        await tick();
+        check('（打了桩）走 checkVisibility 分支：面板可见 → 盾牌出现', shown());
+
+        panel.setAttribute('data-hidden', 'yes');   // 面板自己的 style 没变，只是整块容器被藏了
+        window.dispatchEvent(new window.Event('resize'));
+        await tick();
+        check('整块容器被响应式藏掉（面板自身 style 未变）：resize 兜底把盾牌收回去', ! shown());
+
+        panel.removeAttribute('data-hidden');
+        window.dispatchEvent(new window.Event('resize'));
+        await tick();
+        check('容器再显示出来：盾牌跟着回来', shown());
+
+        delete window.Element.prototype.checkVisibility;   // 恢复「老浏览器」状态
+        panel.style.display = 'none';
+        await tick();
+        check('回退分支仍有效（没有 checkVisibility 的浏览器）：菜单关掉盾牌就收起', ! shown());
+    }
+
+    // 初始化时机：单独一个实例，面板一开始就是可见的（= Alpine 还没启动的那一瞬间）
+    {
+        const d = new JSDOM(`<!DOCTYPE html><html><body>
+            <div class="relative"><div class="ls-menu">菜单</div></div>
+            <div id="ls-menu-shield" aria-hidden="true"></div>
+        </body></html>`, { url: 'http://localhost/', runScripts: 'outside-only' });
+        d.window.eval(m[1]);
+        const shield2 = d.window.document.getElementById('ls-menu-shield');
+        const panel2 = d.window.document.querySelector('.ls-menu');
+        const shown2 = () => shield2.classList.contains('is-visible');
+        const tick2 = () => new Promise((r) => d.window.setTimeout(r, 0));
+
+        check('加载的那一刻不做初始同步（此时面板还没被 Alpine 设成 display:none，别误判成菜单开着、白盖一层盾牌）',
+            ! shown2());
+
+        panel2.style.display = 'none';
+        await tick2();
+        panel2.style.display = 'block';
+        await tick2();
+        check('该实例里状态机照常工作（不靠那一次初始同步）：菜单打开 → 盾牌出现', shown2());
+    }
 }
 
 // ---------------------------------------------------------------- 汇总
