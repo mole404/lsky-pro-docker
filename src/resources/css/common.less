@@ -47,7 +47,8 @@ progress::-webkit-progress-value {
     // 气泡宽度：组件里的 $tipWidth 与它保持一致（两处一起改）
     --ls-tip-w: 212px;
 
-    // 仪表盘那条比侧栏粗一档；写成 .ls-segbar.ls-segbar--thick 是为了压过 Tailwind 的 h-1.5
+    // 仪表盘与侧栏同档 8px（组件默认档是 Tailwind 的 h-1.5 = 6px）；
+    // 写成 .ls-segbar.ls-segbar--thick 是为了压过 .h-1.5（同权重时先后顺序会决定谁赢）
     &.ls-segbar--thick {
         height: 8px;
     }

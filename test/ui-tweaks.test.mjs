@@ -403,6 +403,29 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         ctxJs === read('resources', 'js', 'context-js.js'));
 }
 
+// ---------------------------------------------------------------- 存储用量条粗细（仪表盘与侧栏同一档）
+/*
+ * 侧栏那条原来走组件默认档 h-1.5（6px），实测太细；现在与仪表盘统一到 8px（ls-segbar--thick）。
+ * 为什么 thick 必须写成 .ls-segbar.ls-segbar--thick（双类名）：模板上同时挂着 Tailwind 的 h-1.5，
+ * 单类名 .ls-segbar--thick 与 .h-1.5 权重相同 —— 谁后加载谁赢，8px 会时灵时不灵。
+ */
+{
+    const segComponent = read('resources', 'views', 'components', 'storage-segments.blade.php');
+    const sidebarBlade = read('resources', 'views', 'layouts', 'sidebar.blade.php');
+    const dashboardBlade = read('resources', 'views', 'user', 'dashboard.blade.php');
+    const commonCss = read('public', 'css', 'common.css');
+    const thickCall = (blade) => /<x-storage-segments[^>]*bar-class="ls-segbar--thick"[^>]*\/>/.test(blade);
+
+    check('组件默认档仍是 h-1.5（不传 bar-class 就不加粗，回退路径还在）',
+        /'barClass'\s*=>\s*'h-1\.5'/.test(segComponent));
+    check('侧栏那条传了 ls-segbar--thick（与仪表盘同粗）', thickCall(sidebarBlade));
+    check('仪表盘那条同样传了 ls-segbar--thick（两条同档，别再分粗细）', thickCall(dashboardBlade));
+    check('提交的 common.css 里 thick 档 = 8px，且用双类名压过 .h-1.5',
+        /\.ls-segbar\.ls-segbar--thick\s*\{\s*height:\s*8px/.test(commonCss),
+        (commonCss.match(/\.ls-segbar\.ls-segbar--thick\s*\{[^}]*\}/) || ['未找到'])[0]);
+    check('common.less 与 common.css 两份都写了 8px（源码/产物同步）', /height:\s*8px/.test(commonLess));
+}
+
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);

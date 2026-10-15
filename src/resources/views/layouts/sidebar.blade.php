@@ -107,7 +107,8 @@
         <div id="capacity-progress" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10 ls-zoom-mt-0">
             <p class="text-ink-2 text-[13.5px]">容量使用</p>
             {{-- 只有进度条变了：按存储策略分段 + 悬浮看各策略占用；文字一行不动 --}}
-            <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" />
+            {{-- 粗细与仪表盘统一（ls-segbar--thick = 8px）：走组件默认档 h-1.5（6px）时实测偏细 --}}
+            <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" bar-class="ls-segbar--thick" />
             <p class="text-ink-3 text-[13.5px] truncate">
                 <span class="used">{{ \App\Utils::formatSize($storage['total'] * 1024) }}</span>
                 /

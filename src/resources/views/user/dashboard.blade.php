@@ -55,7 +55,7 @@
                 </p>
             </div>
             <div class="mt-3">
-                {{-- 仪表盘这条比侧栏略粗一档（8px vs 6px，ls-segbar--thick 在 common.css 里） --}}
+                {{-- 与侧栏同档粗细：ls-segbar--thick（8px，规则在 common.css；组件默认档是 h-1.5=6px） --}}
                 <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" bar-class="ls-segbar--thick" />
             </div>
             @if (count($storage['segments']) > 0)
