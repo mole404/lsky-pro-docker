@@ -59,11 +59,15 @@ console.log('\n[结构] 盾牌标记、层级与渲染条件');
     check('盾牌上不挂 click 监听（关了它菜单就关不掉了 —— 关闭靠点击冒泡到 document）',
         ! /shield\.addEventListener\('click'/.test(blade));
 
-    // 框选那条捕获 mousedown：必须带守卫，否则按住盾牌拖一下会把沿途图片框上
+    // 框选那条捕获 mousedown：必须带守卫，否则按住盾牌拖一下 / 点右键菜单外的图片都会落选中
     const md = blade.slice(blade.indexOf("document.addEventListener('mousedown'"),
                            blade.indexOf("document.addEventListener('mousemove'"));
-    check('框选 mousedown 处理器里有「菜单开着就退出」的守卫',
-        /typeof lsMenuShieldActive === 'function' && lsMenuShieldActive\(\)/.test(md));
+    check('框选 mousedown 处理器里有「屏幕上有菜单就退出」的守卫',
+        /typeof lsMenusOnScreen === 'function' && lsMenusOnScreen\(\)/.test(md));
+    check('守卫用的是广义判据（右键/长按菜单也拦得住），不是只认盾牌',
+        /const MENU_PANELS = '\.ls-menu, \.dropdown-context';/.test(blade));
+    check('盾牌显隐仍然只认 .ls-menu（扩成广义会把"右键另一张图"的目标一起吃掉）',
+        /const PANEL = '\.ls-menu';/.test(blade) && /const s = anyVisible\(PANEL\);/.test(blade));
 }
 
 // ---------------------------------------------------------------- 二、作用域
@@ -91,6 +95,7 @@ console.log('\n[行为] jsdom 跑页内那段 JS');
 
     const dom = new JSDOM(`<!DOCTYPE html><html><body>
         <div class="relative"><div class="ls-menu" style="display: none">菜单</div></div>
+        <div class="dropdown-context" style="display: none">右键菜单</div>
         <div id="ls-menu-shield" aria-hidden="true"></div>
         <img id="pic" src="x.png">
     </body></html>`, { url: 'http://localhost/', runScripts: 'outside-only' });
@@ -114,11 +119,11 @@ console.log('\n[行为] jsdom 跑页内那段 JS');
     document.addEventListener('click', () => { bubbled += 1; });
 
     check('初始（没有菜单可见）：盾牌不显示、状态为 false',
-        ! shown() && window.lsMenuShieldActive() === false);
+        ! shown() && window.lsMenusOnScreen() === false);
 
     panel.style.display = 'block';
     await tick();
-    check('菜单打开后：盾牌显示、状态为 true', shown() && window.lsMenuShieldActive() === true);
+    check('菜单打开后：盾牌显示、状态为 true', shown() && window.lsMenusOnScreen() === true);
 
     const before = bubbled;
     clickOn(shield);
@@ -128,7 +133,7 @@ console.log('\n[行为] jsdom 跑页内那段 JS');
 
     panel.style.display = 'none';
     await tick();
-    check('菜单关掉后：盾牌不显示、状态回到 false', ! shown() && window.lsMenuShieldActive() === false);
+    check('菜单关掉后：盾牌不显示、状态回到 false', ! shown() && window.lsMenusOnScreen() === false);
 
     checkedContextMenu: {
         panel.style.display = 'block';
@@ -198,6 +203,20 @@ console.log('\n[行为] jsdom 跑页内那段 JS');
         panel.style.display = 'none';
         await tick();
         check('回退分支仍有效（没有 checkVisibility 的浏览器）：菜单关掉盾牌就收起', ! shown());
+    }
+
+    // 右键/长按菜单：判据要认它（守卫据此拦住选中/框选的起点），但盾牌**不许**跟着举
+    {
+        const ctx = document.querySelector('.dropdown-context');
+        ctx.style.display = 'block';
+        await tick();
+        check('右键/长按菜单开着：lsMenusOnScreen() 为真（守卫据此拦掉选中/框选的起点）',
+            window.lsMenusOnScreen() === true);
+        check('…但盾牌不举（否则右键另一张图的目标会被盾牌吃掉、菜单换不过去）', ! shown());
+
+        ctx.style.display = 'none';
+        await tick();
+        check('右键菜单关掉：判据回到 false', window.lsMenusOnScreen() === false);
     }
 
     // 初始化时机：单独一个实例，面板一开始就是可见的（= Alpine 还没启动的那一瞬间）

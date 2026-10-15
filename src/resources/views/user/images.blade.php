@@ -2361,9 +2361,15 @@
                 if (e.button !== 0 || ! e.target || ! e.target.closest) {
                     return;
                 }
-                /* 菜单盾牌开着时这一发 mousedown 不属于框选：盾牌盖在网格之上，用户其实是想关菜单。
-                   不加这句的话，按住盾牌拖一下会在 mouseup 那条 selfSelect 分支里把沿途图片框上。 */
-                if (typeof lsMenuShieldActive === 'function' && lsMenuShieldActive()) {
+                /* 屏幕上有菜单（下拉的 .ls-menu，或右键/长按的 .dropdown-context）时，这一发 mousedown
+                   不该被当成选中/框选的起点 —— 用户的意图是"点菜单外把它关掉"。两端都靠这一句：
+                     · 桌面：拦住框选的起点（库的 Interaction.start 绑在区域元素的冒泡阶段，进不来），
+                       下面 mouseup 那条 selfSelect 分支同理；
+                     · 手机：浏览器在 touchend 后**合成的那一发 mousedown** 走的正是这里（见上面 2026-10-08
+                       那段说明），漏掉它就会出现"点菜单外的图片被勾上"。实测两端同源。
+                   判据用 DOM 可见性（连淡出窗口一起算，元素那时还画着）而不是内存状态 ——
+                   "菜单看得见、状态却已置 false"的那一段恰恰最容易点穿。 */
+                if (typeof lsMenusOnScreen === 'function' && lsMenusOnScreen()) {
                     return;
                 }
                 /* 必须在这里就先刷：本监听器是捕获阶段，库的 mousedown 在冒泡阶段，
@@ -3175,16 +3181,23 @@
 
     @push('scripts')
         <script>
-            /* 菜单盾牌：「我的图片」页里，菜单打开时点菜单外的空白 = 只关菜单，不触发别的事。
+            /* 菜单打开时点菜单外 = 只关菜单，不触发别的事（本页两套菜单、两种机制，别混在一起）：
              *
-             * 为什么需要它：这些下拉菜单的关闭都靠 Alpine 的 @click.outside —— 它注册在 document 冒泡阶段，
-             * 只执行 `open = false`，既不 preventDefault 也不 stopPropagation；而「点图片开预览」是 viewer.js
-             * 绑在 #images-grid 上的冒泡监听 ⇒ 同一发点击两个都跑（先开图、后关菜单）。
-             * 这里放一块 fixed 全屏透明层把那发点击结构性吃掉（关闭仍由 @click.outside 完成，盾牌上别加 stopPropagation）。
+             * ① 下拉菜单（.ls-menu：顶栏用户菜单 / 存储策略 / 外观切换 + 本页「⋯」「最新」「标签」）
+             *    关闭靠 Alpine 的 @click.outside —— 注册在 document 冒泡阶段，只执行 `open = false`，
+             *    既不 preventDefault 也不 stopPropagation；而「点图片开预览」绑在内容容器冒泡阶段
+             *    ⇒ 同一发点击两个都跑（先开图、后关菜单）。所以这里放一块 fixed 全屏透明层
+             *    （#ls-menu-shield）把那发点击**结构性**吃掉。关闭仍由 @click.outside 完成 ——
+             *    盾牌上**别加 stopPropagation**，否则点击到不了 document、菜单反而关不掉。
              *
-             * 覆盖范围：本页所有 .ls-menu —— 顶栏的用户菜单 / 存储策略 / 外观切换，以及本页「⋯」「最新」「标签」。
-             * 长按与右键那种菜单（.dropdown-context）另有自己的捕获守卫（context-js），不归这里管。
-             * 已知代价（已确认接受）：菜单开着时点吸顶工具栏那三个按钮要先关菜单（它们在盾牌之下，z-[3]）。
+             * ② 右键/长按菜单（.dropdown-context）**不用盾牌**：它的 click 族已经由 context-js 自己的
+             *    捕获守卫吞掉（closeMenus + preventDefault + stopPropagation），缺的只有 mousedown 族
+             *    （点选/框选/selfSelect 都在那一族）⇒ 交给页面里那条捕获 mousedown 守卫，判据就是本文件
+             *    对外暴露的 window.lsMenusOnScreen()。
+             *    为什么不顺手也用盾牌：盾牌一盖住网格，**右键另一张图的目标就被盾牌吃掉**（菜单不会再换到
+             *    那张图上），而它本来也不需要盾牌。所以盾牌的显隐**只认 .ls-menu**，两个状态分开维护。
+             *
+             * 已知代价（已确认接受）：下拉菜单开着时点吸顶工具栏那三个按钮要先关菜单（它们在盾牌之下，z-[3]）。
              */
             /* MENU-SHIELD-BEGIN */
             (() => {
@@ -3193,9 +3206,9 @@
                     return;
                 }
 
-                const PANEL = '.ls-menu';
+                const PANEL = '.ls-menu';                            // 盾牌只认下拉菜单
+                const MENU_PANELS = '.ls-menu, .dropdown-context';   // "屏幕上有菜单"的广义判据（含右键/长按菜单）
                 const TOUCH_SUPPRESS_MS = 700;   // 与 context-js 的时间窗同量级：够吞掉抬手补发的那一发 click
-                let open = false;
                 let suppressClickUntil = 0;
 
                 // 「屏幕上有菜单」的判据只看元素实际可见性，不看任何内存状态。
@@ -3212,22 +3225,29 @@
                     const cs = getComputedStyle(el);
                     return cs.display !== 'none' && cs.visibility !== 'hidden';
                 };
-                const anyMenuOpen = () => Array.prototype.some.call(document.querySelectorAll(PANEL), visible);
+                const anyVisible = (selector) => Array.prototype.some.call(document.querySelectorAll(selector), visible);
+
+                /* 两个状态分开维护，别合并：
+                   · shieldOpen —— 只有 .ls-menu 在屏幕上时才举盾牌（理由见文件头 ②）；
+                   · menusOpen —— 广义「屏幕上有菜单」，给页面那条捕获 mousedown 守卫与手机 touchstart
+                     分支用（挡住选中/框选的起点）。对外名 window.lsMenusOnScreen()。 */
+                let shieldOpen = false;
+                let menusOpen = false;
 
                 const sync = () => {
-                    const now = anyMenuOpen();
-                    if (now === open) {
-                        return;
+                    const s = anyVisible(PANEL);
+                    if (s !== shieldOpen) {
+                        shieldOpen = s;
+                        shield.classList.toggle('is-visible', s);
                     }
-                    open = now;
-                    shield.classList.toggle('is-visible', now);
+                    menusOpen = anyVisible(MENU_PANELS);
                 };
 
                 // 菜单开合只会动面板自己的行内 style / class（x-show 与 x-transition）
                 new MutationObserver((records) => {
                     for (const record of records) {
                         const target = record.target;
-                        if (target && target.nodeType === 1 && target.matches && target.matches(PANEL)) {
+                        if (target && target.nodeType === 1 && target.matches && target.matches(MENU_PANELS)) {
                             sync();
                             return;
                         }
@@ -3258,7 +3278,8 @@
                 // 触屏（盾牌在 hover:none 下不显示，吃不到点击）：手指一碰就收菜单（与长按菜单同一套手感），
                 // 并开一个时间窗吞掉随后补发的那一发 click；不 preventDefault ⇒ 滚动照常，touchmove 会清窗。
                 document.addEventListener('touchstart', () => {
-                    if (! open) {
+                    sync();                 // 手指按下这一刻重新对一次状态（菜单可能刚被别的路径关掉）
+                    if (! menusOpen) {
                         return;
                     }
                     closeMenus();
@@ -3275,8 +3296,8 @@
                     event.stopPropagation();
                 }, true);
 
-                // 给页面里那个捕获阶段的框选处理器问「现在有没有菜单开着」
-                window.lsMenuShieldActive = () => open;
+                // 给页面里那条捕获阶段的框选/点选守卫问「现在屏幕上有没有菜单」（下拉菜单与右键/长按菜单都算）
+                window.lsMenusOnScreen = () => menusOpen;
             })();
             /* MENU-SHIELD-END */
         </script>
