@@ -465,6 +465,43 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         (segCmp.match(/<div class="ls-segbar[^"]*"/) || ['未找到'])[0]);
 }
 
+// ---------------------------------------------------------------- 各策略占用百分比不再展示 + 「存储」文案
+/*
+ * 口径：各存储策略不再统计/展示「占已用量的百分比」—— 仪表盘图例与悬浮气泡（仪表盘 + 侧栏同一组件）
+ * 里的那一项都去掉；只有「存储用量」右上角那个总占用比例保留（唯一有用的一处）。文案上「储存用量」/
+ * 「容量使用」统一成「存储用量」。
+ * 组件里的 share 仍要算：色段宽度 = 该策略占已用量比例 × 整条填充比例，少了它整条画不出来。
+ */
+{
+    const dashboardBlade = read('resources', 'views', 'user', 'dashboard.blade.php');
+    const sidebarBlade = read('resources', 'views', 'layouts', 'sidebar.blade.php');
+    const segCmp = read('resources', 'views', 'components', 'storage-segments.blade.php');
+    const commonCss = read('public', 'css', 'common.css');
+
+    check('各策略百分比从所有模板里消失（图例 + 气泡，仪表盘与侧栏共用同一组件）',
+        ! dashboardBlade.includes("round($segment['share'], 1)")
+        && ! segCmp.includes("round($segment['share'], 1)")
+        && ! sidebarBlade.includes("round($segment['share'], 1)"));
+    check('对应的 CSS 一起撤（.ls-legend__pct 标记与规则都不留）',
+        ! dashboardBlade.includes('ls-legend__pct')
+        && ! commonCss.includes('ls-legend__pct') && ! commonLess.includes('ls-legend__pct'));
+    check('图例仍在，且仍显示体积（只去掉百分比这一项）',
+        /ls-legend__num/.test(dashboardBlade) && /formatSize\(\$segment\['kb'\] \* 1024\)/.test(dashboardBlade));
+    check('气泡仍显示「体积 · 张数」', /\{\{ \$segment\['images'\] \}\} 张<\/span>/.test(segCmp));
+    check('保留唯一有用的百分比：仪表盘「存储用量」右上角的总占用比例',
+        /\{\{ \$usedPercent \}\}%/.test(dashboardBlade));
+    check('组件的 share 仍在算宽度（别顺手把统计删了）',
+        /\$usedPercent \* \$segment\['share'\] \/ 100/.test(segCmp));
+    check('仪表盘标题改「存储用量」（不留「储存用量」）',
+        dashboardBlade.includes('>存储用量</p>') && ! dashboardBlade.includes('储存用量'));
+    check('侧栏标题改「存储用量」（不留「容量使用」）',
+        sidebarBlade.includes('>存储用量</p>') && ! sidebarBlade.includes('容量使用'));
+    check('侧栏「已用 / 总量」那行数字照旧保留',
+        sidebarBlade.includes('class="used"') && sidebarBlade.includes('class="total"'));
+    check('无障碍标签也跟着改词（存储用量按存储策略分布）',
+        segCmp.includes('aria-label="存储用量按存储策略分布"'));
+}
+
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);

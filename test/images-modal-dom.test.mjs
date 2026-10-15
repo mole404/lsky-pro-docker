@@ -73,6 +73,7 @@ function boot({ putResponse = { status: true, message: '移动成功' },
         <div id="album-switch-modal" class="hidden"><div id="album-switch-content"></div></div>
         <a data-operate="movements" class="hidden" href="javascript:void(0)">移动到相册</a>
         <a data-operate="detail" class="hidden" href="javascript:void(0)">详细信息</a>
+        <a data-operate="refresh" class="hidden" href="javascript:void(0)">刷新</a>
         <input id="search">
         <script type="text/html" id="image-detail-tpl">${tpl('image-detail-tpl')}</script>
         <script type="text/html" id="movements-container-tpl">${tpl('movements-container-tpl')}</script>
@@ -456,6 +457,37 @@ console.log('\n[相册弹窗] 空状态、创建相册（同一表单/接口/报
         fifth.calls.modalClose.includes('album-switch-modal'), JSON.stringify(fifth.calls.modalClose));
 }
 
+
+// ================================================================ 操作条分发：「刷新」不该被空选中守卫挡掉
+/*
+ * 菜单项走的是共用委托 $('[data-operate]').click(...)，它进门就有一道「没选中就早退」的守卫；
+ * 而「⋯」菜单在空选中时白名单里恰好只剩「刷新」（bindOperates）—— 那道守卫把唯一还可见的那项变成死键
+ * （现象：点下去菜单关了、什么也没发生）。右键/长按菜单里的「刷新」走 context-js 的 actions 表，
+ * 压根不经过这个处理器，所以一直好使 —— 两条路径必须在这一层对齐。改法是给守卫加一个例外
+ * （operate !== 'refresh'），并确保其它操作在空选中下仍是「点了没反应」。
+ */
+console.log('\n[操作条] 空选中时「刷新」照常刷新，别的操作仍被守卫挡住');
+{
+    const fresh = boot();
+    const before = fresh.calls.refreshes.length;
+    fresh.$('[data-operate="refresh"]').trigger('click');
+    check('空选中点「刷新」：真的走到 resetImages（imagesInfinite.refresh({page:1})）',
+        fresh.calls.refreshes.length === before + 1 && fresh.calls.refreshes.at(-1)?.page === 1,
+        JSON.stringify(fresh.calls.refreshes));
+
+    const guarded = boot();
+    guarded.$('[data-operate="movements"]').trigger('click');
+    check('空选中点「移动到相册」：守卫照旧拦住（不开弹窗、不发请求）',
+        guarded.calls.modalOpen.length === 0 && guarded.calls.puts.length === 0,
+        `modalOpen=${JSON.stringify(guarded.calls.modalOpen)} puts=${guarded.calls.puts.length}`);
+
+    const picked = boot();
+    picked.t.ds._sel = [picked.$('.images-item').get(0)];
+    const b2 = picked.calls.refreshes.length;
+    picked.$('[data-operate="refresh"]').trigger('click');
+    check('有选中时点「刷新」：行为不变（照旧刷新一次）',
+        picked.calls.refreshes.length === b2 + 1, JSON.stringify(picked.calls.refreshes));
+}
 
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => !r.pass);

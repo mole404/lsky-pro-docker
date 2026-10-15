@@ -12,7 +12,7 @@
         ['可用储存', \App\Utils::formatSize(($capacityKb - $usedKb) * 1024), 'fa-hdd'],
         ['总储存', \App\Utils::formatSize($capacityKb * 1024), 'fa-server'],
     ];
-    // 储存用量进度（capacity 单位是 KB；容量为 0 时不做除法）
+    // 存储用量进度（capacity 单位是 KB；容量为 0 时不做除法）
     $usedPercent = $capacityKb > 0
         ? min(100, round($usedKb / $capacityKb * 100, 1))
         : 0;
@@ -44,10 +44,10 @@
             @endforeach
         </div>
 
-        {{-- ② 储存用量（侧栏折叠时那块容量信息会藏起来，这里正好补上） --}}
+        {{-- ② 存储用量（侧栏折叠时那块容量信息会藏起来，这里正好补上） --}}
         <div class="bg-surface rounded-xl p-4 md:p-5 shadow-card">
             <div class="flex items-center justify-between gap-4">
-                <p class="text-ink text-[14px] font-semibold">储存用量</p>
+                <p class="text-ink text-[14px] font-semibold">存储用量</p>
                 <p class="text-ink-3 text-[13.5px] tabular-nums">
                     <span class="text-ink font-semibold">{{ \App\Utils::formatSize($usedKb * 1024) }}</span>
                     <span class="mx-0.5">/</span>{{ \App\Utils::formatSize($capacityKb * 1024) }}
@@ -59,14 +59,13 @@
                 <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" bar-class="ls-segbar--thick" />
             </div>
             @if (count($storage['segments']) > 0)
-                {{-- 颜色图例：只列有占用的策略（未使用的不出现），顺序与色段一致 --}}
+                {{-- 颜色图例：只列有占用的策略（未使用的不出现），顺序与色段一致；各策略不再统计占用百分比 --}}
                 <div class="ls-legend">
                     @foreach ($storage['segments'] as $segment)
                         <span class="ls-legend__item">
                             <i class="ls-legend__dot" style="background: {{ $segment['color'] }}"></i>
                             <span class="ls-legend__name">{{ $segment['name'] }}</span>
                             <span class="ls-legend__num">{{ \App\Utils::formatSize($segment['kb'] * 1024) }}</span>
-                            <span class="ls-legend__pct">{{ round($segment['share'], 1) }}%</span>
                         </span>
                     @endforeach
                 </div>

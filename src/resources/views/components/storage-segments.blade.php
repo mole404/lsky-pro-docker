@@ -34,7 +34,7 @@
         <div class="h-full rounded-full bg-brand" style="width: {{ $usedPercent }}%"></div>
     </div>
 @else
-    <div class="ls-segbar {{ $barClass }}" role="img" aria-label="储存用量按存储策略分布">
+    <div class="ls-segbar {{ $barClass }}" role="img" aria-label="存储用量按存储策略分布">
         @foreach ($laid as $item)
             @php
                 $segment = $item['segment'];
@@ -47,7 +47,7 @@
                 <span class="ls-seg__tip"
                       style="left: min({{ round($item['start'], 4) }}%, max(0px, calc(100% - {{ $tipWidth }}px)))">
                     <span class="ls-seg__tip-name">{{ $segment['name'] }}</span>
-                    <span class="ls-seg__tip-num">{{ \App\Utils::formatSize($segment['kb'] * 1024) }} · {{ $segment['images'] }} 张 · {{ round($segment['share'], 1) }}%</span>
+                    <span class="ls-seg__tip-num">{{ \App\Utils::formatSize($segment['kb'] * 1024) }} · {{ $segment['images'] }} 张</span>
                 </span>
             </div>
         @endforeach

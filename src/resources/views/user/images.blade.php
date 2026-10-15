@@ -3121,7 +3121,9 @@
                 let operate = $(this).data('operate');
                 let selected = ds.getSelection();
 
-                if (selected.length === 0) {
+                // 「刷新」与有没有选中无关：空选中时 operate 白名单里也只有它（见 bindOperates），
+                // 别被这道守卫顺手挡掉 —— 它一挡，菜单里唯一还可见的那项就成了死键。
+                if (selected.length === 0 && operate !== 'refresh') {
                     return false;
                 }
 

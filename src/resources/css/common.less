@@ -127,8 +127,7 @@ progress::-webkit-progress-value {
 
 .ls-legend__dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 .ls-legend__name { color: var(--lsky-text); }
-.ls-legend__num, .ls-legend__pct { font-variant-numeric: tabular-nums; }
-.ls-legend__pct { color: var(--lsky-text-3); }
+.ls-legend__num { font-variant-numeric: tabular-nums; }
 
 #toast-container {
     & > div {
@@ -634,7 +633,7 @@ html.dark {
 }
 
 // ---------------------------------------------------------------- fork：侧栏高度跟随真实可视视口
-// 手机地址栏可见时 100vh 比「真正看得见的区域」高，侧栏底部（容量使用区）会被推到可视区之外，
+// 手机地址栏可见时 100vh 比「真正看得见的区域」高，侧栏底部（存储用量区）会被推到可视区之外，
 // 地址栏一收起才冒出来（实测「地址栏在的时候不显示」）。
 // 用 dvh 让侧栏高度跟着地址栏收起/展开实时变：同一选择器里 dvh 声明在后 → 后者胜；
 // 不支持 dvh 的旧浏览器整条声明作废、自动退回紧邻的 100vh（= 旧行为）。
