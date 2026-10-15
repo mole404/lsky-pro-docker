@@ -242,6 +242,20 @@
         html .viewer-toolbar > ul > li.viewer-fullscreen.is-fs:before {
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v3a2 2 0 0 1-2 2H3'/%3E%3Cpath d='M21 8h-3a2 2 0 0 1-2-2V3'/%3E%3Cpath d='M3 16h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M16 21v-3a2 2 0 0 1 2-2h3'/%3E%3C/svg%3E");
         }
+
+        /* 看图器工具栏的「顶屏」按钮图标。库里没有这个键（它只有 1:1），自定义键不在那张雪碧图枚举里
+           ⇒ 图标要自己补 content 与 20×20 盒子，做法与上面「裁剪」「全屏」一致。
+           图形取「从中心向外的四个箭头」：与「全屏」的四角括号、以及被替换掉的 1:1 字形都能一眼区分。 */
+        html .viewer-toolbar > ul > li.viewer-fit-edge:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4.5v5'/%3E%3Cpath d='M9.5 7 12 4.5 14.5 7'/%3E%3Cpath d='M12 19.5v-5'/%3E%3Cpath d='M9.5 17 12 19.5 14.5 17'/%3E%3Cpath d='M4.5 12h5'/%3E%3Cpath d='M7 9.5 4.5 12 7 14.5'/%3E%3Cpath d='M19.5 12h-5'/%3E%3Cpath d='M17 9.5 19.5 12 17 14.5'/%3E%3C/svg%3E");
+            background-position: 3px 3px;
+            background-repeat: no-repeat;
+            background-size: 14px 14px;
+        }
     
         }
 </style>
@@ -831,7 +845,8 @@
                     ...(canViewerFullscreen()
                         ? { fullscreen: { show: true, click: () => toggleViewerFullscreen() } }
                         : {}),
-                    'one-to-one': true,
+                    // 「顶屏」：替代库里那个 1:1（原始尺寸）。语义与实现见下方 fitEdge 那一段。
+                    'fit-edge': { show: true, click: () => fitEdgeNow() },
                     reset: true,
                     prev: true,
                     play: true,
@@ -891,6 +906,74 @@
                 };
             })();
 
+            /* ── 看图器「顶屏」（工具栏自定义键 fit-edge）──────────────────────────────
+             * 语义：等比缩放到「先够得着的那一对边正好贴住画布」，另一对边留空 —— 不溢出、不裁切、不变形。
+             * 库自带的初始适配是 min(0.9 × 可用区, 原图)（见 viewer.min.js initImage）⇒ 四周留一圈白；
+             * 顶屏就是去掉那个 0.9、也不夹"不超过原始像素"，所以比默认大一圈（小图会被放大，糊是必然代价）。
+             *
+             * 落地方式：不改库文件，在库里 renderImage() 真正渲染**之前**改写 imageData 里的尺寸与位置
+             *   ⇒ 库自己那一次过渡（切图时新图从画布中心生长，起点由 load() 写成 0×0 + 居中）直接长到顶屏尺寸，
+             *     不会出现"先长到 90% 再补一下"的第二段。
+             *
+             * 位置口径：库用 marginLeft/marginTop 相对 .viewer-canvas 的内容盒摆放图片，所以 canvas.clientWidth/
+             *   clientHeight 与 imageData 里的数值是同一坐标系 —— 比例与居中都能直接算，不需要量渲染矩形
+             *   （桌面端 html{zoom:1.1} + .viewer-container{zoom:.90909} 那套补偿也因此绕过了）。
+             *
+             * 旋转：imageData.width/height 是**未旋转**的盒子，视觉占位在 90°/270° 时宽高互换，算比例要按占位算。
+             */
+            let fsFitMode = false;                  // 「看图器处于浏览器全屏」期间为 true
+            let fitRenderSeq = 0;                   // 库每次调 renderImage 自增，用于判断全屏后有没有发生过重排
+            /* 把 imageData 改成顶屏尺寸；返回是否真的改了（已经顶屏 / 尺寸算不出来时返回 false） */
+            const applyFitEdgeToImageData = () => {
+                const d = viewer.imageData;
+                const canvas = viewer.canvas;
+                if (! d || ! canvas || ! d.naturalWidth || ! d.naturalHeight) { return false; }
+                const cw = canvas.clientWidth;
+                const ch = canvas.clientHeight;
+                if (! (cw > 0 && ch > 0)) { return false; }
+                const rotate = ((d.rotate || 0) % 180 + 180) % 180;
+                const footW = rotate === 90 ? d.naturalHeight : d.naturalWidth;    // 视觉占位宽
+                const footH = rotate === 90 ? d.naturalWidth : d.naturalHeight;    // 视觉占位高
+                let ratio = Math.min(cw / footW, ch / footH);
+                if (! isFinite(ratio) || ratio <= 0) { return false; }
+                ratio = Math.min(ratio, 100);                                      // 与库 maxZoomRatio 一致
+                const width = d.naturalWidth * ratio;
+                const height = d.naturalHeight * ratio;
+                if (Math.abs(width - d.width) < 0.5 && Math.abs(height - d.height) < 0.5) { return false; }
+                d.oldRatio = d.ratio;
+                d.width = width;
+                d.height = height;
+                d.ratio = ratio;
+                d.x = (cw - width) / 2;                 // 居中：与库同一套 margin 口径
+                d.y = (ch - height) / 2;
+                d.left = d.x;
+                d.top = d.y;
+                return true;
+            };
+            /* 工具栏「顶屏」键：算一次、渲一次。这一步库里不带过渡动画（没有 viewing/zooming 那类标志）
+             * ⇒ 直接到位，不做"从当前尺寸滑过去"的慢动作。 */
+            const fitEdgeNow = () => {
+                if (! viewer.viewed || viewer.played) { return; }
+                if (applyFitEdgeToImageData()) { viewer.renderImage(); }
+            };
+            (function () {
+                if (typeof viewer.renderImage !== 'function') { return; }    // 产物变了就安静退出，不折腾
+                const rawRenderImage = viewer.renderImage.bind(viewer);
+                /* 全屏期间：凡是"库自己按新尺寸重排"的那类渲染（切图 viewing、进出全屏、重置等）一律在渲染前
+                 * 改成顶屏尺寸 ⇒ 一次到位；用户自己的滚轮缩放 / 拖动 / 旋转（库置了 zooming/moving/rotating/
+                 * scaling 标志）不动，保持当次操作的结果。 */
+                viewer.renderImage = function () {
+                    fitRenderSeq += 1;
+                    if (fsFitMode && ! viewer.played && ! viewer.zooming && ! viewer.moving
+                        && ! viewer.rotating && ! viewer.scaling) {
+                        try { applyFitEdgeToImageData(); } catch (e) { /* 兜底：绝不因这一刀让看图界面挂掉 */ }
+                    }
+                    return rawRenderImage.apply(null, arguments);
+                };
+            })();
+            /* 「重置」键不用改：全屏里 reset() 内部会走到上面这层包装 ⇒ 自动变成「归位 + 顶屏」；
+             * 非全屏时 fsFitMode 是 false ⇒ 仍是库默认的"回到完整显示"。 */
+
             /* 图片裁剪（Cropper.js v1.6.3）—— 三个入口共用这一个模块：
              *   · 看图器工具栏的「裁剪」按钮（cropEditor.openFromViewer）
              *   · 选中操作条的 [data-operate="edit"]（只有单选 jpg/jpeg/png 时出现）
@@ -938,6 +1021,32 @@
             };
             document.addEventListener('fullscreenchange', syncFullscreenIcon);
             document.addEventListener('webkitfullscreenchange', syncFullscreenIcon);
+
+            /* 全屏进出与顶屏的联动（与上面的图标同步分开写，职责清楚）：
+             *   进 ⇒ 打开"渲染即顶屏"模式：库因视口变化重排那次渲染会被上面那层改成顶屏，一步到位；
+             *        再兜底 250ms —— 万一某个浏览器不改视口、压根没有那次重排，就自己渲一次。
+             *   出 ⇒ 关掉模式并按当前视口重算一次适配（回到库默认的完整显示）。
+             * 判据只看 document 的全屏元素，不依赖库的内部状态。 */
+            const onViewerFullscreenResize = () => {
+                const d = document;
+                const on = !!(d.fullscreenElement || d.webkitFullscreenElement);
+                if (on === fsFitMode) { return; }
+                fsFitMode = on;
+                if (on) {
+                    const seq = fitRenderSeq;
+                    setTimeout(() => {
+                        if (! fsFitMode || fitRenderSeq !== seq) { return; }   // 期间已经渲染过（那次已被改成顶屏）
+                        fitEdgeNow();
+                    }, 250);
+                } else if (viewer.viewed && ! viewer.played && typeof viewer.initImage === 'function') {
+                    requestAnimationFrame(() => {                              // 等视口真正收回去再重算
+                        if (fsFitMode) { return; }
+                        viewer.initImage(() => viewer.renderImage());
+                    });
+                }
+            };
+            document.addEventListener('fullscreenchange', onViewerFullscreenResize);
+            document.addEventListener('webkitfullscreenchange', onViewerFullscreenResize);
 
             /* 全屏里鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态） */
             const FS_UI_MS = 2500;
