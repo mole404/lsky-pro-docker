@@ -96,32 +96,24 @@
              窗口更高时（内容放得下）flex 的 justify-between 会把这块吸到容器底部，
              所以高窗口（≥864 实测余量 61.6px）观感与改动前逐像素一致 —— 只有「会溢出」的窗口才整体上移。
              手机档（<768px）保持 mt-10 原样（要求手机端零变化）。--}}
+        @php
+            // 与仪表盘同一套统计（同一次请求里只真正查一次库）；这里同样替掉 use_capacity 的重复聚合
+            $storage = \App\Support\StorageUsage::forUser(Auth::user());
+            $capacityKb = (int) Auth::user()->capacity;
+            $usedPercent = $capacityKb > 0
+                ? min(100, round($storage['total'] / $capacityKb * 100, 1))
+                : 0;
+        @endphp
         <div id="capacity-progress" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10 ls-zoom-mt-0">
             <p class="text-ink-2 text-[13.5px]">容量使用</p>
-            <progress class="w-full h-1.5" value="{{ Auth::user()->use_capacity }}" max="{{ Auth::user()->capacity }}"></progress>
+            {{-- 只有进度条变了：按存储策略分段 + 悬浮看各策略占用；文字一行不动 --}}
+            <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" tip="below" />
             <p class="text-ink-3 text-[13.5px] truncate">
-                <span class="used">{{ \App\Utils::formatSize(Auth::user()->use_capacity * 1024) }}</span>
+                <span class="used">{{ \App\Utils::formatSize($storage['total'] * 1024) }}</span>
                 /
-                <span class="total">{{ \App\Utils::formatSize(Auth::user()->capacity * 1024) }}</span>
+                <span class="total">{{ \App\Utils::formatSize($capacityKb * 1024) }}</span>
             </p>
         </div>
     </div>
 </nav>
 
-@push('scripts')
-    <script>
-        let $progress = $('#capacity-progress progress');
-        let value = $progress.attr('value') / $progress.attr('max') * 100;
-        let str = 'green';
-        if (value > 90) {
-            str = 'red';
-        } else if (value > 70) {
-            str = 'orange';
-        } else if (value > 60) {
-            str = 'yellow';
-        } else if (value > 40) {
-            str = 'yellowgreen';
-        }
-        $progress.addClass(str)
-    </script>
-@endpush
