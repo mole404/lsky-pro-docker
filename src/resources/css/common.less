@@ -39,14 +39,21 @@ progress::-webkit-progress-value {
 // fork: 按存储策略分段的用量条（仪表盘与侧栏共用）——颜色见 css/app.css 的 --lsky-seg-*
 // 轨道不加 overflow:hidden：气泡要能跑出条外；圆角改为只给首尾两段
 .ls-segbar {
+    position: relative;
     display: flex;
     width: 100%;
     border-radius: 9999px;
     background: var(--lsky-surface-3);
+    // 气泡宽度：组件里的 $tipWidth 与它保持一致（两处一起改）
+    --ls-tip-w: 212px;
+
+    // 仪表盘那条比侧栏粗一档；写成 .ls-segbar.ls-segbar--thick 是为了压过 Tailwind 的 h-1.5
+    &.ls-segbar--thick {
+        height: 8px;
+    }
 }
 
 .ls-seg {
-    position: relative;
     min-width: 3px;
 
     &:first-child {
@@ -59,23 +66,24 @@ progress::-webkit-progress-value {
         border-bottom-right-radius: 9999px;
     }
 
+    // 高亮用 inset 阴影：filter 会让 .ls-seg 变成定位包含块，气泡被拉回小段上、被裁
     &:hover {
-        filter: brightness(1.08);
+        box-shadow: inset 0 0 0 999px rgba(127, 127, 127, .16);
     }
 }
 
-// 悬浮气泡：固定在条上方（放下面会盖住条下方那行说明文字）
+// 悬浮气泡：绝对定位挂到「条」上（.ls-seg 是 static），left 由组件内联的 min() 夹住 ⇒ 永远在条内；
+// 固定在条上方（放下面会盖住条下方那行说明文字）
 .ls-seg__tip {
     position: absolute;
-    left: 50%;
+    left: 0;
     bottom: calc(100% + 8px);
-    transform: translateX(-50%);
     z-index: 30;
     display: flex;
     flex-direction: column;
     gap: 1px;
     width: max-content;
-    max-width: min(260px, 60vw);
+    max-width: var(--ls-tip-w);
     padding: 6px 9px;
     border-radius: 8px;
     background: var(--lsky-surface);
@@ -90,25 +98,14 @@ progress::-webkit-progress-value {
     pointer-events: none;
     transition: opacity .14s ease;
 
-    .ls-seg:first-child & {
-        left: 0;
-        transform: none;
-    }
-
-    .ls-seg:last-child & {
-        left: auto;
-        right: 0;
-        transform: none;
-    }
-
     .ls-seg:hover & {
         opacity: 1;
         visibility: visible;
     }
 }
 
-.ls-seg__tip-name { font-weight: 600; }
-.ls-seg__tip-num { color: var(--lsky-text-2); font-variant-numeric: tabular-nums; }
+.ls-seg__tip-name { font-weight: 600; overflow-wrap: anywhere; }
+.ls-seg__tip-num { color: var(--lsky-text-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
 // 图例
 .ls-legend {

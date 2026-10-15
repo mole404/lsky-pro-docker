@@ -55,7 +55,8 @@
                 </p>
             </div>
             <div class="mt-3">
-                <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" />
+                {{-- 仪表盘这条比侧栏略粗一档（8px vs 6px，ls-segbar--thick 在 common.css 里） --}}
+                <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" bar-class="ls-segbar--thick" />
             </div>
             @if (count($storage['segments']) > 0)
                 {{-- 颜色图例：只列有占用的策略（未使用的不出现），顺序与色段一致 --}}

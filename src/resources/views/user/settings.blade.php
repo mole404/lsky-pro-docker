@@ -145,8 +145,9 @@
                             <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="year">今年</button>
                             <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="clear">不选日期</button>
                         </div>
-                        <input type="date" id="export-date-from" name="date_from" class="ls-input mt-1 hidden">
-                        <input type="date" id="export-date-to" name="date_to" class="ls-input mt-1 hidden">
+                        {{-- 起始/结束两行常驻显示（原来是点「自定义日期」展开的） --}}
+                        <input type="date" id="export-date-from" name="date_from" class="ls-input mt-1">
+                        <input type="date" id="export-date-to" name="date_to" class="ls-input mt-1">
                         <p id="export-date-summary" class="mt-1 text-sm text-ink-2"></p>
                     </div>
 
@@ -1111,14 +1112,43 @@
       'background:transparent;border:0;padding:2px 10px;border-radius:6px;font-size:16px;line-height:1;',
       '\u2039');
     prevBtn.className = 'cursor-pointer text-ink-2';
-    var titleEl = el('span', { 'data-title': '' }, null, '');
-    titleEl.className = 'text-sm font-medium text-ink';
+    // 年月快选：年份/月份文字本身就是按钮，点开就地列出可选项（文案旁边带下拉箭头）
+    var titleWrap = el('div', null, 'position:relative;display:flex;align-items:center;gap:2px;');
+    titleWrap.className = 'text-sm font-medium text-ink';
+    var PICK_BTN_CSS = 'display:inline-flex;align-items:center;gap:3px;background:transparent;border:0;' +
+      'padding:2px 5px;border-radius:6px;font:inherit;color:inherit;line-height:1.5;';
+    var PICK_CELL_CSS = 'background:transparent;border:0;padding:5px 2px;border-radius:6px;cursor:pointer;' +
+      'font-size:12.5px;line-height:1.35;color:inherit;';
+    var PICK_PANEL_CSS = 'position:absolute;top:calc(100% + 4px);left:0;z-index:30;display:none;padding:6px;' +
+      'border-radius:10px;background:var(--lsky-surface);border:1px solid var(--lsky-border);' +
+      'box-shadow:var(--lsky-shadow-pop);gap:4px;';
+    var yearText = el('span', null, null, '');
+    var monthText = el('span', null, null, '');
+    function pickButton(kind, label, textNode) {
+      var btn = el('button', { type: 'button', 'data-pick': kind, 'aria-haspopup': 'true',
+        'aria-expanded': 'false', 'aria-label': label }, PICK_BTN_CSS);
+      btn.className = 'cursor-pointer text-ink';
+      btn.appendChild(textNode);
+      btn.appendChild(el('span', null, 'font-size:9px;line-height:1;opacity:.7;', '\u25be'));
+      return btn;
+    }
+    var yearBtn = pickButton('year', '选择年份', yearText);
+    var monthBtn = pickButton('month', '选择月份', monthText);
+    var yearPanel = el('div', { 'data-pick-panel': 'year' },
+      PICK_PANEL_CSS + 'grid-template-columns:repeat(3,1fr);max-height:164px;overflow-y:auto;');
+    var monthPanel = el('div', { 'data-pick-panel': 'month' },
+      PICK_PANEL_CSS + 'grid-template-columns:repeat(4,1fr);');
+    titleWrap.appendChild(yearBtn);
+    titleWrap.appendChild(monthBtn);
+    titleWrap.appendChild(yearPanel);
+    titleWrap.appendChild(monthPanel);
+    var openPick = null;
     var nextBtn = el('button', { type: 'button', 'data-nav': '1', 'aria-label': '下一月' },
       'background:transparent;border:0;padding:2px 10px;border-radius:6px;font-size:16px;line-height:1;',
       '\u203a');
     nextBtn.className = 'cursor-pointer text-ink-2';
     header.appendChild(prevBtn);
-    header.appendChild(titleEl);
+    header.appendChild(titleWrap);
     header.appendChild(nextBtn);
 
     var weekRow = el('div', null, 'display:grid;grid-template-columns:repeat(7,1fr);gap:4px;');
@@ -1137,17 +1167,10 @@
       '有数字的日期表示当天存过图片');
     hint.className = 'text-ink-2';
 
-    var footer = el('div', null, 'display:flex;align-items:center;justify-content:flex-end;margin-top:4px;');
-    var customBtn = el('button', { type: 'button', 'data-custom': '' },
-      'background:transparent;border:0;padding:0;', '自定义日期');
-    customBtn.className = 'cursor-pointer text-sm text-ink-2';
-    footer.appendChild(customBtn);
-
     root.appendChild(header);
     root.appendChild(weekRow);
     root.appendChild(grid);
     root.appendChild(hint);
-    root.appendChild(footer);
 
     function todayYmd() {
       return formatLocalDate(new Date());
@@ -1201,7 +1224,8 @@
     }
 
     function paint() {
-      titleEl.textContent = view.year + '年' + view.month + '月';
+      yearText.textContent = view.year + '年';
+      monthText.textContent = view.month + '月';
       var weeks = monthGrid(view.year, view.month);
       grid.innerHTML = '';
       for (var w = 0; w < weeks.length; w++) {
@@ -1286,17 +1310,71 @@
       paint();
     }
 
-    function toggleCustom() {
-      if (!fromInput || !toInput) return;
-      if (fromInput.classList.contains('hidden')) {
-        fromInput.classList.remove('hidden');
-        toInput.classList.remove('hidden');
-        customBtn.textContent = '收起';
-      } else {
-        fromInput.classList.add('hidden');
-        toInput.classList.add('hidden');
-        customBtn.textContent = '自定义日期';
+    // 年份候选：有上传记录的年份范围 ∪ 当前视图年 ∪ 今年（没有记录时给视图年 ±3）
+    function yearOptions() {
+      var min = null, max = null;
+      for (var k in daysMap) {
+        if (!Object.prototype.hasOwnProperty.call(daysMap, k)) continue;
+        var y = Number(k.slice(0, 4));
+        if (min === null || y < min) min = y;
+        if (max === null || y > max) max = y;
       }
+      var thisYear = new Date().getFullYear();
+      if (min === null) { min = view.year - 3; max = view.year + 3; }
+      min = Math.min(min, view.year, thisYear);
+      max = Math.max(max, view.year, thisYear);
+      var out = [];
+      for (var yy = max; yy >= min; yy--) out.push({ value: yy, label: yy + '年', selected: yy === view.year });
+      return out;
+    }
+
+    function monthOptions() {
+      var out = [];
+      for (var mm = 1; mm <= 12; mm++) out.push({ value: mm, label: mm + '月', selected: mm === view.month });
+      return out;
+    }
+
+    function fillPanel(panel, items) {
+      panel.innerHTML = '';
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        var cell = el('button', { type: 'button', 'data-pick-value': String(it.value) }, PICK_CELL_CSS, it.label);
+        if (it.selected) {
+          cell.style.background = ACCENT;
+          cell.style.color = '#fff';
+          cell.style.fontWeight = '600';
+          cell.setAttribute('aria-selected', 'true');
+        }
+        cell.addEventListener('mouseenter', function () {
+          if (this.getAttribute('aria-selected') === 'true') return;
+          this.style.background = ACCENT_HOVER;
+        });
+        cell.addEventListener('mouseleave', function () {
+          if (this.getAttribute('aria-selected') === 'true') return;
+          this.style.background = 'transparent';
+        });
+        panel.appendChild(cell);
+      }
+    }
+
+    function closePicks() {
+      yearPanel.style.display = 'none';
+      monthPanel.style.display = 'none';
+      yearBtn.setAttribute('aria-expanded', 'false');
+      monthBtn.setAttribute('aria-expanded', 'false');
+      openPick = null;
+    }
+
+    function togglePick(kind) {
+      var wasOpen = openPick === kind;
+      closePicks();
+      if (wasOpen) return;
+      var panel = kind === 'year' ? yearPanel : monthPanel;
+      var btn = kind === 'year' ? yearBtn : monthBtn;
+      fillPanel(panel, kind === 'year' ? yearOptions() : monthOptions());
+      panel.style.display = 'grid';
+      btn.setAttribute('aria-expanded', 'true');
+      openPick = kind;
     }
 
     function closestFrom(target, selector) {
@@ -1344,7 +1422,29 @@
         shiftMonth(Number(nav.getAttribute('data-nav')) || 0);
         return;
       }
-      if (closestFrom(e.target, '[data-custom]')) toggleCustom();
+      var pick = closestFrom(e.target, '[data-pick]');
+      if (pick) {
+        togglePick(pick.getAttribute('data-pick'));
+        return;
+      }
+      var pickCell = closestFrom(e.target, '[data-pick-value]');
+      if (pickCell) {
+        // 年月快选只跳视图，不动已选区间
+        if (openPick === 'year') view.year = Number(pickCell.getAttribute('data-pick-value'));
+        else if (openPick === 'month') view.month = Number(pickCell.getAttribute('data-pick-value'));
+        closePicks();
+        paint();
+        return;
+      }
+      closePicks();   // 点日历空白处收起快选面板
+    });
+
+    // 点日历外面 / 按 Esc 也收起
+    document.addEventListener('click', function (e) {
+      if (openPick && !titleWrap.contains(e.target)) closePicks();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' || e.key === 'Esc') closePicks();
     });
 
     if (quickRoot) {
