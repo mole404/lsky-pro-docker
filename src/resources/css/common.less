@@ -184,9 +184,14 @@ progress::-webkit-progress-value {
 
 // 我的图片
 #images-grid {
-    a:hover, a.ds-selected {
+    // 蓝框（外扩 2px 的 outline）只在**被勾选**时染色 —— ds-selected 是 DragSelect 给选中项加的类。
+    // 悬停不染色：鼠标扫过一排图片不再拖出一条蓝线，手机上浏览器「粘住」的 :hover 也不会留下框。
+    a.ds-selected {
         outline-color: var(--lsky-accent);
+    }
 
+    // 右上角小圆勾：悬停与选中都显示；选中时额外染成品牌色（见下面 &.ds-selected）
+    a:hover, a.ds-selected {
         .image-selector {
             display: block;
         }
