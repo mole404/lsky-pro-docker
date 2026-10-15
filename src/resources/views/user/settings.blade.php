@@ -143,7 +143,7 @@
                             <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="week">本周</button>
                             <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="month">本月</button>
                             <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="year">今年</button>
-                            <button type="button" class="cursor-pointer text-sm text-ink-2" data-quick="clear">不选日期</button>
+                            <button type="button" class="cursor-pointer text-sm text-ink-2 ml-2" data-quick="clear">清除日期</button>
                         </div>
                         {{-- 起始/结束两行常驻显示（原来是点「自定义日期」展开的） --}}
                         <input type="date" id="export-date-from" name="date_from" class="ls-input mt-1">
@@ -1115,7 +1115,7 @@
     // 年月快选：年份/月份文字本身就是按钮，点开就地列出可选项（文案旁边带下拉箭头）
     var titleWrap = el('div', null, 'position:relative;display:flex;align-items:center;gap:2px;');
     titleWrap.className = 'text-sm font-medium text-ink';
-    var PICK_BTN_CSS = 'display:inline-flex;align-items:center;gap:3px;background:transparent;border:0;' +
+    var PICK_BTN_CSS = 'display:inline-flex;align-items:center;gap:4px;background:transparent;border:0;' +
       'padding:2px 5px;border-radius:6px;font:inherit;color:inherit;line-height:1.5;';
     // white-space:nowrap：否则 4 列布局里「10月/11月/12月」会被折成两行
     var PICK_CELL_CSS = 'background:transparent;border:0;padding:5px 6px;border-radius:6px;cursor:pointer;' +
@@ -1130,7 +1130,7 @@
         'aria-expanded': 'false', 'aria-label': label }, PICK_BTN_CSS);
       btn.className = 'cursor-pointer text-ink';
       btn.appendChild(textNode);
-      btn.appendChild(el('span', null, 'font-size:9px;line-height:1;opacity:.7;', '\u25be'));
+      btn.appendChild(el('span', null, 'font-size:12px;line-height:1;opacity:.75;', '\u25be'));
       return btn;
     }
     var yearBtn = pickButton('year', '选择年份', yearText);
