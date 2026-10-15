@@ -9,15 +9,11 @@
                 <div class="overflow-hidden rounded-md">
                     <div class="px-4 py-5 bg-surface sm:p-6 space-y-4 shadow-card">
                         <div class="col-span-6">
-                            <label class="block">
-                                <span class="text-ink">选择角色组</span>
-                                {{-- 多选框默认只有两行高，第二行就看不清 → 显式给足高度 --}}
-                                <x-select name="groups[]" class="block w-full mt-1 min-h-[8rem] form-multiselect" multiple>
-                                    @foreach(\App\Models\Group::query()->get() as $group)
-                                    <option value="{{ $group->id }}">{{ $group->name }}</option>
-                                    @endforeach
-                                </x-select>
-                            </label>
+                            {{-- 原来这里是原生 <select multiple>：桌面要按住 Ctrl/⌘ 才好多选、手机上基本选不动。
+                                 现改成打勾清单（一行一个组，点一下勾上/取消）；组多时框内滚动。
+                                 组件：components/group-checklist.blade.php --}}
+                            <span class="block text-ink">选择角色组</span>
+                            <x-group-checklist />
                         </div>
 
                         <div class="col-span-6">

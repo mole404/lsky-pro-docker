@@ -10,15 +10,10 @@
                     <div class="px-4 py-5 bg-surface sm:p-6 space-y-4 shadow-card">
 
                         <div class="col-span-6">
-                            <label class="block">
-                                <span class="text-ink">选择角色组</span>
-                                {{-- 多选框默认只有两行高，第二行就看不清 → 显式给足高度 --}}
-                                <x-select name="groups[]" class="block w-full mt-1 min-h-[8rem] form-multiselect" multiple>
-                                    @foreach(\App\Models\Group::query()->get() as $group)
-                                        <option value="{{ $group->id }}" {{ $strategy->groups->where('id', $group->id)->isNotEmpty() ? 'selected' : '' }}>{{ $group->name }}</option>
-                                    @endforeach
-                                </x-select>
-                            </label>
+                            {{-- 同新建页：原生多选框换成打勾清单，该策略已关联的角色组默认勾上。
+                                 组件：components/group-checklist.blade.php --}}
+                            <span class="block text-ink">选择角色组</span>
+                            <x-group-checklist :selected="$strategy->groups->pluck('id')->all()" />
                         </div>
 
                         <div class="col-span-6">
