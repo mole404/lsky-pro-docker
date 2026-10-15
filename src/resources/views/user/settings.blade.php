@@ -322,7 +322,10 @@
                     + '<div id="export-bar" style="height:100%;width:0%;border-radius:9999px;background:#3085d6;transition:width .4s ease"></div>'
                     + '</div>'
                     + '<p id="export-bar-text" style="margin-top:.375rem;font-size:.875rem;opacity:.75">'
-                    + '已完成 0 / ' + count + ' 张（0%）</p>';
+                    + '已完成 0 / ' + count + ' 张（0%）</p>'
+                    // 取消键自己做：swal 自带那个按钮一点就把弹窗关掉，进度条会跟着一起消失
+                    + '<button type="button" id="export-cancel" class="swal2-styled swal2-cancel"'
+                    + ' style="margin-top:.9rem;background:#d33;color:#fff;cursor:pointer">取消导出</button>';
 
                 const updateBar = (done, total, bytes) => {
                     const container = Swal.getHtmlContainer();
@@ -346,13 +349,19 @@
                         allowOutsideClick: false,
                         allowEscapeKey: false,
                         showConfirmButton: false,
-                        showCancelButton: true,
-                        cancelButtonText: '取消导出',
-                        cancelButtonColor: '#d33',
-                    })).then(result => {
-                        if (result.dismiss === Swal.DismissReason.cancel && exporting) { cancelDialog(); }
-                    });
+                        // 全局 mixin 默认开着「取消」键（app.js 里的 Swal.mixin），这里必须显式关掉：
+                        // 取消键由 progressHtml 自己提供，弹窗不关，进度条原地留到结果出来
+                        showCancelButton: false,
+                    }));
                 };
+
+                // 取消键是页面自己的（见 barHtml 里的 #export-cancel）：一点不关弹窗，
+                // 就地改成「正在取消导出…」，进度条与已完成数字留在原地
+                $(document).on('click', '#export-cancel', function () {
+                    if (! exporting || $(this).prop('disabled')) { return; }
+                    $(this).prop('disabled', true).text('正在取消…');
+                    cancelDialog();
+                });
 
                 // 发起后任务没起来（被拒/出错）：与其干等到超时，不如早点说清楚
                 const stallDialog = () => {
@@ -362,6 +371,7 @@
                         text: '服务端没有接到这次导出，可能被拒绝了，请再试一次。',
                         confirmButtonColor: '#3085d6',
                         confirmButtonText: '知道了',
+                        showCancelButton: false,
                     }));
                 };
 
@@ -375,6 +385,7 @@
                             + (aborted ? '' : '<p style="margin-top:.5rem;font-size:.875rem;opacity:.75">文件已在浏览器下载列表中。</p>'),
                         confirmButtonColor: '#3085d6',
                         confirmButtonText: '知道了',
+                        showCancelButton: false,
                     }));
                 };
 
@@ -385,22 +396,20 @@
                         text: '结果暂时查不到。导出可能仍在服务端继续，可以等它跑完后再试一次。',
                         confirmButtonColor: '#3085d6',
                         confirmButtonText: '知道了',
+                        showCancelButton: false,
                     }));
                 };
 
                 // 取消：给服务端置个旗标，循环会在下一张图的边界停下（原生下载没法在客户端掐断）
                 const cancelDialog = () => {
-                    // 就地改标题：进度条留在原地继续显示，取消期间也看得见停在哪一张
-                    if (Swal.getPopup()) {
-                        Swal.update({title: '正在取消导出…', showCancelButton: false, showLoading: true});
-                    } else {
-                        Swal.fire(dialog({
-                            title: '正在取消导出…',
-                            allowOutsideClick: false,
-                            allowEscapeKey: false,
-                            showConfirmButton: false,
-                        }));
-                    }
+                    // 只改标题文本，不用 Swal.update：update 会把 html 容器整个重渲染，
+                    // 进度条节点被换新、宽度与「已完成 N 张」都会被打回 0，视觉上等于清零重来。
+                    // 直接改文本 + 停用取消键，进度条、数字、loader 全部原地保留。
+                    const title = document.querySelector('.swal2-title');
+                    if (title) { title.textContent = '正在取消导出…'; }
+
+                    const button = document.querySelector('#export-cancel');
+                    if (button) { button.disabled = true; button.textContent = '正在取消…'; }
 
                     axios.post(EXPORT_CANCEL_URL, {_token: CSRF_TOKEN}).then(() => {
                         // 转去等那条「已中断」的结果记录
@@ -416,6 +425,7 @@
                             text: '导出可能仍在服务端进行，请稍后重新发起确认。',
                             confirmButtonColor: '#3085d6',
                             confirmButtonText: '知道了',
+                            showCancelButton: false,
                         }));
                     });
                 };
