@@ -1,7 +1,6 @@
 @props([
     'segments' => [],
     'usedPercent' => 0,
-    'tip' => 'above',      // above：气泡在条上方（仪表盘卡片里）；below：气泡在条下方（侧栏容器内不会被裁）
     'barClass' => 'h-1.5',
 ])
 
@@ -27,7 +26,8 @@
                 $width = $usedPercent * $segment['share'] / 100;
             @endphp
             <div class="ls-seg" style="width: {{ round($width, 4) }}%; background: {{ $segment['color'] }}">
-                <span class="ls-seg__tip @if ($tip === 'below') ls-seg__tip--below @endif">
+                {{-- 气泡一律在条上方：侧栏放下面会盖住「已用/总量」那行字 --}}
+                <span class="ls-seg__tip">
                     <span class="ls-seg__tip-name">{{ $segment['name'] }}</span>
                     <span class="ls-seg__tip-num">{{ \App\Utils::formatSize($segment['kb'] * 1024) }} · {{ $segment['images'] }} 张 · {{ round($segment['share'], 1) }}%</span>
                 </span>
