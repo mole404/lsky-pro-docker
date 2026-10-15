@@ -36,33 +36,106 @@ progress::-webkit-progress-value {
     background-color: var(--lsky-accent);
 }
 
-#capacity-progress {
-    progress.green {
-        &::-webkit-progress-value {
-            background: #00ab00;
-        }
+// fork: 按存储策略分段的用量条（仪表盘与侧栏共用）——颜色见 css/app.css 的 --lsky-seg-*
+// 轨道不加 overflow:hidden：气泡要能跑出条外；圆角改为只给首尾两段
+.ls-segbar {
+    display: flex;
+    width: 100%;
+    border-radius: 9999px;
+    background: var(--lsky-surface-3);
+}
+
+.ls-seg {
+    position: relative;
+    min-width: 3px;
+
+    &:first-child {
+        border-top-left-radius: 9999px;
+        border-bottom-left-radius: 9999px;
     }
-    progress.yellowgreen {
-        &::-webkit-progress-value {
-            background: yellowgreen;
-        }
+
+    &:last-child {
+        border-top-right-radius: 9999px;
+        border-bottom-right-radius: 9999px;
     }
-    progress.yellow {
-        &::-webkit-progress-value {
-            background: #b9b900;
-        }
-    }
-    progress.orange {
-        &::-webkit-progress-value {
-            background: #ff9900;
-        }
-    }
-    progress.red {
-        &::-webkit-progress-value {
-            background: #ff4141;
-        }
+
+    &:hover {
+        filter: brightness(1.08);
     }
 }
+
+// 气泡：默认在条上方；侧栏用 --below 变体（容器是 overflow-scroll，放下面才不会被裁）
+.ls-seg__tip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: max-content;
+    max-width: min(260px, 60vw);
+    padding: 6px 9px;
+    border-radius: 8px;
+    background: var(--lsky-surface);
+    color: var(--lsky-text);
+    border: 1px solid var(--lsky-border);
+    box-shadow: var(--lsky-shadow-pop);
+    font-size: 12.5px;
+    line-height: 1.45;
+    text-align: left;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity .14s ease;
+
+    &.ls-seg__tip--below {
+        bottom: auto;
+        top: calc(100% + 8px);
+    }
+
+    .ls-seg:first-child & {
+        left: 0;
+        transform: none;
+    }
+
+    .ls-seg:last-child & {
+        left: auto;
+        right: 0;
+        transform: none;
+    }
+
+    .ls-seg:hover & {
+        opacity: 1;
+        visibility: visible;
+    }
+}
+
+.ls-seg__tip-name { font-weight: 600; }
+.ls-seg__tip-num { color: var(--lsky-text-2); font-variant-numeric: tabular-nums; }
+
+// 图例
+.ls-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    margin-top: 10px;
+}
+
+.ls-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--lsky-text-2);
+}
+
+.ls-legend__dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.ls-legend__name { color: var(--lsky-text); }
+.ls-legend__num, .ls-legend__pct { font-variant-numeric: tabular-nums; }
+.ls-legend__pct { color: var(--lsky-text-3); }
 
 #toast-container {
     & > div {
