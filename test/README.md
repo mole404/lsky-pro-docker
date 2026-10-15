@@ -53,6 +53,7 @@ node repro-clickthrough.mjs /path/to/context-js.js     # 最小复现：滚动�
 | `infinite-scroll-bottom-mobile.test.mjs` | 手机整页滚到底第一次就要自动加载（地址栏收起前后的视口高度差） |
 | `infinite-scroll-destroy.test.mjs` | `infiniteScroll.destroy()` 谁注册谁解绑（别顺手摘掉图片墙挂在 window 上的监听） |
 | `infinite-scroll-click-delegate.test.mjs` | 哨兵 click 委托判据收窄 + 事件命名空间 |
+| `menu-shield.test.mjs` | 「菜单开着时点菜单外只关菜单、不触发别的」的盾牌（仅图片页）：层级夹在 z-8、手机不渲染、框选守卫、点盾牌仍能冒泡关菜单、右击只关菜单、触屏碰一下即关 + 700ms 窗吞 click |
 | `sidebar.test.mjs` | 侧栏折叠三契约（首屏贴类、切换写 localStorage、<640px 只开关抽屉） |
 
 只跑某一个：`node <文件名>`。

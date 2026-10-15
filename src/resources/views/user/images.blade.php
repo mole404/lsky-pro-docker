@@ -242,10 +242,32 @@
         html .viewer-toolbar > ul > li.viewer-fullscreen.is-fs:before {
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v3a2 2 0 0 1-2 2H3'/%3E%3Cpath d='M21 8h-3a2 2 0 0 1-2-2V3'/%3E%3Cpath d='M3 16h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M16 21v-3a2 2 0 0 1 2-2h3'/%3E%3C/svg%3E");
         }
-    </style>
+    
+        /* 菜单盾牌（只在「我的图片」这一页存在；标记与逻辑见本文件后面）。
+           菜单打开时盖住页面内容，把「点菜单外」的那一发点击**结构性地**吃掉 —— 点图片不再顺手开预览/勾选。
+           z-index 取 8：本页所有「点了会出事」的东西都 ≤ 3（图片卡片 z-[1]/z-[2]、吸顶工具栏 z-[3]），
+           而该盖住它/该保持能点的都 ≥ 9（顶栏 z-[9] 及其下拉面板、长按菜单 z-1000、看图器）。
+           手机（hover:none）不渲染它：一是它会把「菜单开着时划图片墙」一起挡掉，二来触屏由
+           touchstart 关菜单 + 700ms 时间窗吞那一发 click 负责（与长按菜单同一套手感）。
+           注意：关闭逻辑不在这里 —— 点击照常冒泡到 document，由 Alpine 的 @click.outside 收菜单，
+           所以盾牌上**不要**加 stopPropagation。 */
+        #ls-menu-shield {
+            position: fixed;
+            inset: 0;
+            z-index: 8;
+            display: none;
+        }
+        @media (hover: hover) and (pointer: fine) {
+            #ls-menu-shield.is-visible {
+                display: block;
+            }
+        }
+</style>
 @endpush
 
 <x-app-layout>
+    {{-- 菜单盾牌：点菜单外只关菜单、不触发别的（加载与逻辑在本文件末尾的 @push('scripts') 里，仅本页） --}}
+    <div id="ls-menu-shield" aria-hidden="true"></div>
     {{-- 整页滚动后工具栏要吸在固定顶栏下面（top-14 = 56px），否则一滚就没了 --}}
     <div class="sticky top-14 flex justify-between items-center px-2 py-2 z-[3] left-0 right-0 bg-surface border-solid border-b">
         <div class="space-x-2 flex justify-between items-center">
@@ -2339,6 +2361,11 @@
                 if (e.button !== 0 || ! e.target || ! e.target.closest) {
                     return;
                 }
+                /* 菜单盾牌开着时这一发 mousedown 不属于框选：盾牌盖在网格之上，用户其实是想关菜单。
+                   不加这句的话，按住盾牌拖一下会在 mouseup 那条 selfSelect 分支里把沿途图片框上。 */
+                if (typeof lsMenuShieldActive === 'function' && lsMenuShieldActive()) {
+                    return;
+                }
                 /* 必须在这里就先刷：本监听器是捕获阶段，库的 mousedown 在冒泡阶段，
                  * 顺序上我们一定先跑，库判定时读到的才是刷新后的矩形。 */
                 dsSyncAreaRect();
@@ -3142,8 +3169,102 @@
                 }
             });
 
-            // 标签列表最后拉：此时 renderDetailTagOptions / renderTagFilter 都已定义（避免 TDZ）
             loadTags();
+        </script>
+    @endpush
+
+    @push('scripts')
+        <script>
+            /* 菜单盾牌：「我的图片」页里，菜单打开时点菜单外的空白 = 只关菜单，不触发别的事。
+             *
+             * 为什么需要它：这些下拉菜单的关闭都靠 Alpine 的 @click.outside —— 它注册在 document 冒泡阶段，
+             * 只执行 `open = false`，既不 preventDefault 也不 stopPropagation；而「点图片开预览」是 viewer.js
+             * 绑在 #images-grid 上的冒泡监听 ⇒ 同一发点击两个都跑（先开图、后关菜单）。
+             * 这里放一块 fixed 全屏透明层把那发点击结构性吃掉（关闭仍由 @click.outside 完成，盾牌上别加 stopPropagation）。
+             *
+             * 覆盖范围：本页所有 .ls-menu —— 顶栏的用户菜单 / 存储策略 / 外观切换，以及本页「⋯」「最新」「标签」。
+             * 长按与右键那种菜单（.dropdown-context）另有自己的捕获守卫（context-js），不归这里管。
+             * 已知代价（已确认接受）：菜单开着时点吸顶工具栏那三个按钮要先关菜单（它们在盾牌之下，z-[3]）。
+             */
+            /* MENU-SHIELD-BEGIN */
+            (() => {
+                const shield = document.getElementById('ls-menu-shield');
+                if (! shield) {
+                    return;
+                }
+
+                const PANEL = '.ls-menu';
+                const TOUCH_SUPPRESS_MS = 700;   // 与 context-js 的时间窗同量级：够吞掉抬手补发的那一发 click
+                let open = false;
+                let suppressClickUntil = 0;
+
+                // 「屏幕上有菜单」的判据与 context-js 一致：只看元素实际可见性，不看任何内存状态
+                const visible = (el) => {
+                    const cs = getComputedStyle(el);
+                    return cs.display !== 'none' && cs.visibility !== 'hidden';
+                };
+                const anyMenuOpen = () => Array.prototype.some.call(document.querySelectorAll(PANEL), visible);
+
+                const sync = () => {
+                    const now = anyMenuOpen();
+                    if (now === open) {
+                        return;
+                    }
+                    open = now;
+                    shield.classList.toggle('is-visible', now);
+                };
+
+                // 菜单开合只会动面板自己的行内 style / class（x-show 与 x-transition）
+                new MutationObserver((records) => {
+                    for (const record of records) {
+                        const target = record.target;
+                        if (target && target.nodeType === 1 && target.matches && target.matches(PANEL)) {
+                            sync();
+                            return;
+                        }
+                    }
+                }).observe(document.body, {attributes: true, attributeFilter: ['style', 'class'], subtree: true});
+
+                // 兜底：真正要动手前再对一次状态（pointerdown 早于 mousedown / click，页面里那个框选处理器读的就是它）
+                document.addEventListener('pointerdown', sync, true);
+                document.addEventListener('keydown', sync, true);
+                sync();
+
+                // 走现有那条关闭路径：合成一发 click，冒泡到 document → Alpine 的 @click.outside 收菜单
+                const closeMenus = () => {
+                    shield.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                };
+
+                // 右击盾牌：只关菜单，不弹浏览器原生菜单
+                shield.addEventListener('contextmenu', (event) => {
+                    event.preventDefault();
+                    closeMenus();
+                });
+
+                // 触屏（盾牌在 hover:none 下不显示，吃不到点击）：手指一碰就收菜单（与长按菜单同一套手感），
+                // 并开一个时间窗吞掉随后补发的那一发 click；不 preventDefault ⇒ 滚动照常，touchmove 会清窗。
+                document.addEventListener('touchstart', () => {
+                    if (! open) {
+                        return;
+                    }
+                    closeMenus();
+                    suppressClickUntil = Date.now() + TOUCH_SUPPRESS_MS;
+                }, true);
+                document.addEventListener('touchmove', () => {
+                    suppressClickUntil = 0;
+                }, true);
+                document.addEventListener('click', (event) => {
+                    if (Date.now() >= suppressClickUntil) {
+                        return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                }, true);
+
+                // 给页面里那个捕获阶段的框选处理器问「现在有没有菜单开着」
+                window.lsMenuShieldActive = () => open;
+            })();
+            /* MENU-SHIELD-END */
         </script>
     @endpush
 </x-app-layout>
