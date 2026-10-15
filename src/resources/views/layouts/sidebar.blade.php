@@ -107,7 +107,7 @@
         <div id="capacity-progress" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10 ls-zoom-mt-0">
             <p class="text-ink-2 text-[13.5px]">容量使用</p>
             {{-- 只有进度条变了：按存储策略分段 + 悬浮看各策略占用；文字一行不动 --}}
-            <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" tip="below" />
+            <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" />
             <p class="text-ink-3 text-[13.5px] truncate">
                 <span class="used">{{ \App\Utils::formatSize($storage['total'] * 1024) }}</span>
                 /
