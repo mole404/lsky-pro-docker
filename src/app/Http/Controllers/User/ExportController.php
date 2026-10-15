@@ -75,16 +75,19 @@ class ExportController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
-        $result = Cache::get($this->resultKey($user->id));
+        $record = Cache::get($this->resultKey($user->id));
 
-        if (! is_array($result)) {
-            // 显式回一个 JSON 的 null。不能直接 response()->json(null)：Symfony 的 JsonResponse
-            // 会把 PHP 的 null 归一成 `{}`、把空数组归一成 `[]`，前端拿到空对象更容易被误当成
-            // 「有一条记录、只是字段全空」，从而显示一个 0 张的假结果。
-            return response()->json([], 200)->setContent('null');
-        }
-
-        return response()->json($result);
+        // 固定信封，不外发裸 null：Symfony 的 JsonResponse 会把 PHP 的 null 归一成 `{}`、
+        // 把空数组归一成 `[]`，前端很容易把空对象误当成「有一条记录、只是字段全空」。
+        // 信封里的 record 永远是显式的 null 或对象，前端一句 data.record 就够。
+        //   record   —— 最近一次「已完成」的导出记录（没有则 null）
+        //   progress —— 此刻正在跑的那笔的进度（含 run 标识，前端据此认领自己的任务）
+        //   active   —— 此刻是否有导出在跑（含别人触发的，或本账号的另一笔）
+        return response()->json([
+            'record'   => is_array($record) ? $record : null,
+            'progress' => ExportConcurrency::progress($user->id),
+            'active'   => ExportConcurrency::isActive($user->id),
+        ]);
     }
 
     /**
@@ -96,8 +99,13 @@ class ExportController extends Controller
         $user = Auth::user();
         $userId = $user->id;
 
+        // 本次导出的标识：前端随机生成、随下载地址带过来，服务端原样写进结果记录。
+        // 前端只认「run 与自己一致」的结果，于是设置页再也不用在打开时读旧记录来区分
+        // 「本次」与「上一次」—— 历史记录一次都不会显示在页面上。
+        $run = $this->runToken($request);
+
         // 占位 = 同一账号只能有一个导出（同时受整机并发上限约束）
-        $denied = ExportConcurrency::acquire($userId);
+        $denied = ExportConcurrency::acquire($userId, 0, $run);
 
         if ($denied === 'busy') {
             return $this->text('已有导出任务在进行中，请等它结束', 429);
@@ -132,6 +140,9 @@ class ExportController extends Controller
 
         $bytes = (int) round((float) (clone $query)->sum('size') * 1024);
 
+        // 总数先公布出去：进度条一开弹窗就有分母，不用等第一张图写完
+        ExportConcurrency::touch($userId, ExportConcurrency::progressPayload(0, 0, $total, $run));
+
         // zip64 判定：条目数越过 65535，或 32 位的大小/偏移快溢出时必须切到 zip64。
         // size 列是 KB 精度（不含每条头部开销），所以留 8MB 余量；另外固定还会追加 3 个条目（索引/摘要/失败清单）。
         $zip64 = ($total + 8) >= 0xFFFF || $bytes >= 0xFFFFFFFF - 8 * 1024 * 1024;
@@ -149,7 +160,7 @@ class ExportController extends Controller
             'X-Accel-Buffering'   => 'no',
         ];
 
-        return response()->stream(function () use ($query, $zip64, $userId, $total, $filters, $started, &$streamStarted) {
+        return response()->stream(function () use ($query, $zip64, $userId, $total, $filters, $started, $run, &$streamStarted) {
             // 流真的开始往外写了：撤掉上面那个「没开流就还占位」的兜底
             $streamStarted = true;
 
@@ -165,7 +176,7 @@ class ExportController extends Controller
 
             // 收尾：释放占位 + 写结果记录 +（只有真出问题才）写一条日志。
             // 三条路径都走这里 —— 正常结束、用户取消/网络断开、fatal（register_shutdown_function）。
-            $finish = function (bool $aborted) use (&$state, &$finished, $userId, $total, $started) {
+            $finish = function (bool $aborted) use (&$state, &$finished, $userId, $total, $started, $run) {
                 if ($finished) {
                     return;
                 }
@@ -183,6 +194,8 @@ class ExportController extends Controller
                     'bytes'       => (int) $state['bytes'],
                     'aborted'     => $aborted,
                     'first_error' => $state['first_error'],
+                    // 本次导出的标识：前端只认自己那一次，页面不再显示任何历史结果
+                    'run'         => $run,
                 ]);
 
                 if ($state['failed'] > 0 || $state['first_error'] !== null) {
@@ -210,7 +223,7 @@ class ExportController extends Controller
 
             try {
                 $query->with(['album', 'strategy', 'group', 'tags'])
-                    ->chunkById(self::CHUNK, function ($images) use ($zip, &$state, &$filesystems, &$used, $userId) {
+                    ->chunkById(self::CHUNK, function ($images) use ($zip, &$state, &$filesystems, &$used, $userId, $total, $run) {
                         foreach ($images as $image) {
                             if (connection_aborted()) {
                                 throw new ClientAbortedException();
@@ -224,8 +237,14 @@ class ExportController extends Controller
 
                             $this->writeImage($zip, $image, $filesystems, $used, $state);
 
-                            // 心跳：每张图刷新一次，别人就知道这个导出还活着（不会被当成死占位回收）
-                            ExportConcurrency::touch($userId);
+                            // 心跳 + 进度：每张图刷新一次（同一笔写入）。既让别人知道这个导出还活着
+                            // （不会被当成死占位回收），也让设置页的进度条能动起来。
+                            ExportConcurrency::touch($userId, ExportConcurrency::progressPayload(
+                                $state['ok'] + $state['failed'],
+                                (int) $state['bytes'],
+                                $total,
+                                $run
+                            ));
                         }
                     });
 
@@ -551,6 +570,17 @@ class ExportController extends Controller
         $state['failed']++;
         $state['first_error'] = $state['first_error'] ?: $reason;
         $state['failures'][] = $id."\t".$reason;
+    }
+
+    /**
+     * 前端带来的本次导出标识。只收 [A-Za-z0-9_-] 且长度封顶，拿不到就是 null
+     * （例如用户直接从地址栏打开下载地址，那种情况结果记录里 run 为 null）。
+     */
+    private function runToken(Request $request): ?string
+    {
+        $run = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $request->query('run', ''));
+
+        return $run === '' ? null : substr($run, 0, 32);
     }
 
     private function resultKey(int $userId): string
