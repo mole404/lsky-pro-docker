@@ -198,6 +198,8 @@
                 const CANCEL_POLL_MAX = 30;
                 const STALL_MS = 8000;               // 发起后这么久还没见过自己的进度 ⇒ 当作没起来
                 const BUTTON_DISABLE_MS = 3000;      // 发起后按钮禁用时长
+                // 小包阈值：整包取回内存再让浏览器保存（blob 地址），下载管理器没有可回源的地址可截
+                const SMALL_LIMIT = 128 * 1024 * 1024;
 
                 const $button = $('#export-submit');
 
@@ -212,6 +214,8 @@
                 let exporting = false;   // 本次导出是否还在进行（决定取消按钮是否有意义）
                 let startedMs = 0;       // 发起时刻，用于判断这次任务有没有真的起来
                 let sawProgress = false; // 是否见过服务端上报的进度
+                let cancelRequested = false;  // 本次是否点过取消（blob 路径据此丢弃半截数据）
+                let abortController = null;   // blob 路径的 fetch 控制器：取消时直接掐断连接
 
                 // 控件 name 即接口参数名；空值一律不传（= 该维度不限）
                 const collectSearch = () => {
@@ -382,7 +386,7 @@
                         icon: aborted ? 'info' : (failed > 0 ? 'warning' : 'success'),
                         title: aborted ? '导出已中断' : (failed > 0 ? '导出完成，有图片未成功' : '导出完成'),
                         html: '<p>' + resultText(data) + '</p>'
-                            + (aborted ? '' : '<p style="margin-top:.5rem;font-size:.875rem;opacity:.75">文件已在浏览器下载列表中。</p>'),
+                            + (aborted ? '' : '<p style="margin-top:.5rem;font-size:.875rem;opacity:.75">文件即将开始下载。</p>'),
                         confirmButtonColor: '#3085d6',
                         confirmButtonText: '知道了',
                         showCancelButton: false,
@@ -411,6 +415,12 @@
                     const button = document.querySelector('#export-cancel');
                     if (button) { button.disabled = true; button.textContent = '正在取消…'; }
 
+                    cancelRequested = true;
+
+                    if (abortController) {
+                        try { abortController.abort(); } catch (e) { /* 已经结束了就算了 */ }
+                    }
+
                     axios.post(EXPORT_CANCEL_URL, {_token: CSRF_TOKEN}).then(() => {
                         // 转去等那条「已中断」的结果记录
                         pollCount = 0;
@@ -430,8 +440,55 @@
                     });
                 };
 
-                // 隐藏 iframe 下载：不替换当前页面（万一是错误响应，也只会落在这个看不见的框里），
-                // 大文件依旧由浏览器直接落盘、不经过内存。
+                // 从响应的 Content-Disposition 取文件名（同源请求能读到该头）；取不到就用服务端同款格式
+                const filenameFrom = (header) => {
+                    if (! header) { return null; }
+                    const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+                    if (star) { try { return decodeURIComponent(star[1]); } catch (e) { return star[1]; } }
+                    const plain = /filename="?([^";]+)"?/i.exec(header);
+                    return plain ? plain[1] : null;
+                };
+
+                const fallbackFilename = () => {
+                    const d = new Date();
+                    const pad = n => (n < 10 ? '0' : '') + n;
+                    return 'lsky-images-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
+                        + '-' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '.zip';
+                };
+
+                // 小包：页面自己把整包取回内存，再用 blob 地址交给浏览器保存。
+                // 下载管理器截的是「浏览器的下载事件 + 可回源重发的服务端地址」——blob 两条都不成立：
+                // 没有服务端地址可重发，它们既截不走，也不会再用自己的引擎慢慢爬。
+                const startBlobDownload = (query) => {
+                    abortController = new AbortController();
+                    const url = EXPORT_URL + (query === '' ? '' : '?' + query);
+
+                    window.fetch(url, {credentials: 'same-origin', signal: abortController.signal})
+                        .then(response => {
+                            if (! response.ok) { throw new Error('HTTP ' + response.status); }
+                            const name = filenameFrom(response.headers.get('Content-Disposition')) || fallbackFilename();
+                            return response.blob().then(blob => ({blob: blob, name: name}));
+                        })
+                        .then(result => {
+                            // 取消过就别存了：此刻拿到的只是半截数据
+                            if (cancelRequested) { return; }
+                            const link = document.createElement('a');
+                            link.href = URL.createObjectURL(result.blob);
+                            link.download = result.name;
+                            document.body.appendChild(link);
+                            link.click();
+                            window.setTimeout(() => { URL.revokeObjectURL(link.href); link.remove(); }, 4000);
+                        })
+                        .catch(error => {
+                            if (cancelRequested || (error && error.name === 'AbortError')) { return; }
+                            exporting = false;
+                            stopPolling();
+                            stallDialog();
+                        });
+                };
+
+                // 大包：隐藏 iframe 流式下载（不替换当前页面，万一是错误响应也只落在看不见的框里），
+                // 由浏览器直接落盘、不经过内存。
                 const startDownload = (url) => {
                     if (! frame) {
                         frame = document.createElement('iframe');
@@ -481,8 +538,15 @@
                             // 按钮保持禁用一段时间，避免连点重复发起
                             window.setTimeout(() => $button.prop('disabled', false), BUTTON_DISABLE_MS);
 
-                            // 浏览器原生下载（隐藏 iframe）：大文件直接落盘、不经过内存
-                            startDownload(EXPORT_URL + (query === '' ? '' : '?' + query));
+                            cancelRequested = false;
+
+                            if (bytes <= SMALL_LIMIT) {
+                                // 小包：页面取回内存后由浏览器保存（blob 地址，第三方下载器截不到）
+                                startBlobDownload(query);
+                            } else {
+                                // 大包：浏览器原生流式下载，不占内存
+                                startDownload(EXPORT_URL + (query === '' ? '' : '?' + query));
+                            }
 
                             exporting = true;
                             sawProgress = false;
