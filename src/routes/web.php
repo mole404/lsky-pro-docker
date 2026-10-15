@@ -48,6 +48,8 @@ Route::group(['middleware' => ['auth']], function () {
         Route::get('export/preview', [ExportController::class, 'preview'])->name('settings.export.preview');
         Route::get('export/result', [ExportController::class, 'result'])->name('settings.export.result');
         Route::get('export', [ExportController::class, 'export'])->name('settings.export');
+        // 取消导出：置服务端旗标，流式循环在下一张图的边界停下（原生下载没法在客户端掐断）
+        Route::post('export/cancel', [ExportController::class, 'cancel'])->name('settings.export.cancel');
     });
 
     Route::group([

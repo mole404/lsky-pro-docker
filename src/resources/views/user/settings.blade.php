@@ -77,10 +77,11 @@
             </div>
         </form>
 
-        {{-- 批量导出：独立卡片，不放进上面那个 settings.update 表单（页面脚本按 form 选择器统一接管提交） --}}
-        <div class="mt-6 overflow-hidden sm:rounded-md shadow-card">
+        {{-- 批量导出：标题排在外面（与上面「用户设置」同款）；卡片本体不放进那个 settings.update 表单
+             （页面脚本按 form 选择器统一接管提交） --}}
+        <p class="mt-6 mb-3 font-semibold text-lg text-ink">批量导出</p>
+        <div class="overflow-hidden sm:rounded-md shadow-card">
             <div class="px-3 py-4 bg-surface sm:p-6">
-                <p class="mb-3 font-semibold text-lg text-ink">批量导出</p>
                 @php
                     // 下拉选项先在服务端拼好（含每项的数量），前端只负责渲染与交互
                     $albumOptions = [['v' => '0', 't' => '未分类 ('.$uncategorizedNum.')']];
@@ -100,12 +101,11 @@
                         }
                     }
                 @endphp
+                {{-- 一句说明放在筛选区上方：不占网格，也就不跟控件抢行 --}}
+                <p class="mb-4 text-sm text-ink-2">不选择任何条件 = 导出全部图片</p>
+
                 {{-- 控件的 name 就是导出接口的参数名，空值不传 ⇒ 该维度不限 --}}
                 <div id="export-filters" class="grid grid-cols-6 gap-6">
-                    <div class="col-span-6">
-                        <p class="text-sm text-ink-2">不选择任何条件 = 导出全部图片</p>
-                    </div>
-
                     <div class="col-span-6 sm:col-span-3">
                         <span class="block text-sm font-medium text-ink">相册</span>
                         {{-- 自绘多选下拉：选项数据在 script[type=application/json] 里，交互由内联脚本渲染 --}}
@@ -183,14 +183,21 @@
 
     @push('scripts')
         <script>
-            // 批量导出：预检数量与体积 → 二次确认 → 浏览器原生下载 → 轮询导出结果
+            // 批量导出：预检数量与体积 → 二次确认 → 浏览器原生下载（大文件不进内存）
+            //          → 进行中弹窗（可「取消导出」）+ 轮询结果 → 结果弹窗
             (function () {
                 const EXPORT_PREVIEW_URL = '{{ route('settings.export.preview') }}';
                 const EXPORT_URL = '{{ route('settings.export') }}';
                 const EXPORT_RESULT_URL = '{{ route('settings.export.result') }}';
-                const POLL_INTERVAL = 15000;      // 轮询间隔 15 秒
-                const POLL_MAX = 60;              // 最多轮询 60 次
-                const BUTTON_DISABLE_MS = 3000;   // 发起后按钮禁用时长
+                const EXPORT_CANCEL_URL = '{{ route('settings.export.cancel') }}';
+                const CSRF_TOKEN = '{{ csrf_token() }}';
+
+                const POLL_FIRST_MS = 2000;          // 头一次查结果：导出很快时不用干等
+                const POLL_INTERVAL = 5000;          // 常规轮询间隔
+                const POLL_MAX = 180;                // 最多轮询次数（够大包跑完）
+                const CANCEL_POLL_INTERVAL = 1000;   // 点了取消后加密轮询，尽快看到「已中断」
+                const CANCEL_POLL_MAX = 30;
+                const BUTTON_DISABLE_MS = 3000;      // 发起后按钮禁用时长
 
                 const $button = $('#export-submit');
                 const $result = $('#export-result');
@@ -199,6 +206,9 @@
                 let lastStartedAt = null;
                 let pollTimer = null;
                 let pollCount = 0;
+                let pollInterval = POLL_INTERVAL;
+                let pollMax = POLL_MAX;
+                let exporting = false;   // 本次导出是否还在进行（决定取消按钮是否有意义）
 
                 // 控件 name 即接口参数名；空值一律不传（= 该维度不限）
                 const collectSearch = () => {
@@ -243,8 +253,23 @@
                     data.started_at || data.finished_at || data.total || data.ok || data.failed || data.bytes || data.aborted
                 );
 
+                // 页面其它弹窗的既有写法：不动背景页面的高度与滚动条
+                const dialog = (options) => Object.assign({heightAuto: false, scrollbarPadding: false}, options);
+
                 const stopPolling = () => {
                     if (pollTimer !== null) { window.clearTimeout(pollTimer); pollTimer = null; }
+                };
+
+                const schedulePoll = (delay) => {
+                    stopPolling();
+                    pollTimer = window.setTimeout(pollOnce, delay);
+                };
+
+                const settle = (data) => {
+                    exporting = false;
+                    stopPolling();
+                    showResult(resultText(data));
+                    resultDialog(data);
                 };
 
                 const pollOnce = () => {
@@ -253,22 +278,94 @@
                         // 进页面时已有记录 ⇒ 只有 started_at 变了才是本次导出
                         if (hasRecord(data) && (lastStartedAt === null || data.started_at !== lastStartedAt)) {
                             lastStartedAt = data.started_at || lastStartedAt;
-                            showResult(resultText(data));
-                            stopPolling();
+                            settle(data);
                             return;
                         }
-                        scheduleNextPoll();
-                    }).catch(() => scheduleNextPoll());
+                        if (++pollCount >= pollMax) {
+                            exporting = false;
+                            stopPolling();
+                            showResult('导出仍在进行或结果暂不可查，稍后刷新本页查看');
+                            timeoutDialog();
+                            return;
+                        }
+                        schedulePoll(pollInterval);
+                    }).catch(() => {
+                        if (++pollCount >= pollMax) {
+                            exporting = false;
+                            stopPolling();
+                            timeoutDialog();
+                            return;
+                        }
+                        schedulePoll(pollInterval);
+                    });
                 };
 
-                const scheduleNextPoll = () => {
-                    pollCount += 1;
-                    if (pollCount >= POLL_MAX) {
-                        stopPolling();
-                        showResult('导出仍在进行或结果暂不可查，稍后刷新本页查看');
-                        return;
-                    }
-                    pollTimer = window.setTimeout(pollOnce, POLL_INTERVAL);
+                // 进行中：只有「取消导出」一个按钮 —— 导出期间页面被它占住，避免误操作打断
+                const progressDialog = (count, bytes) => {
+                    Swal.fire(dialog({
+                        title: '导出进行中',
+                        html: '<p>正在打包 <b>' + count + '</b> 张图片（约 ' + formatSize(bytes) + '）。</p>'
+                            + '<p style="margin-top:.5rem;font-size:.875rem;opacity:.75">打包期间请保持本页面开启。</p>',
+                        icon: 'info',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        showConfirmButton: false,
+                        showCancelButton: true,
+                        cancelButtonText: '取消导出',
+                        cancelButtonColor: '#d33',
+                    })).then(result => {
+                        if (result.dismiss === Swal.DismissReason.cancel && exporting) { cancelDialog(); }
+                    });
+                };
+
+                const resultDialog = (data) => {
+                    const failed = parseInt(data.failed, 10) || 0;
+                    const aborted = Boolean(data.aborted);
+                    Swal.fire(dialog({
+                        icon: aborted ? 'info' : (failed > 0 ? 'warning' : 'success'),
+                        title: aborted ? '导出已中断' : (failed > 0 ? '导出完成，有图片未成功' : '导出完成'),
+                        html: '<p>' + resultText(data) + '</p>'
+                            + (aborted ? '' : '<p style="margin-top:.5rem;font-size:.875rem;opacity:.75">文件已在浏览器下载列表中。</p>'),
+                        confirmButtonColor: '#3085d6',
+                        confirmButtonText: '知道了',
+                    }));
+                };
+
+                const timeoutDialog = () => {
+                    Swal.fire(dialog({
+                        icon: 'info',
+                        title: '导出仍在进行',
+                        text: '结果暂时查不到，稍后刷新本页即可看到。',
+                        confirmButtonColor: '#3085d6',
+                        confirmButtonText: '知道了',
+                    }));
+                };
+
+                // 取消：给服务端置个旗标，循环会在下一张图的边界停下（原生下载没法在客户端掐断）
+                const cancelDialog = () => {
+                    Swal.fire(dialog({
+                        title: '正在取消导出…',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        showConfirmButton: false,
+                    }));
+
+                    axios.post(EXPORT_CANCEL_URL, {_token: CSRF_TOKEN}).then(() => {
+                        // 转去等那条「已中断」的结果记录
+                        pollCount = 0;
+                        pollInterval = CANCEL_POLL_INTERVAL;
+                        pollMax = CANCEL_POLL_MAX;
+                        schedulePoll(CANCEL_POLL_INTERVAL);
+                    }).catch(() => {
+                        exporting = false;
+                        Swal.fire(dialog({
+                            icon: 'warning',
+                            title: '取消请求没发出去',
+                            text: '导出可能仍在服务端进行，稍后刷新本页确认结果。',
+                            confirmButtonColor: '#3085d6',
+                            confirmButtonText: '知道了',
+                        }));
+                    });
                 };
 
                 // 进页面时先展示上一次的导出结果；没有记录就什么都不显示
@@ -298,29 +395,32 @@
                             $button.prop('disabled', false);
                             return;
                         }
-                        Swal.fire({
-                            // 与页面其它弹窗一致：不动背景页面
-                            heightAuto: false,
-                            scrollbarPadding: false,
+                        Swal.fire(dialog({
                             title: '确认导出',
-                            text: '共 ' + count + ' 张 / 约 ' + formatSize(bytes) + '。导出期间请保持页面开启与网络稳定；中途中断需要重新导出。',
+                            text: '共 ' + count + ' 张 / 约 ' + formatSize(bytes) + '。导出期间请保持页面开启与网络稳定，中途中断需要重新导出。',
                             icon: 'question',
                             showCancelButton: true,
                             confirmButtonColor: '#3085d6',
                             cancelButtonColor: '#d33',
                             confirmButtonText: '开始导出',
                             cancelButtonText: '取消',
-                        }).then(result => {
+                        })).then(result => {
                             if (! result.isConfirmed) {
                                 $button.prop('disabled', false);
                                 return;
                             }
                             // 按钮保持禁用一段时间，避免连点重复发起
                             window.setTimeout(() => $button.prop('disabled', false), BUTTON_DISABLE_MS);
-                            pollCount = 0;
-                            // 用浏览器原生下载（不走 axios blob，大文件不进内存）
+
+                            // 浏览器原生下载：大文件直接落盘，不经过内存
                             window.location = EXPORT_URL + (query === '' ? '' : '?' + query);
-                            pollTimer = window.setTimeout(pollOnce, POLL_INTERVAL);
+
+                            exporting = true;
+                            pollCount = 0;
+                            pollInterval = POLL_INTERVAL;
+                            pollMax = POLL_MAX;
+                            progressDialog(count, bytes);
+                            schedulePoll(POLL_FIRST_MS);
                         });
                     }).catch(() => {
                         toastr.warning('导出预检失败，请稍后再试');
@@ -529,6 +629,9 @@
       box.type = 'checkbox';
       box.value = opt.v;
       box.setAttribute('data-label', opt.t);
+      // 点选时浏览器会在勾框外面画一圈聚焦环 —— 去掉它，勾没勾上本身就够清楚了
+      box.style.outline = 'none';
+      box.style.boxShadow = 'none';
 
       var text = make('span', 'truncate');
       text.style.minWidth = '0';
@@ -984,7 +1087,7 @@
       if (!summaryEl) return;
       var text;
       if (!from && !to) {
-        text = '未选择日期（= 不过滤日期）';
+        text = '未选择日期';
       } else if (from && !to) {
         text = from + ' 之后';
       } else if (!from && to) {

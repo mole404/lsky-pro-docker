@@ -8,6 +8,7 @@ use App\Models\Image;
 use App\Models\Strategy;
 use App\Models\User;
 use App\Services\ImageService;
+use App\Support\ExportCancel;
 use App\Support\ExportConcurrency;
 use App\Support\StreamedZipWriter;
 use Illuminate\Http\JsonResponse;
@@ -109,6 +110,9 @@ class ExportController extends Controller
         // 占位是在「流真正开始写」之前拿的，而释放只发生在流回调里 —— 所以这一段里要是出了岔子
         // （异常、致命错误、类型错误……），流回调永远不会跑，占位就没人还，用户被自己那笔占位
         // 挡在门外直到心跳过期。这里用 shutdown 兜底：没开流就还占位。
+        // 新一次导出开始：清掉可能残留的取消旗标（否则上一轮的取消会立刻掐掉这一轮）
+        ExportCancel::clear($userId);
+
         $streamStarted = false;
         register_shutdown_function(static function () use (&$streamStarted, $userId) {
             if (! $streamStarted) {
@@ -168,6 +172,7 @@ class ExportController extends Controller
                 $finished = true;
 
                 ExportConcurrency::release($userId);
+                ExportCancel::clear($userId);
 
                 $this->storeResult($userId, [
                     'started_at'  => $started->toIso8601String(),
@@ -211,6 +216,12 @@ class ExportController extends Controller
                                 throw new ClientAbortedException();
                             }
 
+                            // 用户点了「取消导出」：在图片边界上停 —— 不掐在一张图写到一半的地方，
+                            // 免得包内多出一条半截条目。走的是同一条中断收尾。
+                            if (ExportCancel::requested($userId)) {
+                                throw new ClientAbortedException();
+                            }
+
                             $this->writeImage($zip, $image, $filesystems, $used, $state);
 
                             // 心跳：每张图刷新一次，别人就知道这个导出还活着（不会被当成死占位回收）
@@ -251,6 +262,27 @@ class ExportController extends Controller
                 $finish($interrupted);
             }
         }, 200, $headers);
+    }
+
+    /**
+     * 取消当前账号正在进行的导出。
+     *
+     * 客户端点「取消导出」走这里：置一个旗标，流式循环在下一张图的边界上自己停下，
+     * 然后照常走「中断」收尾（释放占位 + 结果记为已中断），连接随之断开。
+     * 没有导出在进行时不报错（幂等）。
+     */
+    public function cancel(): JsonResponse
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        $active = ExportConcurrency::isActive($user->id);
+
+        if ($active) {
+            ExportCancel::request($user->id);
+        }
+
+        return response()->json(['ok' => true, 'active' => $active]);
     }
 
     /**
