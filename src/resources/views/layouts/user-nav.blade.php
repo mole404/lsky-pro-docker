@@ -1,5 +1,5 @@
 <!-- Profile dropdown -->
-<x-dropdown>
+<x-dropdown labelledby="user-menu-button">
     <x-slot name="trigger">
         {{-- 左内边距 6px、右 12px（故意不等）：default-avatar.svg 里的人形自带 ~5.8px 透明留白
              （那颗脑袋+身体只占画布 58%，左右各留 ~20%）。这个文件**保持原样、不许改**（最初就要以前那个样式），所以两边的视觉间距只能靠按钮 padding 补 —— 左 6px 正好让头像

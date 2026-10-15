@@ -1,9 +1,12 @@
 {{--
  | 外观切换（三态：跟随系统 / 亮色 / 暗色）
  | 纯 Alpine + 一个 store，不碰任何既有交互逻辑；状态存在 localStorage，首屏由 layouts 里的内联脚本恢复。
+ | 面板复用 x-dropdown：动画（进 200ms / 出 75ms、translate-y-9）与「点外面关闭」跟顶栏另两个下拉逐字一致 ——
+ | 这里不要再写自己的 x-transition / @click.outside / x-data，否则又成了第二套实现。
 --}}
-<div class="relative" x-data="{ open: false }" x-cloak @click.outside="open = false">
-    <button type="button" @click="open = !open"
+<x-dropdown panel-class="w-36" labelledby="theme-menu-button">
+    <x-slot name="trigger">
+    <button type="button" id="theme-menu-button"
             class="ls-btn ls-btn-sm px-0 w-10 h-10 rounded-full border-line"
             :title="'外观：' + ($store.theme.mode === 'system' ? '跟随系统' : ($store.theme.mode === 'dark' ? '暗色' : '亮色'))">
         <span class="sr-only">切换外观</span>
@@ -25,16 +28,9 @@
             <path d="M15.5 12.4A5.8 5.8 0 0 1 8 4.6a6 6 0 1 0 7.5 7.8z"/>
         </svg>
     </button>
+    </x-slot>
 
-    <div x-show="open"
-         x-transition:enter="transition ease-out duration-150"
-         x-transition:enter-start="opacity-0 -translate-y-1"
-         x-transition:enter-end="opacity-100 translate-y-0"
-         x-transition:leave="transition ease-in duration-100"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="absolute right-0 mt-2 w-36 z-[10] ls-menu"
-         style="display: none">
+    <x-slot name="content">
         <a class="ls-menu-item flex items-center gap-2"
            :class="$store.theme.mode === 'system' ? 'text-brand font-semibold' : ''"
            @click="$store.theme.set('system'); open = false">
@@ -64,5 +60,5 @@
             </svg>
             <span>暗色</span>
         </a>
-    </div>
-</div>
+    </x-slot>
+</x-dropdown>

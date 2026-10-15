@@ -28,7 +28,9 @@
 
 @if ($segments === [])
     {{-- 没有可用分段（没图、或占用为 0）：退回原来的单色条 --}}
-    <div class="w-full rounded-full bg-surface-3 overflow-hidden {{ $barClass }}">
+    {{-- 回退条也要带 .ls-segbar：thick 档的规则是 .ls-segbar.ls-segbar--thick（双类名压过 h-1.5），
+         少了这个类，空态（没图/占用为 0）那条就只有 6px，与有图时不一致。 --}}
+    <div class="ls-segbar w-full rounded-full bg-surface-3 overflow-hidden {{ $barClass }}">
         <div class="h-full rounded-full bg-brand" style="width: {{ $usedPercent }}%"></div>
     </div>
 @else

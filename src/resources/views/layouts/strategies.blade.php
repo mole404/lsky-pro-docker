@@ -1,5 +1,5 @@
 <!-- Strategies dropdown -->
-<x-dropdown>
+<x-dropdown labelledby="strategy-menu-button">
     <x-slot name="trigger">
         <button type="button" id="strategy-menu-button" class="ls-btn ls-btn-sm h-10 w-10 rounded-full px-0 justify-center gap-2 border-line sm:w-auto sm:px-3" aria-expanded="false" aria-haspopup="true">
             <span class="sr-only">Open strategies menu</span>

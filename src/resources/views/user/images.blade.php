@@ -264,9 +264,9 @@
             </div>
             {{-- 与上排互斥：<xl 才收起成一格「⋯」菜单 --}}
             <div class="block xl:hidden">
-                <x-dropdown direction="right">
+                <x-dropdown direction="right" labelledby="images-menu-button">
                     <x-slot name="trigger">
-                        <a class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)"><i class="fas fa-ellipsis-h text-brand"></i></a>
+                        <a id="images-menu-button" class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)"><i class="fas fa-ellipsis-h text-brand"></i></a>
                     </x-slot>
 
                     <x-slot name="content">
@@ -285,7 +285,7 @@
         </div>
         <div class="flex space-x-2 items-center">
             <input type="text" id="search" class="px-2.5 py-1.5 border-0 outline-none rounded bg-surface-3 text-sm transition-all duration-300 hidden md:block md:w-36 md:hover:w-52 md:focus:w-52" placeholder="输入关键字搜索...">
-            <x-dropdown direction="left">
+            <x-dropdown direction="left" labelledby="order">
                 <x-slot name="trigger">
                     <a id="order" class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
                         <span>最新</span>
@@ -310,7 +310,7 @@
                  标签按用户隔离，列表来自 GET user/tags，由 JS（loadTags → renderTagFilter）
                  渲染进 #tag-filter-list；勾选任意一项立刻 resetImages({page:1, tags:[...]})。
                  多选项沿用本页约定 min-h-[44px]，手机上点得中。--}}
-            <x-dropdown direction="left">
+            <x-dropdown direction="left" labelledby="tag-filter">
                 <x-slot name="trigger">
                     {{-- 图标与文字改成 flex 居中对齐：原来纯 inline 时图标盒 14px、文字盒 16px 靠基线
                          对齐，实测图标中心比文字中心高 0.3px、底部高 1.6px（看着往上飘）。

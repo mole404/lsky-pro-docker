@@ -70,7 +70,6 @@
         x-transition:leave-end="opacity-0"
         class="z-[9] bg-black/60 backdrop-blur-[2px] transition-opacity h-full w-full fixed inset-0 sm:hidden"
         x-show="$store.sidebar.open"
-        @close.stop="$store.sidebar.open = false"
         @click="$store.sidebar.toggle()"
         style="display: none"
     >

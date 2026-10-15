@@ -426,6 +426,45 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     check('common.less 与 common.css 两份都写了 8px（源码/产物同步）', /height:\s*8px/.test(commonLess));
 }
 
+// ---------------------------------------------------------------- 明暗切换复用 x-dropdown（动画统一）
+/*
+ * 明暗切换原来是自己手写的一套：进 150ms / 出 100ms、从上方 4px 落下、退场还不位移 —— 跟顶栏另两个下拉
+ * （进 200ms / 出 75ms、从下方 36px 滑入）观感不一致。现在它改用 <x-dropdown>，动画只留在组件里那六行一处。
+ * 每个使用点都不许再自带 x-transition / @click.outside —— 那就又成了第二套（这正是当初不一致的成因）。
+ * 顺带钉住两个同步修掉的边角：死代码 @close.stop（全仓没有任何地方派发 close 事件）、写死的 aria-labelledby。
+ */
+{
+    const dropdownCmp = read('resources', 'views', 'components', 'dropdown.blade.php');
+    const themeCmp = read('resources', 'views', 'components', 'theme-switch.blade.php');
+    // 只看「标记」，把 {{-- --}} 注释剥掉：注释里会点名 x-transition / x-data 这些词，
+    // 直接对全文断言会把自己的注释当违规（本文件别处已有 navNoCmt 这个先例）。
+    const themeMk = themeCmp.replace(/{{--[\s\S]*?--}}/g, '');
+    const segCmp = read('resources', 'views', 'components', 'storage-segments.blade.php');
+    const appBlade = read('resources', 'views', 'layouts', 'app.blade.php');
+
+    check('组件动画仍是 200/75 + translate-y-9（这一轮没动它）',
+        dropdownCmp.includes('x-transition:enter="transition ease-out duration-200"')
+        && dropdownCmp.includes('x-transition:enter-start="transform opacity-0 translate-y-9"')
+        && dropdownCmp.includes('x-transition:leave="transition ease-in duration-75"'));
+    check('明暗切换改用 <x-dropdown>，且自己不再写 x-transition（动画只能来自组件）',
+        themeMk.includes('<x-dropdown') && ! /x-transition/.test(themeMk));
+    check('明暗切换也不再自带 x-data / @click.outside（状态与关闭都归组件）',
+        ! /x-data|@click\.outside/.test(themeMk));
+    check('宽度：明暗切换 w-36，组件默认仍旧 w-48',
+        /panel-class="w-36"/.test(themeMk) && /'panelClass'\s*=>\s*'w-48'/.test(dropdownCmp));
+    check('三档外观齐全（跟随系统 / 亮色 / 暗色）',
+        ["theme.set('system')", "theme.set('light')", "theme.set('dark')"].every((s) => themeMk.includes(s)));
+    check('触发器不再自己 toggle（与组件里的 @click 二选一，避免双重取反）', ! /open = !open/.test(themeMk));
+    check('死代码 @close.stop 清干净了（组件 + 侧栏遮罩）',
+        ! /@close\.stop/.test(dropdownCmp) && ! /@close\.stop/.test(appBlade));
+    check('aria-labelledby 不再写死 user-menu-button，改为使用点传入',
+        ! /aria-labelledby="user-menu-button"/.test(dropdownCmp) && /'labelledby'/.test(dropdownCmp)
+        && userNav.includes('labelledby="user-menu-button"'));
+    check('空态回退条也带 .ls-segbar（空态/有图都是 8px）',
+        /<div class="ls-segbar [^"]*\{\{ \$barClass \}\}"/.test(segCmp),
+        (segCmp.match(/<div class="ls-segbar[^"]*"/) || ['未找到'])[0]);
+}
+
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);

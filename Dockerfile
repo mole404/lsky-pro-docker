@@ -172,7 +172,7 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 RUN printf '%s\n' \
         '30f2feb6eaa5f6fa6de79b9f87bb70ef  ./public/js/context-js/context-js.js' \
         '30f2feb6eaa5f6fa6de79b9f87bb70ef  ./resources/js/context-js.js' \
-        '7a7c1785d82e0615a4c091c92394e130  ./resources/views/user/images.blade.php' \
+        'b406d341e4f122b0bbb689b29a4e9798  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -226,7 +226,7 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
         "context_js_md5=30f2feb6eaa5f6fa6de79b9f87bb70ef" \
-        "images_blade_md5=7a7c1785d82e0615a4c091c92394e130" \
+        "images_blade_md5=b406d341e4f122b0bbb689b29a4e9798" \
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
