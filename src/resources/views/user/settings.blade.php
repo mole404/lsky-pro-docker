@@ -359,7 +359,7 @@
                     Swal.fire(dialog({
                         icon: 'warning',
                         title: '导出没能开始',
-                        text: '服务端没有接到这次导出，请再试一次；若反复出现请稍后重试。',
+                        text: '服务端没有接到这次导出，可能被拒绝了，请再试一次。',
                         confirmButtonColor: '#3085d6',
                         confirmButtonText: '知道了',
                     }));
@@ -382,7 +382,7 @@
                     Swal.fire(dialog({
                         icon: 'info',
                         title: '导出仍在进行',
-                        text: '结果暂时查不到，稍后刷新本页即可看到。',
+                        text: '结果暂时查不到。导出可能仍在服务端继续，可以等它跑完后再试一次。',
                         confirmButtonColor: '#3085d6',
                         confirmButtonText: '知道了',
                     }));
@@ -413,7 +413,7 @@
                         Swal.fire(dialog({
                             icon: 'warning',
                             title: '取消请求没发出去',
-                            text: '导出可能仍在服务端进行，稍后刷新本页确认结果。',
+                            text: '导出可能仍在服务端进行，请稍后重新发起确认。',
                             confirmButtonColor: '#3085d6',
                             confirmButtonText: '知道了',
                         }));
