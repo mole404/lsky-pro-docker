@@ -56,6 +56,11 @@
 <div class="min-h-screen ls-zoom-minh-screen bg-bg text-ink" x-data x-cloak>
     @include('layouts.sidebar')
     @include('layouts.header')
+    {{-- 遮罩（手机端）：只负责「点遮罩关抽屉」这一件事。
+         别在这层挂 @click.outside —— 它是 fixed inset-0、覆盖除侧栏之外的整个屏幕，而侧栏 <nav id="app-sidebar">
+         （z-10）是它的**兄弟节点**、不在它的子树里：Alpine 的 .outside 语义是「点击目标不在本元素内就执行」，
+         挂上之后「点侧栏内部的空白」也被算成点了外侧 —— 手机上随手点一下侧栏空白，抽屉就被关掉了。
+         关抽屉只留两个入口：这块遮罩自己的 @click、以及侧栏里那个 × 按钮。 --}}
     <div
         x-transition:enter="ease-in-out duration-500"
         x-transition:enter-start="opacity-0"
@@ -65,7 +70,6 @@
         x-transition:leave-end="opacity-0"
         class="z-[9] bg-black/60 backdrop-blur-[2px] transition-opacity h-full w-full fixed inset-0 sm:hidden"
         x-show="$store.sidebar.open"
-        @click.outside="$store.sidebar.open = false"
         @close.stop="$store.sidebar.open = false"
         @click="$store.sidebar.toggle()"
         style="display: none"
