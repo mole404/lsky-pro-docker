@@ -60,7 +60,7 @@
 # 这几个文件当前的 md5（2026-10-17 复核；前三条与 Dockerfile「自证 2」的期望值一致）：
 #   5cf4921912df67a6de657dee02284e65  src/resources/js/context-js.js
 #   5cf4921912df67a6de657dee02284e65  src/public/js/context-js/context-js.js
-c31f3161a9821cd1c4ee8fee11f1ac2b  src/resources/views/user/images.blade.php
+#   6b0a5f43d5d7ddbe97fc685495f9c421  src/resources/views/user/images.blade.php
 #   1e797bc8356bda1f192ca2d704f80623  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不在 Dockerfile「自证 2」那三条里，只在本档存档对照；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里。历史值（c1b339b1… / 5ddf0eed… / c0e51e96…）只作对照，一律以 Dockerfile「自证 2」为准）
@@ -3267,21 +3267,21 @@ c31f3161a9821cd1c4ee8fee11f1ac2b  src/resources/views/user/images.blade.php
 +           图标 inset 15px）里 × 的白色尖端离角只有 9.3px ⇒ 会被切到一点；而可见区只有 40×40，
 +           图标靠里最多挪 3px，再挪 × 的外角就会戳出黑圆、露在照片上。
 +           于是分两步：先（100×100 / inset 20）把尖端挪到 13.5px —— 切不到了，但"刚够用"；
-+           再放大一档到 120×120（可见四分之一圆半径 60px）；其后又略收一成：按钮 108×108
-+           （圆心仍压在角上 ⇒ 半径 54px）+ 图标 inset 23px + × 字形 18px（盒 24→22）
-+           ⇒ × 靠角那侧仍距右边/上边 11px（与 120 那版一致，物理圆角同样切不到），盘子整体小一成。
-+           约束：图标盒外角必须落在那圈黑底里 —— 盒外角离角 9×√2 ≈ 12.7 ≤ 54 ✓；× 外角 29×√2 ≈ 41 ≤ 54 ✓。
++           再放大一档到 120×120（可见四分之一圆半径 60px）；其后分两次收小：按钮 108×108（半径 54px）、
++           再到现在的 96×96（半径 48px）+ 图标 inset 17px —— × 字形 18px 与其距边位置一字未动
++           ⇒ × 靠角的最近点仍距右边/上边 11px（与 120 那版一致，物理圆角同样切不到），只有黑盘逐次收小。
++           约束：图标盒外角必须落在那圈黑底里 —— 盒外角离角 9×√2 ≈ 12.7 ≤ 48 ✓；× 外角 29×√2 ≈ 41 ≤ 48 ✓。
 +           非全屏（库原样 80px/inset 15）不动：那边浏览器自带边距，且收起态那三条 opacity/pointer-events
 +           规则与此无关 —— 本块只改尺寸与位置，不碰 position/border-radius（那个圆是库画的）。 */
 +        html.ls-viewer-fs .viewer-button {
-+            width: 108px;
-+            height: 108px;
-+            right: -54px;
-+            top: -54px;
++            width: 96px;
++            height: 96px;
++            right: -48px;
++            top: -48px;
 +        }
 +        html.ls-viewer-fs .viewer-button:before {
-+            bottom: 23px;
-+            left: 23px;
++            bottom: 17px;
++            left: 17px;
 +        }
 +        /* × 随盘子等比放大（全屏这一档：字形 16→18px；盒子 20→22、盒内偏移仍 2px ⇒ 盒与字形同心）。
 +           ⚠ 必须挂上第二个类把特异性提到 (0,3,1)：下面那批共享图标规则
