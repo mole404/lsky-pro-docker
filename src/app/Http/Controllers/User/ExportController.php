@@ -400,13 +400,16 @@ class ExportController extends Controller
      */
     private function entryName(Image $image, array &$used): string
     {
-        $folder = $image->album ? $this->sanitize($image->album->name) : 'uncategorized';
+        // trim() 必须与写条目时的口径一致（StreamedZipWriter::normalizeName 逐段 trim）：
+        // sanitize() 只去首尾点、不去空格，若不在这里对齐，去重键会与包里最终的名字不同
+        // （"a.jpg " 与 "a.jpg" 两个键、同一个名字）⇒ 包里出现重名条目，解压时后者覆盖前者。
+        $folder = trim($image->album ? $this->sanitize($image->album->name) : 'uncategorized');
 
         if ($folder === '') {
             $folder = 'uncategorized';
         }
 
-        $filename = $this->sanitize((string) $image->filename);
+        $filename = trim($this->sanitize((string) $image->filename));
 
         if ($filename === '') {
             $filename = $image->key.'.'.$image->extension;

@@ -72,7 +72,14 @@ final class StorageUsage
             return self::$memo[$user->id] = self::empty();
         }
 
-        $names = $names ?? self::names(array_keys($buckets));
+        // 传进来的名字可能不全（仪表盘只传「当前组」的策略名，策略被从组里解绑后就会缺）——
+        // 缺的那些补一次查询，否则同一策略在仪表盘显示成「策略 #3」、在侧栏显示真名。
+        $names = $names ?? [];
+        $missing = array_diff(array_keys($buckets), array_keys($names));
+
+        if ($missing !== []) {
+            $names += self::names($missing);
+        }
 
         // 色号按 strategy_id 升序定，跟占用排序无关 —— 保证颜色不随用量变化
         $order = array_keys($buckets);

@@ -172,7 +172,10 @@ class StreamedZipWriter
     /** 写入一条来自内存字符串的条目（例如包内提示文件） */
     public function addString(string $name, string $contents, ?int $mtime = null): int
     {
-        $stream = fopen('php://temp', 'r+b');
+        // php://memory：php://temp 超过 2MB 会溢写到系统临时文件（容器里是 /tmp），
+        // 与「全程零落盘」的承诺不符（索引一大就会命中，且被硬杀时可能留残文件）。
+        // 索引本来就整份在内存里（拼好的 CSV 字符串），换成 memory 不额外增加占用。
+        $stream = fopen('php://memory', 'r+b');
         if ($stream === false) {
             throw new RuntimeException('无法创建内存流');
         }
