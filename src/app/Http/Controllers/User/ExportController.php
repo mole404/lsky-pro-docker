@@ -400,10 +400,7 @@ class ExportController extends Controller
      */
     private function entryName(Image $image, array &$used): string
     {
-        // trim() 必须与写条目时的口径一致（StreamedZipWriter::normalizeName 逐段 trim）：
-        // sanitize() 只去首尾点、不去空格，若不在这里对齐，去重键会与包里最终的名字不同
-        // （"a.jpg " 与 "a.jpg" 两个键、同一个名字）⇒ 包里出现重名条目，解压时后者覆盖前者。
-        $folder = trim($image->album ? $this->sanitize($image->album->name) : 'uncategorized');
+        $folder = trim($this->sanitize($image->album ? $image->album->name : 'uncategorized'));
 
         if ($folder === '') {
             $folder = 'uncategorized';
@@ -415,12 +412,29 @@ class ExportController extends Controller
             $filename = $image->key.'.'.$image->extension;
         }
 
-        $name = $folder.'/'.$filename;
+        /* 去重键必须**等于包里最终写出的名字**，否则两个不同的键会写出同一个条目名、
+         * 解压时后者覆盖前者（静默丢图）。写条目时 StreamedZipWriter 还会再规范化一遍
+         * （逐段去空白、丢掉空段与只剩点号的段，例如 '相册/. ' → '相册'），
+         * 所以这里直接用同一个规范化器算**键与名字**——对齐由构造保证，不靠两边规则写得一样。
+         * 历史坑：只补 trim() 是不够的，`相册A/. . .` 洗出来是 `相册A/.`（两个不同的键、同一个名字）。 */
+        $name = StreamedZipWriter::normalizeName($folder.'/'.$filename);
+
+        if ($name === '') {
+            // 两级都被丢光的极端情形：至少给出一个能解压的名字（writer 收到空名会直接抛错）。
+            // 这里也**照样**过归一化 ——「去重键 == 包里写出的名字」这条不变式不认旁路
+            // （理论上 key/extension 都很干净，但规则只留一条更好守）。
+            $name = StreamedZipWriter::normalizeName($image->key.'.'.$image->extension);
+
+            if ($name === '') {
+                // 连 key 与扩展名都没剩下：给一个必定能解压的名字（id 在用户范围内唯一）
+                $name = StreamedZipWriter::normalizeName('image_'.(int) $image->id);
+            }
+        }
 
         if (isset($used[$name])) {
-            $extension = pathinfo($filename, PATHINFO_EXTENSION);
-            $base = $extension !== '' ? substr($filename, 0, -strlen($extension) - 1) : $filename;
-            $name = $folder.'/'.$base.'_'.$image->key.($extension !== '' ? '.'.$extension : '');
+            $extension = pathinfo($name, PATHINFO_EXTENSION);
+            $base = $extension !== '' ? substr($name, 0, -strlen($extension) - 1) : $name;
+            $name = StreamedZipWriter::normalizeName($base.'_'.$image->key.($extension !== '' ? '.'.$extension : ''));
         }
 
         $used[$name] = true;

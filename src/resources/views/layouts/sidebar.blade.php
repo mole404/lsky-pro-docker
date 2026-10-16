@@ -104,8 +104,9 @@
                 ? min(100, round($storage['total'] / $capacityKb * 100, 1))
                 : 0;
         @endphp
-        {{-- data-* 是给 utils.setCapacityProgress 的真值基准（上传/删图后它据此重算数字与分段宽度）；
-                少了它们，那个函数读不到基准就会把「已用」写成 NaN --}}
+        {{-- data-* 是给 utils.setCapacityProgress 的真值基准（上传/删图后它据此重算数字与分段宽度）。
+                少了它们，那个函数读不到基准（老形状的 <progress> 已经不在模板里了）⇒ 上传后「已用」
+                只会按本次增量显示（旧版本上真显示过 NaN undefined）--}}
         <div id="capacity-progress" data-used-kb="{{ $storage['total'] }}" data-capacity-kb="{{ $capacityKb }}" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10 ls-zoom-mt-0">
             <p class="text-ink-2 text-[13.5px]">存储用量</p>
             {{-- 只有进度条变了：按存储策略分段 + 悬浮看各策略占用；文字一行不动 --}}

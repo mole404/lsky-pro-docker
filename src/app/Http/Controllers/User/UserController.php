@@ -26,7 +26,8 @@ class UserController extends Controller
         $strategies = $user->group->strategies()->get();
         // 每个存储策略各占多少：一次分组聚合同时给出总量与分段，替掉视图里对
         // use_capacity 访问器的 4 次重复聚合（数值完全一样，都是同一张表的 SUM(size)）。
-        // 策略名直接用上面已取到的集合，不再多查一次。
+        // 策略名优先用上面已取到的集合；策略被移出当前组时会缺，StorageUsage 内部只对缺的那些补一次
+        // 查询（侧栏那份不传名字，等于一次查全，见 StorageUsage::forUser）。
         $storage = StorageUsage::forUser($user, $strategies->pluck('name', 'id')->all());
         return view('user.dashboard', compact('strategies', 'configs', 'user', 'storage'));
     }

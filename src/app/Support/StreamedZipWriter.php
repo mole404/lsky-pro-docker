@@ -75,7 +75,7 @@ class StreamedZipWriter
      */
     public function uniqueName(string $name): string
     {
-        $name = $this->normalizeName($name);
+        $name = self::normalizeName($name);
         if (! isset($this->names[$name])) {
             return $name;
         }
@@ -172,12 +172,16 @@ class StreamedZipWriter
     /** 写入一条来自内存字符串的条目（例如包内提示文件） */
     public function addString(string $name, string $contents, ?int $mtime = null): int
     {
-        // php://memory：php://temp 超过 2MB 会溢写到系统临时文件（容器里是 /tmp），
-        // 与「全程零落盘」的承诺不符（索引一大就会命中，且被硬杀时可能留残文件）。
-        // 索引本来就整份在内存里（拼好的 CSV 字符串），换成 memory 不额外增加占用。
-        $stream = fopen('php://memory', 'r+b');
+        /* php://temp/maxmemory:32M —— 小于 32MB 的内容全程留在内存里（现在的包内索引约 64KB，
+         * 与 php://memory 等价、依旧零落盘），只有单个包内文本超过 32MB（约 20 万张图那种体量）
+         * 才溢写到系统临时文件。
+         * 为什么不直接用 php://memory：那种体量下内存里会同时留着拼好的字符串与这份流缓冲，
+         * 加上 $state['index']（每图一行数组，5 万图就 25–50MB）很容易顶到 PHP 的 memory_limit
+         * （entrypoint 收紧成 64M）⇒ 边压边发的响应被截断，用户拿到一个残包。残包比一个用完即删的
+         * 临时文件更糟，所以留这道溢写阀。阈值要改的话先看这段。 */
+        $stream = fopen('php://temp/maxmemory:33554432', 'r+b');
         if ($stream === false) {
-            throw new RuntimeException('无法创建内存流');
+            throw new RuntimeException('无法创建内存/临时流');
         }
         fwrite($stream, $contents);
         rewind($stream);
@@ -304,8 +308,14 @@ class StreamedZipWriter
         ];
     }
 
-    /** 条目名归一化：统一分隔符、去掉控制字符与文件系统非法字符、去掉 `..` 段与前导 `/` */
-    private function normalizeName(string $name): string
+    /**
+     * 条目名归一化：统一分隔符、去掉控制字符与文件系统非法字符、去掉空段/`.`/`..` 段与前导 `/`。
+     *
+     * public static 是**故意的**：ExportController 算「重名去重键」时必须用同一个函数，
+     * 键与最终写进包里的名字才会逐字相同（否则两个不同的键写出同一个条目名，解压时后者覆盖前者）。
+     * 靠"两边把规则写得一样"是撑不住的（实测漏过 `相册/.` 这种只剩点号的段）。
+     */
+    public static function normalizeName(string $name): string
     {
         // 反斜杠是路径分隔符；其余在文件系统/解压器里有风险的字符换成下划线（不引入额外层级）
         $name = str_replace('\\', '/', $name);

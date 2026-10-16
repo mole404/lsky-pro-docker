@@ -328,7 +328,10 @@ class Image extends Model
     {
         return new Attribute(fn() => collect([
             'url' => $this->url,
-            'html' => "&lt;img src=\"{$this->url}\" alt=\"{$this->origin_name}\" title=\"{$this->origin_name}\" /&gt;",
+            // origin_name 是用户可控（上传时的原始文件名），这段又被「上传完成」面板当 HTML 插进页面 ⇒
+            // 属性值必须先转义，否则名字里一个双引号就能闭合 alt、把 <img onerror=...> 注进去
+            // （自伤型：要让受害者自己上传/下载那个文件名）。url 是服务端生成的路径，不含用户输入。
+            'html' => "&lt;img src=\"{$this->url}\" alt=\"".e($this->origin_name)."\" title=\"".e($this->origin_name)."\" /&gt;",
             'bbcode' => "[img]{$this->url}[/img]",
             'markdown' => "![{$this->origin_name}]({$this->url})",
             'markdown_with_link' => "[![{$this->origin_name}]({$this->url})]({$this->url})",

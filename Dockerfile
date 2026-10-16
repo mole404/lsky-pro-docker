@@ -172,7 +172,8 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 RUN printf '%s\n' \
         '5cf4921912df67a6de657dee02284e65  ./public/js/context-js/context-js.js' \
         '5cf4921912df67a6de657dee02284e65  ./resources/js/context-js.js' \
-        '8c62015b71c12d9741b2b80986c02695  ./resources/views/user/images.blade.php' \    | md5sum -c - \
+        '2f780a122c8c21ec9c2b7ba84451318b  ./resources/views/user/images.blade.php' \
+    | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
     && grep -q 'LONG_PRESS_DELAY = 250' ./public/js/context-js/context-js.js \
@@ -209,22 +210,27 @@ RUN printf '%s\n' \
 #                 其它 PHP/前端都没动）时，标记不变 → 老卷不会重新同步 → 卷里是旧依赖、镜像里是新依赖。
 #                 composer install 是在 build 阶段、镜像自带的 vendor/ 已经按新 lock 装好；
 #                 加了这一条，只换依赖的镜像也会让标记变、触发一次同步。
-# 2026-10-16 扩容：上面这份指纹只算 app/ config/ routes/ + 4 个具体文件，而镜像里还有
-#   resources/（全部 blade 模板与 less 源）与 public/（编译产物）。实测：只改
-#   resources/views/** 或 public/css/common.css 时标记不变 ⇒ 老卷永远拿不到新模板/新样式
+# 2026-10-16 扩容：上面这份指纹原本只算 app/ config/ routes/ + 4 个具体文件，而镜像里还有
+#   resources/（全部 blade 模板与 less 源）、public/（编译产物）与 lang/（用户可见文案）。
+#   实测：只改 resources/views/** 或 public/css/common.css 时标记不变 ⇒ 老卷永远拿不到新模板/新样式
 #   （GHCR 构建因 fork_sha=commit 每次都变而掩盖了这条，本地重建才露出来）。
-#   故再补两条：resources_md5（resources/ 全树）、public_md5（public/ 全树）。
-#   仍未进指纹的只有 src/*.md 这类纯文档（会进镜像但不影响运行）。
+#   故补三条：app_src_md5 扩到 lang/、resources_md5、public_md5。
+#   并且一律写成 `xargs md5sum | md5sum` 而不是 `xargs cat | md5sum`：把**文件名**也哈希进去，
+#   否则重命名文件、或新增一个空文件都不会改变指纹（卷同步是只增改不删 ⇒ 老卷拿不到改名）。
+#   仍未进指纹的：src/*.md 这类纯文档、composer.json（随被钉住的 composer.lock 一起变）、
+#   bootstrap/ 与 database/（entrypoint 的 tar 同步本来就排除它们，进去只会白吵标记）。
 # 另外 find/sort 一律钉 LC_ALL=C：sort 的排序规则跟 locale 走，不加这一项，
 #   上面「同一份源码在任何机器上结果一致」就是假的（实测 en_US.UTF-8 与 C 得出两个不同的
 #   md5 —— 文件清单与逐文件内容完全相同，只是排序不同）⇒ 容器外无法复算核对。
-# 任何一个不存在 / 命令失败都写 none（标记照写）—— **绝不能让构建失败**。
+# 变量为空才写 none（目录整体缺失/整条管道失败）。注意**空目录不算失败**：空输入会照常得到
+#   空字符串的 md5 常量（d41d8cd9…），所以这条兜底实际只在命令真失败时才命中。
+# 无论如何都写一份标记（标记照写）—— **绝不能让构建失败**。
 # 入口脚本比的是整个标记文件的内容，所以多出这几行 = 换镜像时自动触发同步，entrypoint 不需要改。
-RUN APP_SRC_MD5=$(LC_ALL=C find app config routes -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r cat 2>/dev/null | md5sum | cut -d' ' -f1); \
+RUN APP_SRC_MD5=$(LC_ALL=C find app config routes lang -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r md5sum 2>/dev/null | md5sum | cut -d' ' -f1); \
     [ -n "$APP_SRC_MD5" ] || APP_SRC_MD5=none; \
-    RESOURCES_MD5=$(LC_ALL=C find resources -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r cat 2>/dev/null | md5sum | cut -d' ' -f1); \
+    RESOURCES_MD5=$(LC_ALL=C find resources -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r md5sum 2>/dev/null | md5sum | cut -d' ' -f1); \
     [ -n "$RESOURCES_MD5" ] || RESOURCES_MD5=none; \
-    PUBLIC_MD5=$(LC_ALL=C find public -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r cat 2>/dev/null | md5sum | cut -d' ' -f1); \
+    PUBLIC_MD5=$(LC_ALL=C find public -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r md5sum 2>/dev/null | md5sum | cut -d' ' -f1); \
     [ -n "$PUBLIC_MD5" ] || PUBLIC_MD5=none; \
     APP_JS_MD5=$(md5sum public/js/app.js 2>/dev/null | cut -d' ' -f1); \
     [ -n "$APP_JS_MD5" ] || APP_JS_MD5=none; \
@@ -238,7 +244,8 @@ RUN APP_SRC_MD5=$(LC_ALL=C find app config routes -type f -print0 2>/dev/null | 
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
         "context_js_md5=5cf4921912df67a6de657dee02284e65" \
-        "images_blade_md5=8c62015b71c12d9741b2b80986c02695" \        "app_src_md5=${APP_SRC_MD5}" \
+        "images_blade_md5=2f780a122c8c21ec9c2b7ba84451318b" \
+        "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
         "context_css_md5=${CONTEXT_CSS_MD5}" \

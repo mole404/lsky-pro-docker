@@ -1417,7 +1417,8 @@
                 /* 触屏：安卓上控件在指针处理里 preventDefault 之后 pointermove 可能收不到，
                  * 所以 touchmove 也记一份（与页面上双击判定用的是同一套经验）。
                  * 只读坐标、从不 preventDefault ⇒ 必须 passive：document 上的非 passive touchmove
-                 * 会让 Chrome 失去「不等 JS 就滚动/绘制」的快路径（本文件 1765 行附近有详细教训）。 */
+                 * 会让 Chrome 失去「不等 JS 就滚动/绘制」的快路径（本文件第二处 document 上的 touchmove
+                 * 旁边有详细教训：那个监听器同时处理两张手势，漏了 passive 真机上会「碰一下才画出来」）。 */
                 document.addEventListener('touchmove', (e) => {
                     const t = e.changedTouches && e.changedTouches[0];
                     if (! dragged && t && moved(t.clientX, t.clientY)) { dragged = true; }
@@ -1795,8 +1796,16 @@
                 const FAR_RATIO = 0.24;    // 够远：视口宽的这个比例（0.18 → 0.21 → 0.24）
                 const FAR_MIN = 56;        // 或至少这么多 px（只在桌面窄窗口时轮到它）
                 const FAST_SPEED = 0.80;   // 够快：px/ms（0.5 → 0.65 → 0.80）
+                const SWIPE_TAIL_SLOP = 12;   // px：补发的 click 落点与抬手点基本重合；用户主动点则在别处
+                /* 这一发 click 是不是「切图那一下的尾巴」？
+                 * 触屏上浏览器会照着手指数起的位置补发一发 click；抬手点若正好落在看图器 UI 上
+                 * （起手贴着缩略图条/工具栏斜滑时会发生），那一发会被 UI 接住 ⇒ 滑一张就退出查看器、
+                 * 或跳到手指抬起的那张缩略图。判据用**坐标**，不用目标元素：按元素一刀放行（旧写法）
+                 * 会把尾巴也一并放过去；而「滑完图后主动点 UI」是另一次触碰、落点在别处 ⇒ 照旧放行。 */
+                const isSwipeTailClick = (guard, now, x, y) => !! guard && now - guard.t <= 400
+                    && Math.abs(x - guard.x) <= SWIPE_TAIL_SLOP && Math.abs(y - guard.y) <= SWIPE_TAIL_SLOP;
                 let g = null;
-                let guardClick = 0;   // 刚切过图的时刻：用来吞掉随后那发背景 click
+                let swipeGuard = null;   // 刚切过图那一下的 {t, x, y}：用来吞掉随后那发「尾巴 click」
                 const inCanvas = (el) => el instanceof Element && !!el.closest('.viewer-canvas');
                 const isFit = () => {
                     const d = viewer.imageData;
@@ -1840,21 +1849,18 @@
                     const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 46;   // 46 是"够快"那一档的位移下限（30 → 38 → 46）
                     if ((far || fast) && Math.abs(dx) > Math.abs(dy) * 1.5) {
                         if (dx < 0) viewer.next(false); else viewer.prev(false);
-                        guardClick = Date.now();                          // 标记：刚刚切过图
+                        swipeGuard = {t: Date.now(), x: e.clientX, y: e.clientY};   // 记下这一下的抬手时刻与位置
                     } else if (dx !== 0 || dy !== 0) {
                         viewer.reset();                                   // 带动画的回弹
                     }
                 }, false);
-                /* 手指在图片外空白处结束时，浏览器会补一发 click 落到背景上，库因此关闭查看器 ——
-                 * 于是"切图成功"和"退出查看"同时发生。这里只吞紧跟切图之后那 400ms 内的背景 click，
-                 * 且点在图片上的不算，避免误伤正常点击关闭。 */
+                /* 手指在图片外空白处结束时，浏览器会补发一发 click（落点 = 抬手点）—— 库因此关闭查看器，
+                 * 缩略图条/工具栏也会被点中 ⇒「切图成功」与「退出/跳图」同时发生。这里只吞这一发尾巴：
+                 * 切图后 400ms 内、且落点与抬手点几乎重合（见 isSwipeTailClick）。滑完图后主动去点
+                 * UI 的那一下是另一次触碰、落点在别处 ⇒ 照旧放行 —— 别改回「按目标元素一刀放行」。 */
                 document.addEventListener('click', (e) => {
-                    if (Date.now() - guardClick > 400) return;
-                    // 只吞「背景」那一下：图片本身、以及查看器自己的 UI（工具栏/缩略图条/标题/关闭键）
-                    // 都放行 —— 否则滑完图 400ms 内点它们会没反应（得再点一次）。
-                    if (e.target instanceof Element
-                        && e.target.closest('.viewer-canvas img, .viewer-toolbar, .viewer-navbar, .viewer-title, .viewer-button')) return;
-                    guardClick = 0;
+                    if (! isSwipeTailClick(swipeGuard, Date.now(), e.clientX || 0, e.clientY || 0)) return;
+                    swipeGuard = null;                 // 一次性：吞掉就不再拦
                     e.stopPropagation();
                     e.preventDefault();
                 }, true);
@@ -1989,8 +1995,10 @@
                             .replace(/__name__/g, escapeHtml(String(images[i].filename)).replace(/\$/g, '$$$$'))
                             .replace(/__human_date__/g, images[i].human_date)
                             .replace(/__date__/g, images[i].date)
-                            .replace(/__url__/g, images[i].url)
-                            .replace(/__thumb_url__/g, images[i].thumb_url)
+                            // URL 也落在属性里（data-original= / src=）：名字能闭合属性，URL 一样能。
+                            // 转义不改变值 —— 浏览器的属性解析会把实体还原（jQuery .data('original') 亦然）。
+                            .replace(/__url__/g, escapeHtml(String(images[i].url)).replace(/\$/g, '$$$$'))
+                            .replace(/__thumb_url__/g, escapeHtml(String(images[i].thumb_url)).replace(/\$/g, '$$$$'))
                             .replace(/__width__/g, images[i].width)
                             .replace(/__height__/g, images[i].height)
                             // 卡片角标 = 这张图的标签（列表接口已带 tags）
