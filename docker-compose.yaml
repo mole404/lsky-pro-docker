@@ -39,6 +39,15 @@ services:
       - "9080:8089"
     networks:
       - lsky-net
+    # 容器日志轮转：docker 的 json-file 驱动默认**没有上限**，容器里 Apache 的访问日志
+    # 又全部软链到 stdout ⇒ 一直追加到宿主盘上（/var/lib/docker/containers/…-json.log）。
+    # 这里给它一个上限（单文件 10m、最多留 3 个）。注意：对已经在运行的容器，
+    # 改这份 compose 需要 recreate 才会生效（不 recreate 就还是旧设置）。
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # 默认用 SQLite（镜像自带，无需额外服务）—— 这也是本 fork 线上跑的方式。
   #

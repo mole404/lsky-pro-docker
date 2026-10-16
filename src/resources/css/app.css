@@ -31,6 +31,21 @@
         --lsky-shadow-card: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .05);
         --lsky-shadow-pop: 0 6px 18px rgba(16, 24, 40, .08), 0 2px 6px rgba(16, 24, 40, .04);
         --lsky-shadow-modal: 0 20px 50px rgba(16, 24, 40, .18);
+
+        /* 按存储策略分段的用量条：前 12 个策略的固定色（亮/暗各一套）；
+           第 13 个起由 App\Support\StorageUsage::extraStyle() 按黄金角现生成 */
+        --lsky-seg-1: #2563eb;
+        --lsky-seg-2: #ea580c;
+        --lsky-seg-3: #16a34a;
+        --lsky-seg-4: #7c3aed;
+        --lsky-seg-5: #db2777;
+        --lsky-seg-6: #0891b2;
+        --lsky-seg-7: #d97706;
+        --lsky-seg-8: #4f46e5;
+        --lsky-seg-9: #65a30d;
+        --lsky-seg-10: #e11d48;
+        --lsky-seg-11: #0f766e;
+        --lsky-seg-12: #0284c7;
     }
 
     html.dark {
@@ -51,6 +66,19 @@
         --lsky-shadow-card: 0 1px 2px rgba(0, 0, 0, .35), 0 1px 3px rgba(0, 0, 0, .3);
         --lsky-shadow-pop: 0 8px 22px rgba(0, 0, 0, .45);
         --lsky-shadow-modal: 0 24px 60px rgba(0, 0, 0, .6);
+
+        --lsky-seg-1: #60a5fa;
+        --lsky-seg-2: #fb923c;
+        --lsky-seg-3: #4ade80;
+        --lsky-seg-4: #a78bfa;
+        --lsky-seg-5: #f472b6;
+        --lsky-seg-6: #22d3ee;
+        --lsky-seg-7: #fbbf24;
+        --lsky-seg-8: #818cf8;
+        --lsky-seg-9: #a3e635;
+        --lsky-seg-10: #fb7185;
+        --lsky-seg-11: #2dd4bf;
+        --lsky-seg-12: #38bdf8;
     }
 
     /* 让浏览器原生控件（滚动条、日期选择器、表单默认配色）跟着主题走 */

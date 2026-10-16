@@ -1,5 +1,8 @@
 /*
  * 「编辑图片（裁剪）」入口与规则的静态契约测试（不需要浏览器）
+ *  + [10]：把 openFromViewer 从 blade 抠出真身、注入假环境**真跑**
+ *  + [11]：把「UI 自动收起 + 收起状态下第一下点击」那段从 blade 抠出真身，放进 jsdom 里
+ *    用真实 DOM 事件（pointerdown / 库补发的 click）驱动，逐条核对吞不吞那一下。
  *
  * 背景：目标是「看图器里能裁图」，且入口不止一处 —— 看图器工具栏、选中单张时的操作条、
  * 右键/长按菜单都要有「编辑图片」；只有 jpg/jpeg/png 给入口；导出格式跟随原图
@@ -10,6 +13,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { JSDOM } from 'jsdom';
 
 const here = path.dirname(decodeURIComponent(new URL(import.meta.url).pathname));
 const SRC = path.join(here, '..', 'src');
@@ -22,6 +26,8 @@ const code = blade
     .replace(/\{\{--[\s\S]*?--\}\}/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/[^\n]*/g, '');
+// 收起延时直接从被测代码里读（以后调数值不用再改测试）
+const FS_UI_MS = Number(/const FS_UI_MS = (\d+);/.exec(code)[1]);
 
 const results = [];
 function check(name, pass, detail = '') {
@@ -52,7 +58,10 @@ console.log('\n[1] Cropper.js v1.6.3 已 vendored 且被 blade 正确引入');
 console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
 {
     // ① 看图器工具栏（自定义 toolbar 必须把要用的内置按钮照抄，否则它们会消失）
-    // 注意：+ / − （zoom-in / zoom-out）已按要求去掉，原位换成自定义的「全屏」键。
+    // 注意：+ / − （zoom-in / zoom-out）已按要求去掉，原位换成自定义的「全屏」键；
+    // 「1:1」（one-to-one）按「与改动前一致」归位到全屏之后、重置之前；
+    // 「下载原图」整条链路（键 + downloadViewerImage + CSS 图标）已删除
+    // ⇒ 自定义键只剩 crop / fullscreen，内置键是这 9 个（含归位后的 1:1）。
     const builtins = ['one-to-one', 'reset', 'prev', 'play', 'next', 'rotate-left', 'rotate-right', 'flip-horizontal', 'flip-vertical'];
     const toolbarStart = code.indexOf('toolbar: {');
     // 注意：不能拿第一个 '},' 当结尾 —— crop 那行自己的结尾就是 `},`（它现在排在最前）。
@@ -65,7 +74,7 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
         if (i < 0 || i < idx) { ordered = false; }
         idx = i;
     }
-    check('11 个内置按钮按原顺序全部列全（否则自定义模式下不渲染）', ordered, `keys=${builtins.length}`);
+    check('内置按钮按原顺序全部列全（否则自定义模式下不渲染）', ordered, `keys=${builtins.length}`);
     check('toolbar 里追加了 crop 按钮', /crop:\s*\{\s*show:\s*true,\s*click:/.test(toolbarBlock));
     check('crop 按钮的 click 调 cropEditor.openFromViewer', toolbarBlock.includes('cropEditor.openFromViewer()'));
     check('+ / − 已去掉（自定义 toolbar 里不再有 zoom-in / zoom-out）',
@@ -74,7 +83,8 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
         /fullscreen:\s*\{\s*show:\s*true,\s*click:\s*\(\)\s*=>\s*toggleViewerFullscreen\(\)/.test(toolbarBlock));
     check('全屏按钮紧随「裁剪」之后（= 原来 +/− 的位置）',
         toolbarBlock.indexOf('fullscreen:') > toolbarBlock.indexOf('crop: {')
-        && toolbarBlock.indexOf('fullscreen:') < toolbarBlock.indexOf("'one-to-one': true"));
+        && toolbarBlock.indexOf('fullscreen:') < toolbarBlock.indexOf('reset:'),
+        `crop@${toolbarBlock.indexOf('crop: {')} fullscreen@${toolbarBlock.indexOf('fullscreen:')}`);
     check('全屏开关实现：全屏时走 document 的 exit，否则调库的 viewer.requestFullscreen()',
         /toggleViewerFullscreen[\s\S]{0,700}viewer\.requestFullscreen\(\)/.test(code)
         && /exitFullscreen \|\| d\.webkitExitFullscreen/.test(code));
@@ -90,21 +100,40 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
     {
         const cropIdx = toolbarBlock.indexOf('crop: {');
         const fsIdx = toolbarBlock.indexOf('fullscreen: {');
-        const oneIdx = toolbarBlock.indexOf("'one-to-one': true");
-        check('crop 按钮排最左、全屏紧随其后（= 原 +/− 的位置）',
-            cropIdx > -1 && fsIdx > -1 && oneIdx > -1 && cropIdx < fsIdx && fsIdx < oneIdx,
-            `crop@${cropIdx} fullscreen@${fsIdx} one-to-one@${oneIdx}`);
+        check('「裁剪」排最左、「全屏」其次（= 原来 +/− 的位置）',
+            cropIdx > -1 && fsIdx > -1 && cropIdx < fsIdx, `crop@${cropIdx} fullscreen@${fsIdx}`);
+        check('工具栏里已无「顶屏」（fit-edge）键', toolbarBlock.indexOf('fit-edge') === -1);
     }
     // 自定义键的画廊图标：库只给 14 个内置键写了规则（含 content 与 20×20 盒子），
     // 自定义键不补这几条就只剩 li 的黑底 ⇒「有按钮没图标」。
     check('自定义键的图标补齐了库缺的声明（content + 20×20 盒子）',
         /li\.viewer-crop:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px/.test(blade));
-    check('图标图形比盒子小一圈 —— 裁剪键 14px + 3px 居中偏移（盒子/热区不变）',
-        /li\.viewer-crop:before \{[\s\S]{0,900}background-position: 3px 3px;[\s\S]{0,200}background-size: 14px 14px;/.test(blade));
-    check('「全屏」键同样是自定义键：补了 content + 20×20 盒子 + 14px 图标',
-        /li\.viewer-fullscreen:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px[\s\S]{0,1200}background-size: 14px 14px;/.test(blade));
+    check('图标字形 16px + 2px 居中偏移 —— 裁剪键（盒子/热区不变）',
+        /li\.viewer-crop:before \{[\s\S]{0,900}background-position: 2px 2px;[\s\S]{0,200}background-size: 16px 16px;/.test(blade));
+    check('「全屏」键同样是自定义键：补了 content + 20×20 盒子 + 16px 图标',
+        /li\.viewer-fullscreen:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px[\s\S]{0,1200}background-size: 16px 16px;/.test(blade));
     check('全屏时换成「退出全屏」图标（.viewer-fullscreen.is-fs:before 另一张 SVG）',
         /li\.viewer-fullscreen\.is-fs:before \{\s*\n\s*background-image: url\("data:image\/svg\+xml,/.test(blade));
+    // 「1:1」按「与改动前一致」归位（全屏之后、重置之前）；「下载原图」整条链路（键 + 函数 + 图标）已删除。
+    {
+        const fsIdx = toolbarBlock.indexOf('fullscreen:');
+        const otoIdx = toolbarBlock.indexOf("'one-to-one'");
+        const resetIdx = toolbarBlock.indexOf('reset:');
+        check("「1:1」已归位：'one-to-one' 在 fullscreen 之后、reset 之前",
+            otoIdx > -1 && otoIdx > fsIdx && otoIdx < resetIdx, `fs@${fsIdx} one-to-one@${otoIdx} reset@${resetIdx}`);
+        check('「下载原图」键已从工具栏删除（工具栏区间里没有 download 键）',
+            ! /\bdownload\s*:/.test(toolbarBlock));
+    }
+    {
+        check('「下载原图」的图标规则已整条删除（全文件不见 .viewer-download）', ! /viewer-download/.test(blade));
+        check('自定义键的图标规则只剩 crop / fullscreen 两条（download 那条没留下空壳）',
+            (blade.match(/li\.viewer-(crop|fullscreen):before/g) || []).length === 2);
+    }
+    check('「下载原图」的实现函数已删除（downloadViewerImage 全文件不见）',
+        ! blade.includes('downloadViewerImage') && ! code.includes('downloadViewerImage'));
+    check('cropEditor 对外暴露 viewerUrl / infoOf（裁剪入口的「当前图」取值口径仍在）',
+        /viewerUrl: viewerUrl, infoOf: infoOf \}/.test(code)
+        && /const viewerUrl = \(\) => \{[\s\S]{0,400}\.viewer-canvas img/.test(code));
 
     // ② 选中操作条（顶部那排 + < xl 的「⋯」下拉各一份）
     const editAnchors = (code.match(/data-operate="edit"/g) || []).length;
@@ -242,11 +271,13 @@ console.log('\n[6] 看图器：全屏观感 / 打开不漏重排 / 缩略图条�
         /\[('mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'|'mousemove'.*)\]\.forEach\(\(ev\) => \{/.test(code)
         && ['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown']
             .every((ev) => code.includes(`'${ev}'`)));
-    check('② 全屏里鼠标动/轻触临时淡入 UI（.ls-fs-ui + 到点自动收）',
-        /const flashFullscreenUI = \(e\) => \{[\s\S]{0,400}ls-fs-ui/.test(code)
-        && /document\.addEventListener\(ev, flashFullscreenUI, \{capture: true, passive: true\}\)/.test(code)
-        && /const scheduleFsHide = \(\) => \{[\s\S]{0,300}setTimeout\(\(\) => document\.documentElement\.classList\.remove\('ls-fs-ui'\), FS_UI_MS\)/.test(code)
-        && /const FS_UI_MS = \d+;/.test(code));
+    check('② 全屏里鼠标动/轻触临时淡入 UI（.ls-fs-ui + 到点自动收）—— 两模式共用 flashViewerUI',
+        /const flashViewerUI = \(e\) => \{[\s\S]{0,500}classList\.add\('ls-fs-ui'\)/.test(code)
+        && /document\.addEventListener\(ev, flashViewerUI, \{capture: true, passive: true\}\)/.test(code)
+        && /const FS_UI_MS = \d+;/.test(code),
+        (/const FS_UI_MS = \d+;/.exec(code) || ['FS_UI_MS 未找到'])[0]);
+    check('② scheduleViewerUiHide 两条分支：全屏收 ls-fs-ui / 非全屏（看图器开着）加 ls-ui-idle',
+        /const scheduleViewerUiHide = \(\) => \{[\s\S]{0,500}if \(inFullscreenClass\(\)\) \{ html\.classList\.remove\('ls-fs-ui'\); return; \}[\s\S]{0,200}classList\.add\(UI_IDLE_CLASS\)/.test(code));
     check('④ 不再给图片墙加左侧内边距（上一版加过 18px，否掉了，已回退）',
         !/#images-scroll \{ padding-left: 18px; \}/.test(blade));
     check('② 全屏状态挂/去 html.ls-viewer-fs（与按钮图标在同一处同步）',
@@ -266,13 +297,14 @@ console.log('\n[6] 看图器：全屏观感 / 打开不漏重排 / 缩略图条�
 // ---------------------------------------------------------------- 7. 侧栏上起框 / 全屏操作不消失
 console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失');
 {
-    check('② 全屏里鼠标停在 UI 上就不收起（只续期）—— 用矩形判定，不依赖 pointer-events',
+    check('② 全屏里鼠标停在 UI 上就不收起（只续期）—— 矩形判定，不依赖 pointer-events；非全屏收的是同样那四块',
         /const FS_UI_ZONES = \['\.viewer-toolbar', '\.viewer-navbar', '\.viewer-title', '\.viewer-button'\]/.test(code)
-        && /const pointerOverViewerUI = \(x, y\) => FS_UI_ZONES\.some/.test(code)
-        && /pointerOverViewerUI\(\(e && e\.clientX\) \|\| 0, \(e && e\.clientY\) \|\| 0\)\)[\s\S]{0,80}clearTimeout\(fsUiTimer\)/.test(code));
+        && /const WINDOWED_UI_ZONES = \['\.viewer-toolbar', '\.viewer-navbar', '\.viewer-title', '\.viewer-button'\]/.test(code)
+        && /const pointerOverZones = \(zones, x, y\) => zones\.some/.test(code)
+        && /pointerOverZones\(fs \? FS_UI_ZONES : WINDOWED_UI_ZONES,[\s\S]{0,160}clearTimeout\(fsUiTimer\)/.test(code));
     check('② 手指按住期间不收起，抬起才开始计时（触屏端同样"操作中不消失"）',
         /type\.indexOf\('touch'\) === 0[\s\S]{0,120}clearTimeout\(fsUiTimer\)/.test(code)
-        && /addEventListener\('touchend',[\s\S]{0,200}scheduleFsHide\(\)/.test(code));
+        && /addEventListener\('touchend',[\s\S]{0,400}scheduleViewerUiHide\(\)/.test(code));
     check('④ 允许"区域外（侧栏上）"起框，并在松手时自己落选中',
         /const outOfAreaOk = !! ar && e\.clientX <= ar\.right && e\.clientY >= ar\.top/.test(code)
         && /dsBox\.selfSelect = ! inArea/.test(code)
@@ -325,13 +357,446 @@ console.log('\n[8] 看图器「点空白」：拖动后不算点击 + 全屏改�
         && /addEventListener\('pointerup'[\s\S]{0,140}dragEndAt = Date\.now\(\)/.test(code)
         && /Date\.now\(\) - dragEndAt < DRAG_WINDOW[\s\S]{0,120}e\.stopPropagation\(\)/.test(code));
     check('⑧ 全屏：点空白不再关闭，改成显示 UI（坐标取自 detail.originalEvent）',
-        /document\.documentElement\.classList\.contains\('ls-viewer-fs'\)[\s\S]{0,160}e\.stopPropagation\(\)[\s\S]{0,220}flashFullscreenUI\(\{type: 'click'/.test(code)
+        /document\.documentElement\.classList\.contains\('ls-viewer-fs'\)[\s\S]{0,200}e\.stopPropagation\(\)[\s\S]{0,300}flashViewerUI\(\{type: 'click'/.test(code)
         && /const src = \(e\.detail && e\.detail\.originalEvent\) \|\| e;/.test(code));
     check('⑧ 拦截点是 document 捕获阶段 + 只认 .viewer-canvas（不然会误伤工具栏按钮）',
         /const isCanvas = \(el\) => el instanceof Element && el\.classList\.contains\('viewer-canvas'\)/.test(code)
-        && /addEventListener\('click', \(e\) => \{\n\s*if \(! isCanvas\(e\.target\)\) \{ return; \}[\s\S]{0,9000}\}, true\)/.test(code));
+        && /addEventListener\('click', \(e\) => \{[\s\S]{0,2000}if \(! isCanvas\(e\.target\)\) \{ return; \}[\s\S]{0,9000}\}, true\)/.test(code));
+    check('⑧ 新增的「非全屏 + UI 收着」守卫在 click 捕获处理里、排在 isCanvas 判定之前',
+        (() => {
+            const iDef = code.indexOf('const isCanvas = (el) =>');
+            const iGuard = code.indexOf('if (hiddenAtDown) {');
+            const iCall = code.indexOf('if (! isCanvas(e.target)) { return; }');
+            return iDef > -1 && iGuard > iDef && iCall > iGuard;
+        })());
+    check('⑧ 标记是一次性取值：先读进局部量、随即复位（没有前置 pointerdown 的合成 click 不许沿用旧值）',
+        /const hiddenAtDown = windowedUiHiddenAtDown;[\s\S]{0,240}windowedUiHiddenAtDown = false;/.test(code)
+        && /const downTouch = windowedUiHiddenAtDownTouch;[\s\S]{0,240}windowedUiHiddenAtDownTouch = false;/.test(code));
+    check('⑧ 只有触屏/笔才补排收起（鼠标停在 UI 上时不该被收走）',
+        /windowedUiHiddenAtDownTouch = windowedUiHiddenAtDown[\s\S]{0,160}e\.pointerType === 'touch' \|\| e\.pointerType === 'pen'/.test(code)
+        && /if \(downTouch\) \{ scheduleViewerUiHide\(\); \}/.test(code));
     check('⑧ 触屏也记"拖动"（pointermove 在部分安卓上会被 preventDefault 吃掉）',
         /addEventListener\('touchmove'[\s\S]{0,220}dragged = true/.test(code));
+}
+
+// ---------------------------------------------------------------- 9. 「下载原图」已彻底移除
+console.log('\n[9] 「下载原图」整条链路已移除（键 / 函数 / 图标 / 提示语 都钉住）');
+{
+    const tbStart = code.indexOf('toolbar: {');
+    const toolbar = tbStart < 0 ? '' : code.slice(tbStart, code.indexOf("'flip-vertical': true", tbStart) + 400);
+    check('工具栏区间里没有 download 键', !! toolbar && ! /\bdownload\s*:/.test(toolbar));
+    check('全文件没有 downloadViewerImage（定义或调用都没有）',
+        ! blade.includes('downloadViewerImage') && ! code.includes('downloadViewerImage'));
+    check('CSS 里没有 .viewer-download 图标规则（连空壳都没留）', ! blade.includes('viewer-download'));
+    check('页面上没有残留的「下载原图」文案（注释之外）', ! code.includes('下载原图'));
+    check('下载路径专用的跨域提示也没留下（原图在新标签页打开）', ! code.includes('原图在新标签页打开'));
+    check('下载路径专用的 iOS 提示也没留下（存储到照片）', ! code.includes('存储到照片'));
+}
+
+// ---------------------------------------------------------------- 10. 裁剪入口的反查同源行为（真跑）
+// 把 openFromViewer 从 blade 里按花括号配对抠出真身（不手抄），用 new Function 注入假
+// document / toastr / open 直接跑，逐条核对「命中 / 兜底 / 空图」三条路径。
+function extractArrowFn(text, name) {
+    const marker = `const ${name} = `;
+    const start = text.indexOf(marker);
+    if (start < 0) throw new Error(`源码里找不到 ${marker}`);
+    const brace = text.indexOf('{', start);
+    let depth = 0, i = brace;
+    for (; i < text.length; i++) {
+        const c = text[i];
+        if (c === '{') depth++;
+        else if (c === '}') { depth--; if (depth === 0) { i++; break; } }
+    }
+    if (depth !== 0) throw new Error(`${name} 花括号没配对`);
+    return text.slice(start, i);
+}
+
+const IMAGES_ITEM_VAL = (/const IMAGES_ITEM = '([^']+)';/.exec(blade) || [null, ''])[1];
+const GALLERY_HREF = 'https://gallery.example.com/#/user/images';
+const GALLERY_ORIGIN = 'https://gallery.example.com';
+const UA_DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
+const CROSS_URL = 'https://cdn.other.example.com/storage/2026/10/IMG_0002.jpg';
+const CROSS_HINT = '原图在新标签页打开';
+const IOS_HINT = '存储到照片';
+
+// 假环境：document（querySelectorAll 返回带 getAttribute 的假元素）、toastr、viewerUrl。
+function makeEnv(opts) {
+    const env = {
+        url: opts.url,
+        els: (opts.cards || []).map((c) => ({
+            __card: true, __url: c.url, __name: c.name,
+            getAttribute: (k) => (k === 'data-original' ? c.url : null),
+        })),
+        selector: null,
+        toastrCalls: [], opened: [], threw: null,
+    };
+    env.doc = {
+        querySelectorAll(sel) { env.selector = sel; return env.els; },
+    };
+    env.toastr = {
+        warning: (m) => env.toastrCalls.push(['warning', m]),
+        info: (m) => env.toastrCalls.push(['info', m]),
+    };
+    env.open = (item) => env.opened.push(item);
+    env.viewerUrl = () => opts.url;
+    env.toasts = () => env.toastrCalls.map((c) => c[0] + ':' + c[1]);
+    env.runOpenFromViewer = (viewerUrlFn) => {
+        try {
+            const fn = new Function('viewerUrl', 'open', 'toastr', 'document', 'IMAGES_ITEM',
+                `${ovSrc};\nreturn openFromViewer;`)(viewerUrlFn || env.viewerUrl, env.open, env.toastr, env.doc, IMAGES_ITEM_VAL);
+            fn();
+        } catch (e) { env.threw = e; }
+        return env;
+    };
+    return env;
+}
+
+let ovSrc = '';
+try { ovSrc = extractArrowFn(blade, 'openFromViewer'); } catch (e) { /* 下面断言报错 */ }
+
+console.log('\n[10] 看图器「裁剪」入口 openFromViewer 真跑：异常 URL 不抛异常 + 命中 / 兜底 / 空图');
+{
+    const NL_URL = 'https://gallery.example.com/storage/a\nb.HEIC';
+    {
+        const env = makeEnv({ url: NL_URL, cards: [{ url: NL_URL, name: 'a b.HEIC' }] });
+        env.runOpenFromViewer();
+        check('⑩ 含换行的 URL：不抛异常（旧写法拼选择器会 SyntaxError ⇒ 按钮点了没反应）',
+            env.threw === null, env.threw ? env.threw.message : 'null');
+        check('⑩ 含换行的 URL：反查命中 ⇒ open 收到的就是那张卡片元素',
+            env.opened.length === 1 && env.opened[0] === env.els[0],
+            `opened=${env.opened.length} 同一元素? ${env.opened[0] === env.els[0]}`);
+        check('⑩ 反查选择器是常量（未把 URL 拼进去）',
+            env.selector === IMAGES_ITEM_VAL + ' img[data-original]', `selector=${env.selector}`);
+    }
+    {
+        const env = makeEnv({ url: NL_URL, cards: [{ url: 'https://gallery.example.com/storage/other.jpg', name: 'other.jpg' }] });
+        env.runOpenFromViewer();
+        const arg = env.opened[0] || {};
+        check('⑩ 反查落空 ⇒ 兜底对象 {url}（不抛异常、也不会把 undefined 递给 open）',
+            env.threw === null && env.opened.length === 1 && arg !== env.els[0] && arg.url === NL_URL,
+            `arg.url=${arg.url}`);
+        check('⑩ 兜底对象只有 url 一个字段', Object.keys(arg).join(',') === 'url', Object.keys(arg).join(','));
+    }
+    {
+        const env = makeEnv({ url: CROSS_URL, cards: [{ url: CROSS_URL, name: 'x.jpg' }] });
+        env.runOpenFromViewer();
+        check('⑩ 跨域原图也照样反查命中（裁剪入口与存储域无关）',
+            env.threw === null && env.opened[0] === env.els[0]);
+    }
+    {
+        const env = makeEnv({ url: '', cards: [] });
+        env.runOpenFromViewer();
+        check('⑩ 当前图为空 ⇒ 只弹一条 warning、不调 open',
+            env.toastrCalls.length === 1 && env.toastrCalls[0][0] === 'warning' && env.opened.length === 0,
+            JSON.stringify(env.toasts()));
+    }
+}
+
+// ---------------------------------------------------------------- 11. 非全屏 UI 收起时的「第一下点击」（jsdom 真跑）
+// 把 blade 里「UI 自动收起 + 第一下点击守卫」那一整段（常量、pointerOverZones、flashViewerUI、
+// scheduleViewerUiHide、windowedUiHiddenAtDown 记录器、第八轮那个 IIFE）按位置抠出来，注入 jsdom 的
+// document / Element **直接运行**，再用真实 DOM 事件（PointerEvent / 库补发的 CustomEvent click）驱动。
+// 库那一侧用一个注册在 .viewer-container 冒泡阶段的监听代理（与压缩产物里 wt(viewer, 'click', ...) 的
+// 落点一致）：点在缩略图上 ⇒ 记一次 view（库会切图）；点在画布上 ⇒ 记一次 close（库会关掉看图器）。
+console.log('\n[11] 收起状态下的第一下点击：真 DOM 事件驱动（jsdom）');
+const UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];
+const UI_RECTS = {
+    '.viewer-toolbar': { left: 100, top: 8, right: 290, bottom: 48 },
+    '.viewer-navbar': { left: 0, top: 600, right: 390, bottom: 660 },   // 390px 视口下的缩略图条
+    '.viewer-title': { left: 8, top: 24, right: 120, bottom: 48 },
+    '.viewer-button': { left: 350, top: 8, right: 382, bottom: 40 },
+};
+const IDLE_SRC = (() => {
+    const a = blade.indexOf("const VIEWER_OPEN_CLASS = 'ls-viewer-open';");
+    const b = blade.indexOf('/* 点背景 / 按 × 关掉看图器时', a);
+    return (a >= 0 && b > a) ? blade.slice(a, b) : '';
+})();
+
+function bootViewerUi() {
+    const dom = new JSDOM(`<!DOCTYPE html><html class="ls-viewer-open"><body>
+        <div class="viewer-container">
+            <div class="viewer-canvas"><img alt="cur"></div>
+            <ul class="viewer-toolbar"><li class="viewer-crop"></li></ul>
+            <ul class="viewer-navbar"><li class="thumb">thumb</li></ul>
+            <div class="viewer-title">t</div>
+            <button class="viewer-button"></button>
+        </div></body></html>`, { pretendToBeVisual: true });
+    const w = dom.window;
+    Object.defineProperty(w, 'innerWidth', { value: 390, configurable: true });      // 手机宽度
+    // jsdom 不做布局 ⇒ 矩形要自己钉（pointerOverZones 要求 width/height > 0）
+    for (const sel of UI_ZONES) {
+        const el = w.document.querySelector(sel);
+        const r = UI_RECTS[sel];
+        el.getBoundingClientRect = () => ({ ...r, width: r.right - r.left, height: r.bottom - r.top, x: r.left, y: r.top });
+    }
+    // 库那一侧的 click 处理（冒泡阶段，与库里 wt(viewer, 'click', ...) 的落点一致）
+    const lib = [];
+    w.document.querySelector('.viewer-container').addEventListener('click', (e) => {
+        const thumb = e.target.closest && e.target.closest('.viewer-navbar li');
+        lib.push(thumb ? 'view' : 'close');
+    });
+    // 真跑被测代码：抠出来的原文整段塞进去，只用 jsdom 的 document / Element
+    // 计时器换成记账版：用来断言「触屏唤醒后确实补排了一次 FS_UI_MS 的收起」，不必真等它到点
+    const timerLog = { set: [], clear: [], ops: [], live: new Map() };
+    const api = new Function('document', 'Element', 'setTimeout', 'clearTimeout',
+        IDLE_SRC + '\n' + 'return { zones: WINDOWED_UI_ZONES, fsZones: FS_UI_ZONES, hiddenAtDown: () => windowedUiHiddenAtDown, downTouch: () => windowedUiHiddenAtDownTouch };')(
+        w.document, w.Element,
+        (fn, ms) => { timerLog.set.push(ms); timerLog.ops.push(['set', ms]); const id = w.setTimeout(fn, ms); timerLog.live.set(id, ms); return id; },
+        (id) => { timerLog.clear.push(id); timerLog.ops.push(['clear']); timerLog.live.delete(id); return w.clearTimeout(id); });
+    const center = (sel) => {
+        const r = UI_RECTS[sel];
+        return [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
+    };
+    const fire = (sel, xy, kind, libClick, pointerType) => {
+        const el = w.document.querySelector(sel);
+        if (kind === 'click') {
+            el.dispatchEvent(libClick
+                // 库里那条链路：pointerup 时若目标是画布，它向画布补发一个 CustomEvent('click')，
+                // 坐标在 detail.originalEvent 里（不在 e.clientX 上）
+                ? new w.CustomEvent('click', { bubbles: true, detail: { originalEvent: { clientX: xy[0], clientY: xy[1] } } })
+                : new w.MouseEvent('click', { bubbles: true, clientX: xy[0], clientY: xy[1] }));
+        } else {
+            el.dispatchEvent(new w.PointerEvent('pointerdown', {
+                bubbles: true, clientX: xy[0], clientY: xy[1], buttons: 1,
+                pointerType: pointerType || 'mouse',       // 真机一定是 mouse/touch/pen 之一
+            }));
+        }
+    };
+    return {
+        dom, w, lib, api, center, fire,
+        html: w.document.documentElement,
+        idle: () => w.document.documentElement.classList.contains('ls-ui-idle'),
+        timerLog,
+        // 「收起时按在 UI 上」的完整链路：指针落在画布（收起时 UI 不接指针）→ 库补发 click 到画布
+        tapHiddenZone: (sel) => {
+            const xy = center(sel);
+            fire('.viewer-canvas', xy, 'pointerdown');
+            fire('.viewer-canvas', xy, 'click', true);
+        },
+    };
+}
+
+{
+    check('抠到「UI 收起 + 第一下点击」那段真身（未手抄）',
+        IDLE_SRC.length > 3000 && IDLE_SRC.includes('const pointerOverZones')
+        && IDLE_SRC.includes('let windowedUiHiddenAtDown = false;') && IDLE_SRC.includes('if (! isCanvas(e.target))'),
+        `${IDLE_SRC.length} 字符`);
+    check('抠出来的那段和源码里那四块常量对得上（真跑的就是生产代码）',
+        IDLE_SRC.includes("const WINDOWED_UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button']"));
+
+    // ① 非全屏 + ls-ui-idle + 落在缩略图条矩形内（pointer-events:none ⇒ 命中的是画布）
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        check('① 前置：非全屏（无 .ls-viewer-fs）+ 看图器开着 + UI 已收起',
+            ! x.html.classList.contains('ls-viewer-fs') && x.html.classList.contains('ls-viewer-open') && x.idle());
+        const xy = x.center('.viewer-navbar');
+        x.fire('.viewer-canvas', xy, 'pointerdown');
+        check('① 按下这一下就把「刚才还收着」记下来了（记录器确实排在刷新 UI 的名单之前）',
+            x.api.hiddenAtDown() === true);
+        check('① 同一个 pointerdown 也把 ls-ui-idle 摘掉 ⇒ UI 立刻淡回来（唤出）', x.idle() === false);
+        check('① 记录器读到的四块矩形表就是生产代码里那份',
+            Array.isArray(x.api.zones) && x.api.zones.join('|') === UI_ZONES.join('|'), `zones=${x.api.zones}`);
+        x.fire('.viewer-canvas', xy, 'click', true);
+        check('① 库的 click 回调一次都没被调到（stopPropagation 真生效）', x.lib.length === 0, JSON.stringify(x.lib));
+        check('① 那一下也没被当成「点空白退出」（既不切图也不关看图器）',
+            ! x.lib.includes('view') && ! x.lib.includes('close'));
+        x.fire('.viewer-navbar li', xy, 'pointerdown');
+        check('① UI 已可见后再按一下，记录器回到 false（每次按下都重算，不是一次性的）',
+            x.api.hiddenAtDown() === false);
+        x.dom.window.close();
+    }
+
+    // ② 触屏唤醒后自己排一次收起（鼠标只续期）；标记一次性
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        const xy = x.center('.viewer-navbar');
+        x.fire('.viewer-canvas', xy, 'pointerdown', false, 'touch');
+        check('② 触屏按下：记下「刚才收着」且认得出是触屏', x.api.hiddenAtDown() === true && x.api.downTouch() === true);
+        x.timerLog.set.length = 0;
+        x.fire('.viewer-canvas', xy, 'click', true);
+        // 口径改成「活计时器」：闸门加上后，这一下的 flashViewerUI 自己也会走到收起分支，
+        // 再加上下面那句补排 ⇒ 会排两次（第二次清掉第一次、重新计时，净效果仍是一个计时器）。
+        check(`② 触屏收起态点底部：吞掉那一下 + 补排 ${FS_UI_MS}ms 的收起（否则 UI 会一直挂着）`,
+            x.lib.length === 0 && x.timerLog.live.size === 1 && [...x.timerLog.live.values()][0] === FS_UI_MS,
+            `lib=${JSON.stringify(x.lib)} live=${x.timerLog.live.size} timers=${JSON.stringify(x.timerLog.set)}`);
+        x.dom.window.close();
+    }
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        const xy = x.center('.viewer-navbar');
+        x.fire('.viewer-canvas', xy, 'pointerdown', false, 'mouse');
+        check('② 鼠标按下：同样记下「刚才收着」，但不判为触屏', x.api.hiddenAtDown() === true && x.api.downTouch() === false);
+        x.timerLog.set.length = 0;
+        x.fire('.viewer-canvas', xy, 'click', true);
+        check('② 鼠标收起态点底部：也吞掉那一下，但只续期、不补排（指针停在 UI 上不该被收走）',
+            x.lib.length === 0 && x.timerLog.set.length === 0,
+            `lib=${JSON.stringify(x.lib)} timers=${JSON.stringify(x.timerLog.set)}`);
+        x.dom.window.close();
+    }
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        const xy = x.center('.viewer-navbar');
+        x.fire('.viewer-canvas', xy, 'pointerdown', false, 'mouse');
+        x.fire('.viewer-canvas', xy, 'click', true);          // 第一次：被吞
+        check('② 第一次确实被吞了', x.lib.length === 0, JSON.stringify(x.lib));
+        x.fire('.viewer-canvas', xy, 'click', true);          // 没有前置 pointerdown 的合成 click
+        check('② 一次性：合成 click 不再沿用旧标记（否则会被当成第二次「第一下」再吞一次）',
+            x.lib.includes('close'), JSON.stringify(x.lib));
+        x.dom.window.close();
+    }
+
+    // ② UI 可见时点缩略图 ⇒ 照常切图
+    {
+        const x = bootViewerUi();
+        const xy = x.center('.viewer-navbar');
+        x.fire('.viewer-navbar li', xy, 'pointerdown');
+        x.fire('.viewer-navbar li', xy, 'click');
+        check('② UI 可见时点缩略图：库的 view 照常被调到（没被守卫吞掉）',
+            x.lib.length === 1 && x.lib[0] === 'view', JSON.stringify(x.lib));
+        x.dom.window.close();
+    }
+
+    // ③ UI 可见时点画布空白 ⇒ 照常退出看图器
+    {
+        const x = bootViewerUi();
+        x.fire('.viewer-canvas', [195, 300], 'pointerdown');
+        x.fire('.viewer-canvas', [195, 300], 'click');
+        check('③ UI 可见时点画布空白：库收到 close（原有「点空白退出」没被破坏）',
+            x.lib.length === 1 && x.lib[0] === 'close', JSON.stringify(x.lib));
+        x.dom.window.close();
+    }
+
+    // ④ 全屏点空白 ⇒ 只唤出，不退出
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-viewer-fs');
+        x.fire('.viewer-canvas', [195, 300], 'pointerdown');
+        check('④ 全屏下记录器恒为 false（③ 只管非全屏，全屏仍走它自己那条分支）',
+            x.api.hiddenAtDown() === false);
+        x.fire('.viewer-canvas', [195, 300], 'click');
+        check('④ 全屏点空白：库没收到 close（不许关掉看图器）', x.lib.length === 0, JSON.stringify(x.lib));
+        check('④ 同时把 UI 唤出来（加了 ls-fs-ui）', x.html.classList.contains('ls-fs-ui'));
+        x.dom.window.close();
+    }
+
+    // ⑤ 收起状态下点在四块之外 ⇒ 该退还是退（守卫只认那几块矩形，没有扩大成整屏）
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        x.fire('.viewer-canvas', [195, 300], 'pointerdown');     // 画布中部：四块都不覆盖
+        x.fire('.viewer-canvas', [195, 300], 'click', true);
+        check('⑤ UI 收着时点四块之外：库照常收到 close（守卫没把整屏都吞掉）',
+            x.lib.length === 1 && x.lib[0] === 'close', JSON.stringify(x.lib));
+        x.dom.window.close();
+    }
+
+    // ⑥ 四块逐块真跑：收起时落在任何一块矩形里的第一下都被吞掉
+    for (const sel of UI_ZONES) {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        x.tapHiddenZone(sel);
+        check(`⑥ 收起时落在 ${sel} 矩形内的第一下：被吞掉且 UI 被唤出`,
+            x.lib.length === 0 && x.idle() === false, `lib=${JSON.stringify(x.lib)} idle=${x.idle()}`);
+        x.dom.window.close();
+    }
+    // ⑦ 手机「点一下 UI」之后必须仍然自动收起，⑧ 手机滑动依然收，⑨ 桌面鼠标停在 UI 上依然只续期
+    // 为什么单列一节：真机序列在 jsdom 里量出来的根因 —— 抬手那一刻 touchend 监听器排下了 FS_UI_MS 的收起，
+    // 紧接着浏览器补发的**合成 mousemove**（坐标正好落在刚点过的那块 UI 上）走了「指针停在 UI 上 ⇒ 只续期」
+    // 分支，把计时器清掉且不排新的 ⇒ 点过的文件名/工具按钮/缩略图就再也不自动收；滑动不算点击、没有合成
+    // 事件 ⇒ 计时器存活 ⇒ 正常收（看到的行为差异就是这么来的）。改法是给续期分支加「刚发生过触摸就不认」。
+    const mobileTap = (x, sel) => {
+        const el = x.w.document.querySelector(sel);
+        const xy = x.center(sel);
+        el.dispatchEvent(new x.w.PointerEvent('pointerdown', {bubbles: true, clientX: xy[0], clientY: xy[1], buttons: 1, pointerType: 'touch'}));
+        el.dispatchEvent(new x.w.Event('touchstart', {bubbles: true}));
+        el.dispatchEvent(new x.w.Event('touchend', {bubbles: true}));
+        return xy;
+    };
+    const syntheticMouse = (x, sel, xy) => {          // 浏览器在手机点按后补发的那一串（MouseEvent，无 pointerType）
+        const el = x.w.document.querySelector(sel);
+        for (const type of ['mouseover', 'mousemove', 'mousedown', 'mouseup']) {
+            el.dispatchEvent(new x.w.MouseEvent(type, {bubbles: true, clientX: xy[0], clientY: xy[1]}));
+        }
+    };
+    const live = (x) => x.timerLog.live.size;
+    const lastOp = (x) => (x.timerLog.ops[x.timerLog.ops.length - 1] || ['无'])[0];
+
+    check('① 续期分支已经加上「刚发生过触摸就不认」的闸门（合成事件不许再把它当成鼠标停在 UI 上）',
+        /type !== 'keydown' && ! touchedRecently\(\) && pointerOverZones\(/.test(code));
+    check('② 时间窗实现：1200ms + 三个 touch 事件都刷新 lastRealTouchAt（capture + passive）',
+        /const UI_TOUCH_GRACE_MS = 1200;/.test(code)
+        && /let lastRealTouchAt = 0;/.test(code)
+        && /const touchedRecently = \(\) => \(Date\.now\(\) - lastRealTouchAt\) < UI_TOUCH_GRACE_MS/.test(code)
+        && ['touchstart', 'touchmove', 'touchend'].every((ev) => code.includes(`document.addEventListener(ev, () => { lastRealTouchAt = Date.now(); }, {capture: true, passive: true})`))
+        && /'touchstart', 'touchmove', 'touchend'\]\.forEach/.test(code));
+    check('③ 触屏/笔的 pointerdown、pointerup 也刷新（且要求 pointerType 不是 mouse —— 触控板鼠标不受影响）',
+        /'pointerdown', 'pointerup'\]\.forEach/.test(code)
+        && /if \(e && e\.pointerType && e\.pointerType !== 'mouse'\) \{ lastRealTouchAt = Date\.now\(\); \}/.test(code));
+
+    // 真跑：四个区域逐个走「手机点一下」的完整序列（他报的三处：文件名 / 工具按钮 / 缩略图条，外加关闭按钮）
+    for (const sel of UI_ZONES) {
+        const x = bootViewerUi();
+        const xy = mobileTap(x, sel);
+        check(`④ 手机点 ${sel}：抬手那一刻排下了收起计时`, live(x) === 1 && lastOp(x) === 'set',
+            `live=${live(x)} last=${lastOp(x)}`);
+        syntheticMouse(x, sel, xy);
+        check(`④ 手机点 ${sel}：随后补发的合成鼠标事件不许清掉它（改前这里 live 会变 0 ⇒ UI 永不收）`,
+            live(x) === 1 && lastOp(x) === 'set',
+            `live=${live(x)} last=${lastOp(x)} ops=${JSON.stringify(x.timerLog.ops.slice(-3))}`);
+        x.dom.window.close();
+    }
+
+    // 真跑：滑动缩略图条（没有合成事件）—— 手指按着不收，抬手才计时，且此后无人清它
+    {
+        const x = bootViewerUi();
+        const el = x.w.document.querySelector('.viewer-navbar li');
+        const xy = x.center('.viewer-navbar');
+        el.dispatchEvent(new x.w.PointerEvent('pointerdown', {bubbles: true, clientX: xy[0], clientY: xy[1], buttons: 1, pointerType: 'touch'}));
+        el.dispatchEvent(new x.w.Event('touchstart', {bubbles: true}));
+        for (let i = 1; i <= 3; i++) { el.dispatchEvent(new x.w.Event('touchmove', {bubbles: true})); }
+        check('⑤ 滑动中（手指按着）不收：没有活着的收起计时器', live(x) === 0, `live=${live(x)}`);
+        el.dispatchEvent(new x.w.Event('touchend', {bubbles: true}));
+        check('⑤ 滑完抬手：排下收起计时（这条本来就正常，别被闸门改坏）', live(x) === 1 && lastOp(x) === 'set', `live=${live(x)}`);
+        x.dom.window.close();
+    }
+
+    // 真跑：桌面鼠标（无任何触摸）停在四块 UI 上仍然只续期 —— 闸门不许误伤桌面
+    {
+        const x = bootViewerUi();
+        for (const sel of UI_ZONES) {
+            const el = x.w.document.querySelector(sel);
+            const xy = x.center(sel);
+            el.dispatchEvent(new x.w.MouseEvent('mousemove', {bubbles: true, clientX: xy[0], clientY: xy[1]}));
+        }
+        check('⑥ 桌面鼠标停在四块 UI 上：只续期、不收（没有活着的收起计时器）', live(x) === 0, `live=${live(x)}`);
+        x.w.document.querySelector('.viewer-canvas').dispatchEvent(
+            new x.w.MouseEvent('mousemove', {bubbles: true, clientX: 195, clientY: 300}));
+        check('⑥ 桌面鼠标移开 UI 到画布：开始计时（原有行为不变）', live(x) === 1 && lastOp(x) === 'set', `live=${live(x)}`);
+        x.dom.window.close();
+    }
+
+    // 真跑：触屏按下后 1.2s 窗口外的真鼠标（如触控板）仍算停在 UI 上 —— 闸门是时间窗，不是永久拉黑
+    {
+        const x = bootViewerUi();
+        const el = x.w.document.querySelector('.viewer-toolbar');
+        const xy = x.center('.viewer-toolbar');
+        el.dispatchEvent(new x.w.PointerEvent('pointerdown', {bubbles: true, clientX: xy[0], clientY: xy[1], buttons: 1, pointerType: 'touch'}));
+        el.dispatchEvent(new x.w.Event('touchend', {bubbles: true}));
+        const realNow = Date.now;
+        Date.now = () => realNow() + 5000;                 // 把表往前拨 5s（窗口外）
+        try {
+            el.dispatchEvent(new x.w.MouseEvent('mousemove', {bubbles: true, clientX: xy[0], clientY: xy[1]}));
+            check('⑦ 时间窗之外的真鼠标停在 UI 上：恢复「只续期」（live=0）',
+                live(x) === 0, `live=${live(x)} last=${lastOp(x)}`);
+        } finally {
+            Date.now = realNow;
+        }
+        x.dom.window.close();
+    }
 }
 
 // ---------------------------------------------------------------- 汇总

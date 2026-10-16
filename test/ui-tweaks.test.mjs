@@ -386,10 +386,22 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         ! /dbg-ctx|DBG_ON|dbgSid/.test(ctxJs) && ! /\?dbg=1/.test(ctxJs));
     // 2026-10-08 终稿：一级的**淡出时长与二级一致**（一级太长，和二级一致就好）；
     // 只有 hold（停顿）继续分层级。所以代码里不应再有 MAIN_FADE 这类"一级专属 fade"常量。
-    check('点二级项后不「先退回一级」：叶子项路径跳过即时 exitSubmenuInplace，改用延时收尾',
-        /const leafClose = \(Date\.now\(\) - lastLeafTapAt\) < LEAF_FADE_WINDOW;/.test(ctxJs)
-        && /if \(! leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs)
-        && /if \(leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs));
+    // 2026-10-16 定稿：**所有**关闭路径都不许在淡出开始时就还原二级菜单状态。
+    // 判据：淡出期间元素还完整可见（手机 320 / 电脑 120ms），这时动内容状态用户就会看到跳变 ——
+    //   「退回上级」= 摘掉 .submenu-inplace；「二级跳到旁边」= 摘掉 .touch-open 之后主题那条
+    //   `.dropdown-context .dropdown-submenu:hover>.dropdown-menu` 顶上（手机 :hover 粘在刚点过的
+    //   父项上），子菜单按侧开位置 left:100% 又被画出来。所以还原点只允许有一处，且必须在淡出之后。
+    const closeBody = ctxJs.slice(ctxJs.indexOf('function closeMenus('),
+        ctxJs.indexOf('function isInsideMenu('));
+    check('关闭路径不许「先退回一级」：closeMenus 里没有即时 exitSubmenuInplace，叶子项分支已整体撤除',
+        closeBody.length > 400
+        && ! /if \(! leafClose\)/.test(closeBody)
+        && ! /leafClose|lastLeafTapAt|LEAF_FADE_WINDOW/.test(ctxJs));
+    check('二级菜单状态的还原点只有一处，且在「面板已 display:none」之后（fade+60 → fade+150）',
+        (closeBody.match(/exitSubmenuInplace\(/g) || []).length === 1
+        && closeBody.indexOf('exitSubmenuInplace(') > closeBody.indexOf('doFadeOut();')
+        && closeBody.indexOf('fade + 60') < closeBody.indexOf('fade + 150')
+        && /exitSubmenuInplace\(true\);\s*\n\s*\}, fade \+ 150\)\);/.test(closeBody));
     check('叶子项点击后定格高亮：有 .context-pressed 样式（用强调色变量，不写死）',
         /\.dropdown-context a\.context-pressed\{[^}]*var\(--lsky-accent\)/.test(ctxCss)
         && /\.dropdown-context a\.context-pressed\s*\{[\s\S]{0,120}var\(--lsky-accent\)/.test(ctxLess));
@@ -401,6 +413,130 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         && /\.removeClass\(LEAF_PRESSED_CLASS\)/.test(ctxJs));
     check('两份 context-js.js 字节一致（浏览器加载的是 public 那份）',
         ctxJs === read('resources', 'js', 'context-js.js'));
+}
+
+// ---------------------------------------------------------------- 存储用量条粗细（仪表盘与侧栏同一档）
+/*
+ * 侧栏那条原来走组件默认档 h-1.5（6px），实测太细；现在与仪表盘统一到 8px（ls-segbar--thick）。
+ * 为什么 thick 必须写成 .ls-segbar.ls-segbar--thick（双类名）：模板上同时挂着 Tailwind 的 h-1.5，
+ * 单类名 .ls-segbar--thick 与 .h-1.5 权重相同 —— 谁后加载谁赢，8px 会时灵时不灵。
+ */
+{
+    const segComponent = read('resources', 'views', 'components', 'storage-segments.blade.php');
+    const sidebarBlade = read('resources', 'views', 'layouts', 'sidebar.blade.php');
+    const dashboardBlade = read('resources', 'views', 'user', 'dashboard.blade.php');
+    const commonCss = read('public', 'css', 'common.css');
+    const thickCall = (blade) => /<x-storage-segments[^>]*bar-class="ls-segbar--thick"[^>]*\/>/.test(blade);
+
+    check('组件默认档仍是 h-1.5（不传 bar-class 就不加粗，回退路径还在）',
+        /'barClass'\s*=>\s*'h-1\.5'/.test(segComponent));
+    check('侧栏那条传了 ls-segbar--thick（与仪表盘同粗）', thickCall(sidebarBlade));
+    check('仪表盘那条同样传了 ls-segbar--thick（两条同档，别再分粗细）', thickCall(dashboardBlade));
+    check('提交的 common.css 里 thick 档 = 8px，且用双类名压过 .h-1.5',
+        /\.ls-segbar\.ls-segbar--thick\s*\{\s*height:\s*8px/.test(commonCss),
+        (commonCss.match(/\.ls-segbar\.ls-segbar--thick\s*\{[^}]*\}/) || ['未找到'])[0]);
+    check('common.less 与 common.css 两份都写了 8px（源码/产物同步）', /height:\s*8px/.test(commonLess));
+}
+
+// ---------------------------------------------------------------- 明暗切换复用 x-dropdown（动画统一）
+/*
+ * 明暗切换原来是自己手写的一套：进 150ms / 出 100ms、从上方 4px 落下、退场还不位移 —— 跟顶栏另两个下拉
+ * （进 200ms / 出 75ms、从下方 36px 滑入）观感不一致。现在它改用 <x-dropdown>，动画只留在组件里那六行一处。
+ * 每个使用点都不许再自带 x-transition / @click.outside —— 那就又成了第二套（这正是当初不一致的成因）。
+ * 顺带钉住两个同步修掉的边角：死代码 @close.stop（全仓没有任何地方派发 close 事件）、写死的 aria-labelledby。
+ */
+{
+    const dropdownCmp = read('resources', 'views', 'components', 'dropdown.blade.php');
+    const themeCmp = read('resources', 'views', 'components', 'theme-switch.blade.php');
+    // 只看「标记」，把 {{-- --}} 注释剥掉：注释里会点名 x-transition / x-data 这些词，
+    // 直接对全文断言会把自己的注释当违规（本文件别处已有 navNoCmt 这个先例）。
+    const themeMk = themeCmp.replace(/{{--[\s\S]*?--}}/g, '');
+    const segCmp = read('resources', 'views', 'components', 'storage-segments.blade.php');
+    const appBlade = read('resources', 'views', 'layouts', 'app.blade.php');
+
+    check('组件动画仍是 200/75 + translate-y-9（这一轮没动它）',
+        dropdownCmp.includes('x-transition:enter="transition ease-out duration-200"')
+        && dropdownCmp.includes('x-transition:enter-start="transform opacity-0 translate-y-9"')
+        && dropdownCmp.includes('x-transition:leave="transition ease-in duration-75"'));
+    check('明暗切换改用 <x-dropdown>，且自己不再写 x-transition（动画只能来自组件）',
+        themeMk.includes('<x-dropdown') && ! /x-transition/.test(themeMk));
+    check('明暗切换也不再自带 x-data / @click.outside（状态与关闭都归组件）',
+        ! /x-data|@click\.outside/.test(themeMk));
+    check('宽度：明暗切换 w-36，组件默认仍旧 w-48',
+        /panel-class="w-36"/.test(themeMk) && /'panelClass'\s*=>\s*'w-48'/.test(dropdownCmp));
+    check('三档外观齐全（跟随系统 / 亮色 / 暗色）',
+        ["theme.set('system')", "theme.set('light')", "theme.set('dark')"].every((s) => themeMk.includes(s)));
+    check('触发器不再自己 toggle（与组件里的 @click 二选一，避免双重取反）', ! /open = !open/.test(themeMk));
+    check('死代码 @close.stop 清干净了（组件 + 侧栏遮罩）',
+        ! /@close\.stop/.test(dropdownCmp) && ! /@close\.stop/.test(appBlade));
+    check('aria-labelledby 不再写死 user-menu-button，改为使用点传入',
+        ! /aria-labelledby="user-menu-button"/.test(dropdownCmp) && /'labelledby'/.test(dropdownCmp)
+        && userNav.includes('labelledby="user-menu-button"'));
+    check('空态回退条也带 .ls-segbar（空态/有图都是 8px）',
+        /<div class="ls-segbar [^"]*\{\{ \$barClass \}\}"/.test(segCmp),
+        (segCmp.match(/<div class="ls-segbar[^"]*"/) || ['未找到'])[0]);
+}
+
+// ---------------------------------------------------------------- 各策略占用百分比不再展示 + 「存储」文案
+/*
+ * 口径：各存储策略不再统计/展示「占已用量的百分比」—— 仪表盘图例与悬浮气泡（仪表盘 + 侧栏同一组件）
+ * 里的那一项都去掉；只有「存储用量」右上角那个总占用比例保留（唯一有用的一处）。文案上「存储用量」/
+ * 「容量使用」统一成「存储用量」；全仓旧词（储+存）一并扫掉，见本段末尾的全局断言。
+ * 组件里的 share 仍要算：色段宽度 = 该策略占已用量比例 × 整条填充比例，少了它整条画不出来。
+ */
+{
+    const dashboardBlade = read('resources', 'views', 'user', 'dashboard.blade.php');
+    const sidebarBlade = read('resources', 'views', 'layouts', 'sidebar.blade.php');
+    const segCmp = read('resources', 'views', 'components', 'storage-segments.blade.php');
+    const commonCss = read('public', 'css', 'common.css');
+
+    check('各策略百分比从所有模板里消失（图例 + 气泡，仪表盘与侧栏共用同一组件）',
+        ! dashboardBlade.includes("round($segment['share'], 1)")
+        && ! segCmp.includes("round($segment['share'], 1)")
+        && ! sidebarBlade.includes("round($segment['share'], 1)"));
+    check('对应的 CSS 一起撤（.ls-legend__pct 标记与规则都不留）',
+        ! dashboardBlade.includes('ls-legend__pct')
+        && ! commonCss.includes('ls-legend__pct') && ! commonLess.includes('ls-legend__pct'));
+    check('图例仍在，且仍显示体积（只去掉百分比这一项）',
+        /ls-legend__num/.test(dashboardBlade) && /formatSize\(\$segment\['kb'\] \* 1024\)/.test(dashboardBlade));
+    check('气泡仍显示「体积 · 张数」', /\{\{ \$segment\['images'\] \}\} 张<\/span>/.test(segCmp));
+    check('保留唯一有用的百分比：仪表盘「存储用量」右上角的总占用比例',
+        /\{\{ \$usedPercent \}\}%/.test(dashboardBlade));
+    check('组件的 share 仍在算宽度（别顺手把统计删了）',
+        /\$usedPercent \* \$segment\['share'\] \/ 100/.test(segCmp));
+    check('仪表盘标题 =「存储用量」', dashboardBlade.includes('>存储用量</p>'));
+    check('侧栏标题改「存储用量」（不留「容量使用」）',
+        sidebarBlade.includes('>存储用量</p>') && ! sidebarBlade.includes('容量使用'));
+    check('侧栏「已用 / 总量」那行数字照旧保留',
+        sidebarBlade.includes('class="used"') && sidebarBlade.includes('class="total"'));
+    check('无障碍标签也跟着改词（存储用量按存储策略分布）',
+        segCmp.includes('aria-label="存储用量按存储策略分布"'));
+    // 全局：全仓（src/ 下所有文本文件）不许再出现旧词 —— 用拼接写法，免得断言自己踩到自己
+    const oldWord = '储' + '存';
+    const offenders = [];
+    const walk = (dir) => {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (['node_modules', 'vendor', '.git'].includes(e.name)) continue;
+            const p = path.join(dir, e.name);
+            if (e.isDirectory()) { walk(p); continue; }
+            if (! /\.(blade\.php|php|js|mjs|less|css|md|json|ya?ml|sh|patch)$/.test(e.name)) continue;
+            if (fs.readFileSync(p, 'utf8').includes(oldWord)) offenders.push(path.relative(SRC, p));
+        }
+    };
+    walk(SRC);
+    check('全仓不再出现旧词（含注释/README，回潮会被抓住）', offenders.length === 0, offenders.join(', '));
+}
+
+// ------------------------------------------------- 存储用量条（分段条 1px 下限 / 侧栏 8px）
+{
+    const less = read('resources', 'css', 'common.less');
+    const css = read('public', 'css', 'common.css');
+    check('分段条每段留 1px 下限（份额极小的策略也看得见，不会变成 0 宽凭空消失）',
+        /\.ls-seg \{[\s\S]*?min-width: 1px;/.test(less) && /ls-seg\{min-width:1px\}/.test(css),
+        'less 与编译产物都要有（只改 less 不重编 = 线上没生效）');
+    check('侧栏「粗」用量条 = 8px，且选择器压得住 h-1.5',
+        /&\.ls-segbar--thick \{\s*height: 8px;/.test(less) && /ls-segbar--thick\{height:8px\}/.test(css),
+        'less 与编译产物都要有');
 }
 
 // ---------------------------------------------------------------- 汇总

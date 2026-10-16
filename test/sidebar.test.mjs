@@ -8,6 +8,7 @@
  *
  * 运行：npm test（或 node sidebar.test.mjs）
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 
@@ -98,6 +99,44 @@ const hasClass = (dom) => dom.window.document.documentElement.classList.contains
     check('桌面端点按钮：走折叠（open 不受影响）',
         store.collapsed === true && store.open === false,
         `collapsed=${store.collapsed} open=${store.open}`);
+}
+
+// ---------------------------------------------------------------- 抽屉遮罩的点击契约（读文件断言）
+/*
+ * 为什么钉这条：手机端关抽屉只该有两个入口 —— 遮罩自己的 @click、侧栏里那个 × 按钮。
+ * 另外两个「看起来能用」的做法都会让手机端误关：
+ *   · 在遮罩上挂 @click.outside —— 遮罩是 fixed inset-0、盖住除侧栏以外整屏，而侧栏
+ *     <nav id="app-sidebar">（z-10）是它的**兄弟节点**、不在它的子树里；Alpine 的 .outside
+ *     语义是「点击目标不在本元素内就执行表达式」，于是点侧栏**内部**的空白也被算成点了外侧
+ *     → 随手点一下侧栏空白，抽屉就没了。（桌面端复现不了：遮罩 sm:hidden，x-show 为假时
+ *     Alpine 会跳过该处理器。）
+ *   · 在侧栏容器上挂 @click.self / @click.outside —— 同理，点侧栏自身即触发。
+ *
+ * 为什么这里只做「读文件断言」而不上 jsdom 行为测试：Alpine 的 .outside 处理器自带
+ * 「元素零尺寸就不执行」的守卫（offsetWidth < 1 && offsetHeight < 1 → return），而 jsdom 里
+ * 所有元素的 offsetWidth/offsetHeight 恒为 0 —— 这个 bug 在 jsdom 里**根本复现不出来**，
+ * 行为测试会两边都绿（假绿）。真机/真浏览器才是终判，这里钉住结构契约防回归。
+ */
+{
+    const LAYOUTS = path.join(here, '..', 'src', 'resources', 'views', 'layouts');
+    const appBlade = fs.readFileSync(path.join(LAYOUTS, 'app.blade.php'), 'utf8');
+    const sidebarBlade = fs.readFileSync(path.join(LAYOUTS, 'sidebar.blade.php'), 'utf8');
+
+    const at = appBlade.indexOf('x-show="$store.sidebar.open"');
+    check('找得到遮罩元素（x-show="$store.sidebar.open"）', at !== -1, `index=${at}`);
+    const tagStart = at === -1 ? -1 : appBlade.lastIndexOf('<div', at);
+    const tag = at === -1 ? '' : appBlade.slice(tagStart, appBlade.indexOf('>', at) + 1);
+
+    check('遮罩上没有 @click.outside（有它 → 点侧栏内部空白也会关抽屉）',
+        ! /@click\.outside/.test(tag), tag.replace(/\s+/g, ' ').slice(0, 90) + ' …');
+    check('遮罩自己带 @click（点遮罩仍能关抽屉）', /@click=/.test(tag));
+    check('侧栏是遮罩的兄弟节点（不在遮罩子树里，所以「点侧栏内部」≠「点外侧」）',
+        appBlade.indexOf("@include('layouts.sidebar')") < tagStart
+        && ! tag.includes('app-sidebar')
+        && sidebarBlade.includes('id="app-sidebar"'));
+    check('侧栏里只有右上角 × 会关抽屉（别处不许直接改 store）',
+        (sidebarBlade.match(/\$store\.sidebar\.open\s*=\s*false/g) || []).length === 1,
+        String((sidebarBlade.match(/\$store\.sidebar\.open\s*=\s*false/g) || []).length));
 }
 
 // ---------------------------------------------------------------- 汇总

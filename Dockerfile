@@ -118,15 +118,18 @@ RUN printf '%s\n' \
 # 拼成存储路径并由 Image::url() 原样拼成直链（全程无 rawurlencode），名字里带 ? 会让直链
 # 在 ? 处被截断成查询串 ⇒ 图片永远打不开（# 更彻底，请求都不会发出）。这些字符在正常
 # 文件名里不会出现，所以对正常文件名是恒等变换 —— 不改变现有命名结果与链接形态。
+# 批量导出（用户端）也落在这两个文件上：routes/web.php 的 settings 组新增三条导出路由
+# （preview 只查库报体积 / export 流式下载 / result 读本人最近一次结果）；ImageService::getAdapter()
+# 加了可选参数 $httpOptions（S3 的 connect/read 超时）—— 默认空数组 ⇒ 其它调用方行为与从前完全一致。
 # routes/auth.php 也是有意偏离（F23 防爆破）：给 login / register / forgot-password /
 # confirm-password 四个 POST 端点加了 throttle（详见文件内注释）。它同样被钉住，
 # 改了不更新这行 md5 就构建失败。
 # 这几个文件以后只要被改动（哪怕手滑），构建就会红 —— md5 必须随改动同步更新。
 RUN printf '%s\n' \
         'dcc6b370414cf329b7902cdd85f33d2f  ./config/convention.php' \
-        '881fdbaed19ef39027783f093448875d  ./routes/web.php' \
+        'c3d84e42370fea86239a8a076492a215  ./routes/web.php' \
         'c1ab546f3e7f5237c1d45435171858ce  ./routes/auth.php' \
-        '06c38d587ac188750af34aaf224a239d  ./app/Services/ImageService.php' \
+        'c0ea82b790494e247de943f75fa5d059  ./app/Services/ImageService.php' \
     | md5sum -c -
 
 # 有意偏离上游的另一个文件：composer.lock。
@@ -167,9 +170,9 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 # 改 src/ 里这三个文件后必须同步更新这里的 md5（故意做成"改了不更新就构建失败"），
 # 并重新生成 patches/ios-longpress.patch（tools/diff-vs-upstream.sh）。
 RUN printf '%s\n' \
-        '30f2feb6eaa5f6fa6de79b9f87bb70ef  ./public/js/context-js/context-js.js' \
-        '30f2feb6eaa5f6fa6de79b9f87bb70ef  ./resources/js/context-js.js' \
-        '7a7c1785d82e0615a4c091c92394e130  ./resources/views/user/images.blade.php' \
+        '5cf4921912df67a6de657dee02284e65  ./public/js/context-js/context-js.js' \
+        '5cf4921912df67a6de657dee02284e65  ./resources/js/context-js.js' \
+        '6b0a5f43d5d7ddbe97fc685495f9c421  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -207,10 +210,28 @@ RUN printf '%s\n' \
 #                 其它 PHP/前端都没动）时，标记不变 → 老卷不会重新同步 → 卷里是旧依赖、镜像里是新依赖。
 #                 composer install 是在 build 阶段、镜像自带的 vendor/ 已经按新 lock 装好；
 #                 加了这一条，只换依赖的镜像也会让标记变、触发一次同步。
-# 任何一个不存在 / 命令失败都写 none（标记照写）—— **绝不能让构建失败**。
+# 2026-10-16 扩容：上面这份指纹原本只算 app/ config/ routes/ + 4 个具体文件，而镜像里还有
+#   resources/（全部 blade 模板与 less 源）、public/（编译产物）与 lang/（用户可见文案）。
+#   实测：只改 resources/views/** 或 public/css/common.css 时标记不变 ⇒ 老卷永远拿不到新模板/新样式
+#   （GHCR 构建因 fork_sha=commit 每次都变而掩盖了这条，本地重建才露出来）。
+#   故补三条：app_src_md5 扩到 lang/、resources_md5、public_md5。
+#   并且一律写成 `xargs md5sum | md5sum` 而不是 `xargs cat | md5sum`：把**文件名**也哈希进去，
+#   否则重命名文件、或新增一个空文件都不会改变指纹（卷同步是只增改不删 ⇒ 老卷拿不到改名）。
+#   仍未进指纹的：src/*.md 这类纯文档、composer.json（随被钉住的 composer.lock 一起变）、
+#   bootstrap/ 与 database/（entrypoint 的 tar 同步本来就排除它们，进去只会白吵标记）。
+# 另外 find/sort 一律钉 LC_ALL=C：sort 的排序规则跟 locale 走，不加这一项，
+#   上面「同一份源码在任何机器上结果一致」就是假的（实测 en_US.UTF-8 与 C 得出两个不同的
+#   md5 —— 文件清单与逐文件内容完全相同，只是排序不同）⇒ 容器外无法复算核对。
+# 变量为空才写 none（目录整体缺失/整条管道失败）。注意**空目录不算失败**：空输入会照常得到
+#   空字符串的 md5 常量（d41d8cd9…），所以这条兜底实际只在命令真失败时才命中。
+# 无论如何都写一份标记（标记照写）—— **绝不能让构建失败**。
 # 入口脚本比的是整个标记文件的内容，所以多出这几行 = 换镜像时自动触发同步，entrypoint 不需要改。
-RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z | xargs -0 -r cat 2>/dev/null | md5sum | cut -d' ' -f1); \
+RUN APP_SRC_MD5=$(LC_ALL=C find app config routes lang -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r md5sum 2>/dev/null | md5sum | cut -d' ' -f1); \
     [ -n "$APP_SRC_MD5" ] || APP_SRC_MD5=none; \
+    RESOURCES_MD5=$(LC_ALL=C find resources -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r md5sum 2>/dev/null | md5sum | cut -d' ' -f1); \
+    [ -n "$RESOURCES_MD5" ] || RESOURCES_MD5=none; \
+    PUBLIC_MD5=$(LC_ALL=C find public -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r md5sum 2>/dev/null | md5sum | cut -d' ' -f1); \
+    [ -n "$PUBLIC_MD5" ] || PUBLIC_MD5=none; \
     APP_JS_MD5=$(md5sum public/js/app.js 2>/dev/null | cut -d' ' -f1); \
     [ -n "$APP_JS_MD5" ] || APP_JS_MD5=none; \
     APP_CSS_MD5=$(md5sum public/css/app.css 2>/dev/null | cut -d' ' -f1); \
@@ -222,13 +243,15 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
     printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
-        "context_js_md5=30f2feb6eaa5f6fa6de79b9f87bb70ef" \
-        "images_blade_md5=7a7c1785d82e0615a4c091c92394e130" \
+        "context_js_md5=5cf4921912df67a6de657dee02284e65" \
+        "images_blade_md5=6b0a5f43d5d7ddbe97fc685495f9c421" \
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
         "context_css_md5=${CONTEXT_CSS_MD5}" \
         "composer_lock_md5=${COMPOSER_LOCK_MD5}" \
+        "resources_md5=${RESOURCES_MD5}" \
+        "public_md5=${PUBLIC_MD5}" \
         > .code-revision \
     && cat .code-revision
 

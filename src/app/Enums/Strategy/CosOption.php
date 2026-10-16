@@ -19,6 +19,6 @@ final class CosOption
     /** @var string 所属地域 */
     const Region = 'region';
 
-    /** @var string 储存桶名称 */
+    /** @var string 存储桶名称 */
     const Bucket = 'bucket';
 }

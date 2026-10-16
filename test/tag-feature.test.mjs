@@ -113,7 +113,7 @@ console.log('\n[A. 静态] 标签落点：筛选（多选 AND + 清除）');
     check('筛选参数沿用 resetImages({tags:[...]})（后端 tags[] 多值 AND）',
         /resetImages\(\{page: 1, tags: selectedTagIds\.slice\(\)\}\)/.test(blade));
     check('工具栏没有新增第三个下拉（仍然是「排序 + 标签」两个）',
-        (bladeCode.match(/<x-dropdown direction="left">/g) || []).length === 2);
+        (bladeCode.match(/<x-dropdown direction="left"/g) || []).length === 2);
     check('标签多选项有 44px 点击区（手机上点得中）',
         /tag-filter-item[^']*min-h-\[44px\]/.test(blade));
     check('标签列表来自 GET user/tags（route user.tags）', /axios\.get\('\{\{ route\('user\.tags'\) \}\}'\)/.test(blade));

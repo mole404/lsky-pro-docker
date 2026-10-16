@@ -2,15 +2,19 @@
 
 @php
     // 概览数字：图标块 + 弱化标签 + 大号数字（原来是一排 5xl 大图标挤着文字，视觉很乱）
+    // 用量来自控制器里的那一次分组聚合（$storage['total'] 与旧的 use_capacity 同值，
+    // 都是 images 表 SUM(size)，只是不再重复查 4 次）
+    $usedKb = $storage['total'];
+    $capacityKb = (int) $user->capacity;
     $cards = [
         ['图片数量', $user->image_num, 'fa-images'],
-        ['使用储存', \App\Utils::formatSize($user->use_capacity * 1024), 'fa-database'],
-        ['可用储存', \App\Utils::formatSize(($user->capacity - $user->use_capacity) * 1024), 'fa-hdd'],
-        ['总储存', \App\Utils::formatSize($user->capacity * 1024), 'fa-server'],
+        ['使用存储', \App\Utils::formatSize($usedKb * 1024), 'fa-database'],
+        ['可用存储', \App\Utils::formatSize(($capacityKb - $usedKb) * 1024), 'fa-hdd'],
+        ['总存储', \App\Utils::formatSize($capacityKb * 1024), 'fa-server'],
     ];
-    // 储存用量进度（capacity 单位是 KB；容量为 0 时不做除法）
-    $usedPercent = $user->capacity > 0
-        ? min(100, round($user->use_capacity / $user->capacity * 100, 1))
+    // 存储用量进度（capacity 单位是 KB；容量为 0 时不做除法）
+    $usedPercent = $capacityKb > 0
+        ? min(100, round($usedKb / $capacityKb * 100, 1))
         : 0;
     // 上传限制：原来 8 行竖着堆，改成紧凑的小格子，一眼扫完
     $limits = [
@@ -40,19 +44,32 @@
             @endforeach
         </div>
 
-        {{-- ② 储存用量（侧栏折叠时那块容量信息会藏起来，这里正好补上） --}}
+        {{-- ② 存储用量（侧栏折叠时那块容量信息会藏起来，这里正好补上） --}}
         <div class="bg-surface rounded-xl p-4 md:p-5 shadow-card">
             <div class="flex items-center justify-between gap-4">
-                <p class="text-ink text-[14px] font-semibold">储存用量</p>
+                <p class="text-ink text-[14px] font-semibold">存储用量</p>
                 <p class="text-ink-3 text-[13.5px] tabular-nums">
-                    <span class="text-ink font-semibold">{{ \App\Utils::formatSize($user->use_capacity * 1024) }}</span>
-                    <span class="mx-0.5">/</span>{{ \App\Utils::formatSize($user->capacity * 1024) }}
+                    <span class="text-ink font-semibold">{{ \App\Utils::formatSize($usedKb * 1024) }}</span>
+                    <span class="mx-0.5">/</span>{{ \App\Utils::formatSize($capacityKb * 1024) }}
                     <span class="ml-2 text-ink-2">{{ $usedPercent }}%</span>
                 </p>
             </div>
-            <div class="mt-3 h-1.5 w-full rounded-full bg-surface-3 overflow-hidden">
-                <div class="h-full rounded-full bg-brand" style="width: {{ $usedPercent }}%"></div>
+            <div class="mt-3">
+                {{-- 与侧栏同档粗细：ls-segbar--thick（8px，规则在 common.css；组件默认档是 h-1.5=6px） --}}
+                <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" bar-class="ls-segbar--thick" />
             </div>
+            @if (count($storage['segments']) > 0)
+                {{-- 颜色图例：只列有占用的策略（未使用的不出现），顺序与色段一致；各策略不再统计占用百分比 --}}
+                <div class="ls-legend">
+                    @foreach ($storage['segments'] as $segment)
+                        <span class="ls-legend__item">
+                            <i class="ls-legend__dot" style="background: {{ $segment['color'] }}"></i>
+                            <span class="ls-legend__name">{{ $segment['name'] }}</span>
+                            <span class="ls-legend__num">{{ \App\Utils::formatSize($segment['kb'] * 1024) }}</span>
+                        </span>
+                    @endforeach
+                </div>
+            @endif
         </div>
 
         {{-- ③ 可使用的策略 + 我的信息 --}}
@@ -61,7 +78,7 @@
                 <x-slot name="title">可使用的策略</x-slot>
                 <x-slot name="content">
                     @if($strategies->isEmpty())
-                        <x-no-data message="您所在的组还没有可用的储存策略，请联系管理员。" />
+                        <x-no-data message="您所在的组还没有可用的存储策略，请联系管理员。" />
                     @else
                         <p class="px-4 pt-3 text-ink-3 text-[13.5px]">共 {{ $strategies->count() }} 个可用</p>
                         {{-- 手机上不内滚（一列全展开，靠整页滚动即可）；≥md 与「我的信息」并排，才需要限高。

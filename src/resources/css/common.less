@@ -36,33 +36,101 @@ progress::-webkit-progress-value {
     background-color: var(--lsky-accent);
 }
 
-#capacity-progress {
-    progress.green {
-        &::-webkit-progress-value {
-            background: #00ab00;
-        }
-    }
-    progress.yellowgreen {
-        &::-webkit-progress-value {
-            background: yellowgreen;
-        }
-    }
-    progress.yellow {
-        &::-webkit-progress-value {
-            background: #b9b900;
-        }
-    }
-    progress.orange {
-        &::-webkit-progress-value {
-            background: #ff9900;
-        }
-    }
-    progress.red {
-        &::-webkit-progress-value {
-            background: #ff4141;
-        }
+// fork: 按存储策略分段的用量条（仪表盘与侧栏共用）——颜色见 css/app.css 的 --lsky-seg-*
+// 轨道不加 overflow:hidden：气泡要能跑出条外；圆角改为只给首尾两段
+.ls-segbar {
+    position: relative;
+    display: flex;
+    width: 100%;
+    border-radius: 9999px;
+    background: var(--lsky-surface-3);
+    // 气泡宽度：组件里的 $tipWidth 与它保持一致（两处一起改）
+    --ls-tip-w: 212px;
+
+    // 仪表盘与侧栏同档 8px（组件默认档是 Tailwind 的 h-1.5 = 6px）；
+    // 写成 .ls-segbar.ls-segbar--thick 是为了压过 .h-1.5（同权重时先后顺序会决定谁赢）
+    &.ls-segbar--thick {
+        height: 8px;
     }
 }
+
+.ls-seg {
+    // 1px 而不是 3px：3px 会把「占比不足 3px」的窄段撑宽，整条长度不再等于 已用/配额
+    // （线上真值复算：2.9% 用量 + 216px 条时渲染总长被夸大约 1.85 倍，且占比相差一倍的
+    //  两段渲染成等宽）。1px 只保留「这一段存在」的最低可见度，失真压到约 1.2 倍。
+    min-width: 1px;
+
+    &:first-child {
+        border-top-left-radius: 9999px;
+        border-bottom-left-radius: 9999px;
+    }
+
+    &:last-child {
+        border-top-right-radius: 9999px;
+        border-bottom-right-radius: 9999px;
+    }
+
+    // 高亮用 inset 阴影：filter 会让 .ls-seg 变成定位包含块，气泡被拉回小段上、被裁
+    &:hover {
+        box-shadow: inset 0 0 0 999px rgba(127, 127, 127, .16);
+    }
+}
+
+// 悬浮气泡：绝对定位挂到「条」上（.ls-seg 是 static），left 由组件内联的 min() 夹住 ⇒ 永远在条内；
+// 固定在条上方（放下面会盖住条下方那行说明文字）
+.ls-seg__tip {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: max-content;
+    max-width: min(var(--ls-tip-w), 100%);   // 条本身比气泡窄时，气泡跟着缩到条宽
+    padding: 6px 9px;
+    border-radius: 8px;
+    background: var(--lsky-surface);
+    color: var(--lsky-text);
+    border: 1px solid var(--lsky-border);
+    box-shadow: var(--lsky-shadow-pop);
+    font-size: 12.5px;
+    line-height: 1.45;
+    text-align: left;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity .14s ease;
+
+    .ls-seg:hover & {
+        opacity: 1;
+        visibility: visible;
+    }
+}
+
+.ls-seg__tip-name { font-weight: 600; overflow-wrap: anywhere; }
+.ls-seg__tip-num { color: var(--lsky-text-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+// 图例
+.ls-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    margin-top: 10px;
+}
+
+.ls-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--lsky-text-2);
+}
+
+.ls-legend__dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.ls-legend__name { color: var(--lsky-text); }
+.ls-legend__num { font-variant-numeric: tabular-nums; }
 
 #toast-container {
     & > div {
@@ -119,9 +187,14 @@ progress::-webkit-progress-value {
 
 // 我的图片
 #images-grid {
-    a:hover, a.ds-selected {
+    // 蓝框（外扩 2px 的 outline）只在**被勾选**时染色 —— ds-selected 是 DragSelect 给选中项加的类。
+    // 悬停不染色：鼠标扫过一排图片不再拖出一条蓝线，手机上浏览器「粘住」的 :hover 也不会留下框。
+    a.ds-selected {
         outline-color: var(--lsky-accent);
+    }
 
+    // 右上角小圆勾：悬停与选中都显示；选中时额外染成品牌色（见下面 &.ds-selected）
+    a:hover, a.ds-selected {
         .image-selector {
             display: block;
         }
@@ -568,7 +641,7 @@ html.dark {
 }
 
 // ---------------------------------------------------------------- fork：侧栏高度跟随真实可视视口
-// 手机地址栏可见时 100vh 比「真正看得见的区域」高，侧栏底部（容量使用区）会被推到可视区之外，
+// 手机地址栏可见时 100vh 比「真正看得见的区域」高，侧栏底部（存储用量区）会被推到可视区之外，
 // 地址栏一收起才冒出来（实测「地址栏在的时候不显示」）。
 // 用 dvh 让侧栏高度跟着地址栏收起/展开实时变：同一选择器里 dvh 声明在后 → 后者胜；
 // 不支持 dvh 的旧浏览器整条声明作废、自动退回紧邻的 100vh（= 旧行为）。
@@ -803,5 +876,53 @@ html.sidebar-collapsed .ls-sidebar-arrow-right {
 
     html .ls-sidebar-arrow-right {
         display: inline !important;
+    }
+}
+
+
+// fork: 角色组多选清单（存储策略新建/编辑共用）
+// 原生 <select multiple> 在桌面要按住 Ctrl/⌘ 才好多选、手机上基本选不动 → 改成一列复选框。
+// 组多了不能撑破表单：框给最大高度 + 纵向滚动；overscroll-behavior 防止滚到底把整页带着滚。
+.ls-checklist {
+    margin-top: .25rem;
+    max-height: 13.5rem;
+    padding: .25rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--lsky-border-2);
+    border-radius: .5rem;
+    background-color: var(--lsky-surface);
+    color: var(--lsky-text);
+    font-size: 14px;
+
+    &__item {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        min-height: 2.25rem;
+        padding: .25rem .5rem;
+        border-radius: .375rem;
+        line-height: 1.4;
+        cursor: pointer;
+        -webkit-user-select: none;
+        user-select: none;
+
+        &:hover,
+        &:focus-within {
+            background-color: var(--lsky-surface-2);
+        }
+    }
+
+    &__name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__empty {
+        margin: 0;
+        padding: .5rem;
+        color: var(--lsky-text-3);
     }
 }

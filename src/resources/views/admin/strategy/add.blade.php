@@ -1,4 +1,4 @@
-@section('title', '创建储存策略')
+@section('title', '创建存储策略')
 
 <x-app-layout>
     <div class="my-6 md:my-9">
@@ -9,15 +9,11 @@
                 <div class="overflow-hidden rounded-md">
                     <div class="px-4 py-5 bg-surface sm:p-6 space-y-4 shadow-card">
                         <div class="col-span-6">
-                            <label class="block">
-                                <span class="text-ink">选择角色组</span>
-                                {{-- 多选框默认只有两行高，第二行就看不清 → 显式给足高度 --}}
-                                <x-select name="groups[]" class="block w-full mt-1 min-h-[8rem] form-multiselect" multiple>
-                                    @foreach(\App\Models\Group::query()->get() as $group)
-                                    <option value="{{ $group->id }}">{{ $group->name }}</option>
-                                    @endforeach
-                                </x-select>
-                            </label>
+                            {{-- 原来这里是原生 <select multiple>：桌面要按住 Ctrl/⌘ 才好多选、手机上基本选不动。
+                                 现改成打勾清单（一行一个组，点一下勾上/取消）；组多时框内滚动。
+                                 组件：components/group-checklist.blade.php --}}
+                            <span class="block text-ink">选择角色组</span>
+                            <x-group-checklist />
                         </div>
 
                         <div class="col-span-6">
@@ -31,7 +27,7 @@
                         </div>
 
                         <div class="col-span-6 sm:col-span-3">
-                            <label for="key" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>储存策略</label>
+                            <label for="key" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>存储策略</label>
                             <x-select id="key" name="key" autocomplete="key" required>
                                 @foreach(\App\Models\Strategy::DRIVERS as $key => $driver)
                                 <option value="{{ $key }}" {{ $loop->first ? 'selected' : '' }}>{{ $driver }}</option>
@@ -44,7 +40,7 @@
                                 <label for="configs[url]" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>访问网址</label>
                                 <x-input type="text" name="configs[url]" id="configs[url]" placeholder="请输入图片访问域名，需要加 http(s)://" />
                                 <small class="text-orange-500"><i class="fas fa-exclamation"></i>
-                                    本地储存的访问网址必须有根路径，例如：https://www.lsky.pro/uploads 中的 uploads 就是根路径，且根路径不能和其他策略重复。修改根路径直接影响已经上传并已使用的链接的访问。
+                                    本地存储的访问网址必须有根路径，例如：https://www.lsky.pro/uploads 中的 uploads 就是根路径，且根路径不能和其他策略重复。修改根路径直接影响已经上传并已使用的链接的访问。
                                 </small>
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
@@ -53,9 +49,9 @@
                             </div>
                             <div class="col-span-6">
                                 <div class="col-span-6 sm:col-span-3 mb-4">
-                                    <label for="configs[root]" class="block text-sm font-medium text-ink">储存路径</label>
+                                    <label for="configs[root]" class="block text-sm font-medium text-ink">存储路径</label>
                                     <x-input type="text" name="configs[root]" id="configs[root]" autocomplete="text" placeholder="图片保存位置，默认：{{ config('filesystems.disks.uploads.root') }}" />
-                                    <small class="text-orange-500"><i class="fas fa-exclamation"></i> 储存路径为绝对路径，设置错误或没有读写权限可能会导致图片保存失败。如果储存路径与其他策略相同，那么请注意使用角色组的路径命名规则、文件命名规则来区分不同文件夹，否则可能会因为名称重复而导致图片物理文件被覆盖。</small>
+                                    <small class="text-orange-500"><i class="fas fa-exclamation"></i> 存储路径为绝对路径，设置错误或没有读写权限可能会导致图片保存失败。如果存储路径与其他策略相同，那么请注意使用角色组的路径命名规则、文件命名规则来区分不同文件夹，否则可能会因为名称重复而导致图片物理文件被覆盖。</small>
                                 </div>
                             </div>
                         </div>
@@ -86,8 +82,8 @@
                                 <x-input type="text" name="configs[region]" id="configs[region]" placeholder="请输入区域，例如：us-east-1" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
-                                <label for="configs[bucket]" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>储存桶名称</label>
-                                <x-input type="text" name="configs[bucket]" id="configs[bucket]" placeholder="请输入储存桶名称" />
+                                <label for="configs[bucket]" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>存储桶名称</label>
+                                <x-input type="text" name="configs[bucket]" id="configs[bucket]" placeholder="请输入存储桶名称" />
                             </div>
                         </div>
 
@@ -144,9 +140,9 @@
                                 <x-input type="text" name="configs[region]" id="configs[region]" placeholder="请输入所属地域，例如：ap-chengdu" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
-                                <label for="configs[bucket]" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>储存桶名称</label>
-                                <x-input type="text" name="configs[bucket]" id="configs[bucket]" placeholder="请输入储存桶名称" />
-                                <small class="text-ink-2"><i class="fas fa-exclamation-circle"></i> 腾讯云储存桶名称由 名称+appid 组合，例如：test-125146xxxx，此处应该填写 test</small>
+                                <label for="configs[bucket]" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>存储桶名称</label>
+                                <x-input type="text" name="configs[bucket]" id="configs[bucket]" placeholder="请输入存储桶名称" />
+                                <small class="text-ink-2"><i class="fas fa-exclamation-circle"></i> 腾讯云存储桶名称由 名称+appid 组合，例如：test-125146xxxx，此处应该填写 test</small>
                             </div>
                         </div>
 
@@ -242,7 +238,7 @@
                         <div class="col-span-6 mb-4 hidden" data-driver="{{ \App\Enums\StrategyKey::Ftp }}">
                             @if(! extension_loaded('ftp'))
                                 <p class="bg-yellow-500 p-2 mb-4 rounded text-sm text-white">
-                                    <i class="fas fa-exclamation-circle"></i> 系统检测到 ftp 拓展未启用，可能无法正常使用 FTP 储存方式。
+                                    <i class="fas fa-exclamation-circle"></i> 系统检测到 ftp 拓展未启用，可能无法正常使用 FTP 存储方式。
                                 </p>
                             @endif
                             <div class="col-span-3 sm:col-span-2 mb-4">

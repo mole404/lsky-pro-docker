@@ -279,6 +279,17 @@ else
     echo "[lsky] Apache MPM 未写入（原因见上一行警告），原计划生效值：$mpm_summary"
 fi
 
+# 把最终生效的 MaxRequestWorkers 落成 world-readable 标记供应用侧读：
+# /etc/apache2/conf-enabled/mpm.conf 是 root 600，www-data 读不了（Permission denied 实测），
+# 而用户端批量导出要拿这个数算「全局同时能跑几个导出」（默认取一半，留一半给正常请求）。
+# 写不进去只是少了一条自动取值路径，应用会退回自己的保守默认值，不影响导出本身。
+# 放 /tmp 是因为它在容器里天然可写、不占卷、容器重建即消失（符合「用完就扔」）。
+if printf '%s\n' "$MPM_MAX_REQUEST_WORKERS" > /tmp/lsky-mpm-workers 2>/dev/null; then
+    chmod 644 /tmp/lsky-mpm-workers 2>/dev/null || true
+else
+    echo "[lsky] 警告：写不了 /tmp/lsky-mpm-workers，批量导出的并发上限将退回默认值" >&2
+fi
+
 # ---------------------------------------------------------------- PHP memory_limit（可运行时覆盖，默认 64M）
 # 现状（先量后改）：PHP 编译期默认 128M，但镜像里 docker-php-upload.ini 只设上传项、
 # （上游）memory-limit.ini 设的是 512M —— 生效值是 512M。本段把收紧后的 memory_limit 收进

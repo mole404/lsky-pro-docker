@@ -71,7 +71,7 @@
                 </x-nav-link>
                 <x-nav-link :href="route('admin.strategies')" :active="request()->is('admin/strategies*')">
                     <x-slot name="icon"><i class="fas fa-hdd fa-fw"></i></x-slot>
-                    <x-slot name="name">储存策略</x-slot>
+                    <x-slot name="name">存储策略</x-slot>
                 </x-nav-link>
                 <x-nav-link :href="route('admin.settings')" :active="request()->is('admin/settings*')">
                     <x-slot name="icon"><i class="fas fa-cogs fa-fw"></i></x-slot>
@@ -96,32 +96,28 @@
              窗口更高时（内容放得下）flex 的 justify-between 会把这块吸到容器底部，
              所以高窗口（≥864 实测余量 61.6px）观感与改动前逐像素一致 —— 只有「会溢出」的窗口才整体上移。
              手机档（<768px）保持 mt-10 原样（要求手机端零变化）。--}}
-        <div id="capacity-progress" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10 ls-zoom-mt-0">
-            <p class="text-ink-2 text-[13.5px]">容量使用</p>
-            <progress class="w-full h-1.5" value="{{ Auth::user()->use_capacity }}" max="{{ Auth::user()->capacity }}"></progress>
+        @php
+            // 与仪表盘同一套统计（同一次请求里只真正查一次库）；这里同样替掉 use_capacity 的重复聚合
+            $storage = \App\Support\StorageUsage::forUser(Auth::user());
+            $capacityKb = (int) Auth::user()->capacity;
+            $usedPercent = $capacityKb > 0
+                ? min(100, round($storage['total'] / $capacityKb * 100, 1))
+                : 0;
+        @endphp
+        {{-- data-* 是给 utils.setCapacityProgress 的真值基准（上传/删图后它据此重算数字与分段宽度）。
+                少了它们，那个函数读不到基准（老形状的 <progress> 已经不在模板里了）⇒ 上传后「已用」
+                只会按本次增量显示（旧版本上真显示过 NaN undefined）--}}
+        <div id="capacity-progress" data-used-kb="{{ $storage['total'] }}" data-capacity-kb="{{ $capacityKb }}" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10 ls-zoom-mt-0">
+            <p class="text-ink-2 text-[13.5px]">存储用量</p>
+            {{-- 只有进度条变了：按存储策略分段 + 悬浮看各策略占用；文字一行不动 --}}
+            {{-- 粗细与仪表盘统一（ls-segbar--thick = 8px）：走组件默认档 h-1.5（6px）时实测偏细 --}}
+            <x-storage-segments :segments="$storage['segments']" :used-percent="$usedPercent" bar-class="ls-segbar--thick" />
             <p class="text-ink-3 text-[13.5px] truncate">
-                <span class="used">{{ \App\Utils::formatSize(Auth::user()->use_capacity * 1024) }}</span>
+                <span class="used">{{ \App\Utils::formatSize($storage['total'] * 1024) }}</span>
                 /
-                <span class="total">{{ \App\Utils::formatSize(Auth::user()->capacity * 1024) }}</span>
+                <span class="total">{{ \App\Utils::formatSize($capacityKb * 1024) }}</span>
             </p>
         </div>
     </div>
 </nav>
 
-@push('scripts')
-    <script>
-        let $progress = $('#capacity-progress progress');
-        let value = $progress.attr('value') / $progress.attr('max') * 100;
-        let str = 'green';
-        if (value > 90) {
-            str = 'red';
-        } else if (value > 70) {
-            str = 'orange';
-        } else if (value > 60) {
-            str = 'yellow';
-        } else if (value > 40) {
-            str = 'yellowgreen';
-        }
-        $progress.addClass(str)
-    </script>
-@endpush

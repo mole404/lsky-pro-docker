@@ -33,8 +33,11 @@ on:
     #    src/**、Dockerfile、.dockerignore、*.template、entrypoint.sh、
     #    .github/workflows/**、test/**（构建前跑 jsdom 行为测试）、tools/**（升级自证）、
     #    osv-scanner.toml（依赖门禁白名单）、patches/**（偏差清单，自证引用）。
+    # 只写根目录一级（'*.md' 只匹配顶层）：原来写的 '**.md' 会连 src/ 下的 md 一起命中，
+    # 而 src/README.md 是真的会进镜像的（.dockerignore 的 *.md 只管构建上下文根目录）——
+    # 那种提交会一个镜像都不产出，:sha-<commit> 断档，promote/回滚都依赖它。
     paths-ignore:
-      - '**.md'
+      - '*.md'
       - 'LICENSE'
       - '.gitignore'
   # 只用于「试构建」：临时换 PHP 版本验证兼容性，不改仓库里的默认值。
@@ -305,6 +308,23 @@ jobs:
           npm ci --no-audit --no-fund
           npm test
 
+      # 导出用的流式 zip writer（src/app/Support/StreamedZipWriter.php）是自实现的 —— 运行镜像里
+      # 没有 ext-zip，所以它是零依赖的纯 PHP，自带的测试脚本能在官方 php:8.3-cli 镜像里直接跑。
+      # 放构建之前：这个文件被谁改坏了就该早点红，不用白等十几分钟构建。
+      # 镜像指纹与 Dockerfile 里 PHP_CLI_IMAGE_DIGEST 保持一致（同一个 tag，不引入浮动引用）。
+      - name: Export backend tests (streamed zip + concurrency)
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/w" -w /w \
+            php:8.3-cli-bookworm@sha256:4687aec76c4a895b68b91bcd5e48f1ba7a3dea120f6de50bba7e1a93af5372dd \
+            bash -c 'set -euo pipefail; { cat src/app/Support/StreamedZipWriter.php; tail -n +2 test/php/zip-writer.test.php; } | php /dev/stdin'
+          # 并发占位表（同一账号互斥 / 全局上限 / 心跳过期自愈 / 缓存坏掉时降级）——
+          # 这个类原先完全没有自动覆盖，而它管着「同账号两笔导出并行」这种用户可见行为。
+          # 桩必须排在类源码之前（类里用的是 Illuminate\Support\Facades\Cache 那套门面）。
+          docker run --rm -v "$PWD:/w" -w /w \
+            php:8.3-cli-bookworm@sha256:4687aec76c4a895b68b91bcd5e48f1ba7a3dea120f6de50bba7e1a93af5372dd \
+            bash -c 'set -euo pipefail; { cat test/php/export-concurrency.stubs.php; tail -n +2 src/app/Support/ExportConcurrency.php; tail -n +2 test/php/export-concurrency.test.php; } | php /dev/stdin'
+
       # 说明（本次「Node 20 弃用」清扫的覆盖面）：下面 docker/* 系列与上面的 actions/checkout
       # 都核对过 —— 它们钉的 commit SHA 就是各自**最新 release** 指向的 commit，且 action.yml 里
       # 是 runs.using: node24，不会再触发 Node.js 20 弃用警告，故保持不变（不为动而动）。
@@ -341,8 +361,10 @@ jobs:
           # 非试构建 = 只有 FORK_SHA / PHP_VERSION（digest 走 Dockerfile 默认 ARG）；
           # 试构建   = 再追加 PHP_CLI_IMAGE_DIGEST / PHP_APACHE_IMAGE_DIGEST 两个覆盖项。
           build-args: ${{ steps.pin.outputs.build_args }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # scope 必须带上 ref：不设 scope 时 master 与其它分支的构建共用同一个 GHA 缓存条目，
+          # 两个 ref 的 buildkit exporter 并发写同一 scope 会互相踩（缓存抖动/导出偶发失败）。
+          cache-from: type=gha,scope=${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
 
       # ------------------------------------------------------------------
       # 自证：不只看「构建成功」，而是把推上去的镜像拉回来实测

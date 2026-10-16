@@ -18,6 +18,7 @@ use App\Http\Middleware\CheckIsInstalled;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\User\ImageController;
+use App\Http\Controllers\User\ExportController;
 use App\Http\Controllers\User\AlbumController;
 use App\Http\Controllers\Common\ApiController;
 
@@ -43,6 +44,12 @@ Route::group(['middleware' => ['auth']], function () {
         Route::get('', [UserController::class, 'settings'])->name('settings');
         Route::put('', [UserController::class, 'update'])->name('settings.update');
         Route::put('set-strategy', [UserController::class, 'setStrategy'])->name('settings.strategy.set');
+        // 批量导出：preview 只查库报体积；export 是流式下载（只看自己账号的图）；result 读本人最近一次结果
+        Route::get('export/preview', [ExportController::class, 'preview'])->name('settings.export.preview');
+        Route::get('export/result', [ExportController::class, 'result'])->name('settings.export.result');
+        Route::get('export', [ExportController::class, 'export'])->name('settings.export');
+        // 取消导出：置服务端旗标，流式循环在下一张图的边界停下（原生下载没法在客户端掐断）
+        Route::post('export/cancel', [ExportController::class, 'cancel'])->name('settings.export.cancel');
     });
 
     Route::group([

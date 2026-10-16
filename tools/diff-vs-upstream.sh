@@ -41,8 +41,8 @@ src/resources/js/context-js.js
 src/public/js/context-js/context-js.js
 #   src/resources/views/user/images.blade.php
 src/resources/views/user/images.blade.php
-#   #   （两份 JS 内容必须逐字节一致；blade 只改了引入脚本那一行的资源版本串。完整 diff：patches/ios-longpress.patch）
-#   （两份 JS 内容必须逐字节一致；blade 只改了引入脚本那一行的资源版本串。完整 diff：patches/ios-longpress.patch）
+#   （两份 JS 内容必须逐字节一致；blade 除引入脚本那一行的资源版本串外，还承载标签/裁剪/导出等界面改动。
+#     完整 diff：patches/ios-longpress.patch）
 
 # [2 功能移除：画廊（Gallery）与系统升级；登录态访问首页改跳「我的图片」]
 #   src/app/Enums/ConfigKey.php
@@ -301,6 +301,30 @@ src/app/Http/Controllers/Admin/UserController.php
 #   src/lang/zh_CN.json（__('Name') 全站只有注册页 auth/register.blade.php 用这一处，改它不影响别处；
 #     个人资料页那行「姓名」是硬编码，改在 src/resources/views/user/dashboard.blade.php 里 —— 该文件本就在 [5] 段内）
 src/lang/zh_CN.json
+
+# [12 文案：全仓「储存」用词统一为「存储」（纯文案，无行为变化；commit 59efc62）]
+#   src/README.md
+#       （上游 README 的 TODO 列表里「云储存」「储存策略」→「云存储」「存储策略」）
+src/README.md
+#   src/app/Enums/Strategy/CosOption.php
+#   src/app/Enums/Strategy/OssOption.php
+#       （Bucket 常量上方注释「储存桶名称」→「存储桶名称」）
+src/app/Enums/Strategy/CosOption.php
+src/app/Enums/Strategy/OssOption.php
+#   src/app/Http/Requests/Admin/StrategyRequest.php
+#       （本地策略的校验收尾消息「储存路径不存在 / 储存路径没有写入权限」，以及 S3/COS 的 bucket 字段名）
+src/app/Http/Requests/Admin/StrategyRequest.php
+#   src/resources/views/admin/group/tips.blade.php
+#       （「如果你使用第三方储存…」那条黄色提示里的两处）
+src/resources/views/admin/group/tips.blade.php
+
+# [13 仪表盘 / 用户设置页：存储用量改成一次分组聚合 + 给「批量导出」卡片补只读计数
+#     （dashboard() 改用 App\Support\StorageUsage —— 视图里原来访问 4 次 User::useCapacity
+#      访问器（images 表 SUM(size)），现在一次 GROUP BY strategy_id 同时给出总量与分段，数值同旧值；
+#      settings() 另外给出未分类张数、每策略 / 每标签 / 每上传日的张数（键 Y-m-d，pgsql 走 to_char）。
+#      StorageUsage 本身是 fork 新增文件 ⇒ 属于「只在 src 存在」，不进本清单）]
+#   src/app/Http/Controllers/User/UserController.php
+src/app/Http/Controllers/User/UserController.php
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单
@@ -323,7 +347,13 @@ diff -rq --exclude=.git --exclude=node_modules --exclude=vendor --exclude=storag
 # 分类：内容不同 / 只在 src（我们新增）/ 只在上游（我们删了）
 DIFFERS=$(grep -oE '^Files .* and src/.* differ$' "$TMP/raw.txt" | sed -E 's#^Files .* and (src/.*) differ$#\1#' | sort || true)
 ONLY_SRC=$(grep -oE "^Only in src.*: .*$" "$TMP/raw.txt" | sed -E 's#^Only in (src[^:]*): (.*)$#\1/\2#' | sed 's#^\./##' | sort || true)
-ONLY_UP=$(grep -oE "^Only in .*lsky-pro.*: .*$" "$TMP/raw.txt" | grep -v 'Only in src' | sed -E 's#^Only in [^:]*: (.*)$#\1#' | sort || true)
+# ⚠ 上游侧这一行的路径锚点必须是 $TMP/up —— 快照目录名里**没有**仓库名（旧版写成 `.*lsky-pro.*`
+#    ⇒ 恒不匹配，这条清单永远打不出东西，被吞掉的正是我们删掉的那 5 个上游文件）。
+#    改锚点时注意 $TMP 是 `mktemp -d` 出来的路径（可能含 `.` 这类正则元字符，只会多匹配不会漏匹配）。
+UP_DIR="${TMP}/up"
+ONLY_UP=$(grep -oE "^Only in ${UP_DIR}[^:]*: .*$" "$TMP/raw.txt" \
+    | sed -E "s#^Only in ${UP_DIR}/?([^:]*): (.*)\$#\1/\2#" \
+    | sed -E 's#^/##' | sort || true)
 
 # 空字符串要变成「零行」（不能变成一行空行，否则 comm 会误判）
 lines() { [ -n "${1:-}" ] && printf '%s\n' "$1" || true; }
@@ -361,4 +391,5 @@ if [ -n "$STALE" ]; then
     printf '%s\n' "$STALE" | sed 's/^/     /'
 fi
 echo
-echo "提示：把上面的 diff 存进 patches/ios-longpress.patch 即可（patch 文件只是「给上下级看」的存档，不参与构建）。"
+echo "提示：本脚本只打印「全树」diff，不直接产出 patches/ios-longpress.patch —— 那份存档只收长按菜单相关的"
+echo "      几个文件，重生成步骤见 patches/README.md（用的就是上面同样的 diff -u，逐文件回放可验证）。"

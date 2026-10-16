@@ -48,11 +48,14 @@ node repro-clickthrough.mjs /path/to/context-js.js     # 最小复现：滚动�
 | 文件 | 钉住什么 |
 | --- | --- |
 | `images-modal.test.mjs` | 图片页三个弹窗的静态契约：钩子齐全、抽屉残留物为零、字段顺序、请求 payload、设计令牌 |
-| `images-modal-dom.test.mjs` | 同上的行为面：把 blade 里三段内联脚本在 jsdom + 真实 jQuery 里跑起来（移动 / 详情 / 相册列表） |
+| `images-modal-dom.test.mjs` | 同上的行为面：把 blade 里三段内联脚本在 jsdom + 真实 jQuery 里跑起来（移动 / 详情 / 相册列表 / 操作条分发——空选中时「刷新」仍生效、其余操作仍被守卫挡住） |
 | `swal-theme.test.mjs` | 样式层：哨兵隐藏、footer 横线、sweetalert2 皮肤有没有真的压过它运行时注入的默认样式 |
 | `infinite-scroll-bottom-mobile.test.mjs` | 手机整页滚到底第一次就要自动加载（地址栏收起前后的视口高度差） |
 | `infinite-scroll-destroy.test.mjs` | `infiniteScroll.destroy()` 谁注册谁解绑（别顺手摘掉图片墙挂在 window 上的监听） |
 | `infinite-scroll-click-delegate.test.mjs` | 哨兵 click 委托判据收窄 + 事件命名空间 |
+| `image-selection-ring.test.mjs` | 图片墙那圈蓝框**只在被勾选时**出现：编译产物与 LESS 源码都只认 `ds-selected`、任何 `:hover` 染色都不许存在、悬停的小圆勾与选中染色原样、模板保留透明 outline（上色不重排） |
+| `menu-guard.test.mjs` | 「菜单开着时点菜单外只关菜单、不触发别的」的两个守卫（仅图片页）：盾牌与 touch 时间窗已撤除、click 守卫是捕获阶段且面板内放行、关菜单走 Alpine 状态、一段 touch 事件都不碰、两族菜单同时开着的行为 |
+| `ui-tweaks.test.mjs` | 一批 UI / 文案契约：单位大小写、顶栏收拢、外观切换共用下拉、用量条 8px、**各策略占用百分比已下线（图例与气泡都不留，只保留仪表盘右上角的总占比）与「存储用量」用词** |
 | `sidebar.test.mjs` | 侧栏折叠三契约（首屏贴类、切换写 localStorage、<640px 只开关抽屉） |
 
 只跑某一个：`node <文件名>`。

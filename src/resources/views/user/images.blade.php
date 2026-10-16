@@ -208,6 +208,63 @@
         html.ls-viewer-fs:not(.ls-fs-ui) .viewer-button {
             pointer-events: none;
         }
+        /* 全屏里把右上角关闭键整体放大 —— 手机屏幕的**物理圆角**（实测约 7 CSS px，对应 1080p@3x 上
+           二十来个物理 px）会啃掉那个四分之一圆最靠角的一小块。库那套几何（80×80、圆心正压在屏幕角上、
+           图标 inset 15px）里 × 的白色尖端离角只有 9.3px ⇒ 会被切到一点；而可见区只有 40×40，
+           图标靠里最多挪 3px，再挪 × 的外角就会戳出黑圆、露在照片上。
+           于是分两步：先（100×100 / inset 20）把尖端挪到 13.5px —— 切不到了，但"刚够用"；
+           再放大一档到 120×120（可见四分之一圆半径 60px）；其后分两次收小：按钮 108×108（半径 54px）、
+           再到现在的 96×96（半径 48px）+ 图标 inset 17px —— × 字形 18px 与其距边位置一字未动
+           ⇒ × 靠角的最近点仍距右边/上边 11px（与 120 那版一致，物理圆角同样切不到），只有黑盘逐次收小。
+           约束：图标盒外角必须落在那圈黑底里 —— 盒外角离角 9×√2 ≈ 12.7 ≤ 48 ✓；× 外角 29×√2 ≈ 41 ≤ 48 ✓。
+           非全屏（库原样 80px/inset 15）不动：那边浏览器自带边距，且收起态那三条 opacity/pointer-events
+           规则与此无关 —— 本块只改尺寸与位置，不碰 position/border-radius（那个圆是库画的）。 */
+        html.ls-viewer-fs .viewer-button {
+            width: 96px;
+            height: 96px;
+            right: -48px;
+            top: -48px;
+        }
+        html.ls-viewer-fs .viewer-button:before {
+            bottom: 17px;
+            left: 17px;
+        }
+        /* × 随盘子等比放大（全屏这一档：字形 16→18px；盒子 20→22、盒内偏移仍 2px ⇒ 盒与字形同心）。
+           ⚠ 必须挂上第二个类把特异性提到 (0,3,1)：下面那批共享图标规则
+           `html .viewer-button[data-viewer-action="mix"]:before` 是 (0,2,1)，与
+           `html.ls-viewer-fs .viewer-button:before` **相等**，而共享规则在文件里更靠后 ⇒
+           靠顺序压不住，必须靠特异性。只在全屏放大：非全屏（库原样 80px 盒 / inset 15px）里
+           盒子一放大，× 就会贴到视口角只剩 ~5px。 */
+        html.ls-viewer-fs .viewer-button.viewer-close:before,
+        html.ls-viewer-fs .viewer-button[data-viewer-action="mix"]:before {
+            width: 22px;
+            height: 22px;
+            background-position: 2px 2px;
+            background-size: 18px 18px;
+        }
+
+        /* 非全屏（只是看图器开着）也把**整套 UI** 自动收起来 —— 与全屏同一套节奏（2.5s 无操作即隐、
+           一动鼠标/一触碰就现、指针停在 UI 上只续期），只是门从「全屏中」换成「看图器开着」。
+           收的是与全屏一模一样的四块：工具栏、缩略图条、文件名行、右上角关闭键。
+           为什么用 opacity 而不是 display:none：盒子仍在布局里 ⇒ 画布尺寸不变 ⇒ 已经顶屏的
+           图不会因为「UI 收起」而重算、也就不会抖一下（库的 initImage 会把 footer.offsetHeight 从可用高里扣掉）。
+           ★ 收起时必须把指针也关掉（pointer-events:none）：否则看不见的缩略图仍然接得住点击 ⇒
+           一按就切图，用户体感是"点到了隐形的条子"。关掉之后落在这些区域的点击由捕获阶段守卫接住
+           （见「收起状态下第一下点击」那段）：唤出 UI 并吞掉这一下，不切图也不退出。
+           ★ 选择器里排除 .ls-viewer-fs：全屏那三条规则写在前面，这里不去碰它们（不然会抢成可见）。 */
+        html.ls-viewer-open:not(.ls-viewer-fs) .viewer-toolbar,
+        html.ls-viewer-open:not(.ls-viewer-fs) .viewer-navbar,
+        html.ls-viewer-open:not(.ls-viewer-fs) .viewer-title,
+        html.ls-viewer-open:not(.ls-viewer-fs) .viewer-button {
+            transition: opacity .25s ease, visibility .25s ease;
+        }
+        html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-toolbar,
+        html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-navbar,
+        html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-title,
+        html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-button {
+            opacity: 0;
+            pointer-events: none;
+        }
 
         /* 看图器工具栏的「裁剪」按钮图标。
            库的图标是一张 280px 宽的雪碧图，而且只给 14 个内置键分别写了规则
@@ -220,10 +277,10 @@
             width: 20px;
             height: 20px;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E");
-            /* 图形比盒子小一圈（14px 配 3px 居中偏移）；盒子仍 20×20、按钮仍 24×24 ⇒ 热区不变。 */
-            background-position: 3px 3px;
+            /* 字形 16px 配 2px 居中偏移（与库那批图标统一）；盒子仍 20×20、按钮仍 24×24 ⇒ 热区不变。 */
+            background-position: 2px 2px;
             background-repeat: no-repeat;
-            background-size: 14px 14px;
+            background-size: 16px 16px;
         }
 
         /* 看图器工具栏的「全屏」按钮图标。库 1.10.4 的工具栏里**没有**"只全屏"的键
@@ -235,14 +292,168 @@
             width: 20px;
             height: 20px;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3H5a2 2 0 0 0-2 2v3'/%3E%3Cpath d='M16 3h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M21 16v3a2 2 0 0 1-2 2h-3'/%3E%3Cpath d='M3 16v3a2 2 0 0 0 2 2h3'/%3E%3C/svg%3E");
-            background-position: 3px 3px;
+            background-position: 2px 2px;
             background-repeat: no-repeat;
-            background-size: 14px 14px;
+            background-size: 16px 16px;
         }
         html .viewer-toolbar > ul > li.viewer-fullscreen.is-fs:before {
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v3a2 2 0 0 1-2 2H3'/%3E%3Cpath d='M21 8h-3a2 2 0 0 1-2-2V3'/%3E%3Cpath d='M3 16h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M16 21v-3a2 2 0 0 1 2-2h3'/%3E%3C/svg%3E");
         }
-    </style>
+
+        /* 工具栏图标：库那 14 个内置键的图标是 viewer.min.css 里内嵌的一张 **280×20 的 1x 位图雪碧图**
+           （每格 20×20，用 background-position:-0/-20/… 切格），高分屏（手机 2x/3x）放大后发糊。
+           这里把其中 12 个键换成与 crop / fullscreen 同款的内联 SVG：24×24 viewBox、无填充、
+           2.5 描边、圆头圆角 —— 矢量图标无论屏幕密度都锐利，且 data URI 内联、不增加请求。
+           盒子：库的 li 是 24×24、:before 有 margin:2px ⇒ :before 盒正好 20×20 居中；字形统一 16px
+           （background-position:2px 2px + background-size:16px 16px），li 仍 24×24 ⇒ 热区不变，
+           只是图标更大更锐。hover 时库只把圆底加深（rgba(0,0,0,.8)）、不做黑白反转 ⇒ 图标保持白色描边。
+
+           「关闭 ×」为什么要写两条选择器：viewer 1.10.4 的关闭按钮 DOM 是
+           <div class="viewer-button" data-viewer-action="mix">，源码里**根本没有** viewer-close 这个类
+           （fork 与上游 npm 包的 viewer.min.js / viewer.js 都确认过）⇒ 库 CSS 里的 .viewer-close:before
+           是永远命不中的死规则，那个圆底此前一直没有图标。所以两条都写着：今天靠
+           [data-viewer-action="mix"] 出图，以后谁给按钮补上 viewer-close 也能接住。两条都只声明
+           content / 盒子 / 背景，库的 .viewer-button:before{bottom:15px;left:15px;position:absolute}
+           原封不动保留 ⇒ × 仍落在右上角那个四分之一圆里。 */
+        html .viewer-toolbar > ul > li.viewer-zoom-in:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5v17'/%3E%3Cpath d='M3.5 12h17'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-zoom-out:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 12h17'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-one-to-one:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.1 7.85L7.2 4.75v14.5'/%3E%3Cpath d='M15.8 7.85L18.9 4.75v14.5'/%3E%3Cpath d='M11.5 8.95v0.5'/%3E%3Cpath d='M11.5 14.55v0.5'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-reset:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18.58 8.58A7.6 7.6 0 1 1 12 4.78'/%3E%3Cpath d='M9.4 6.28L12 4.78L9.4 3.28'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-prev:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.8 4.2L7 12L14.8 19.8'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        /* 播放三角：之前只做到「墨迹盒居中」(偏心 -0.07px)，但三角形指向右、**面积重心偏左 1.80 单位**
+           (=16px 实显 1.2px) ⇒ 眼睛看着偏左。按 Material Icons `play_arrow` 的口径（它的墨迹盒中心在
+           (13.5,12)、面积重心 (11.67,12) ≈ 正中）把重心摆正中：整组右移 1.8 单位。 */
+        html .viewer-toolbar > ul > li.viewer-play:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.58 4.6L17.78 12L7.58 19.4Z'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-next:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.2 4.2L17 12L9.2 19.8'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        /* 左右旋转：220° 的弧墨迹盒中心本来偏右 1.25 单位（圆心虽在 (12,12)，但弧只占 220°、
+           缺口在左下），箭头又把墨迹往上顶 1.22 ⇒ 实测墨迹盒中心 (13.25, 10.78)，即偏右 0.83px、偏上 0.82px
+           (16px 实显)。整组平移 (-1.25, +1.22) 后墨迹盒中心精确落在 (12,12)；右旋转取其镜像。 */
+        html .viewer-toolbar > ul > li.viewer-rotate-left:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.25 18.59A7 7 0 1 0 10.75 6.23'/%3E%3Cpath d='M15.75 8.68L10.75 6.23L15.75 3.78'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-rotate-right:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.75 18.59A7 7 0 1 1 13.25 6.23'/%3E%3Cpath d='M8.25 8.68L13.25 6.23L8.25 3.78'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-flip-horizontal:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 12h17'/%3E%3Cpath d='M7.2 8.6L3.5 12L7.2 15.4'/%3E%3Cpath d='M16.8 8.6L20.5 12L16.8 15.4'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-flip-vertical:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5v17'/%3E%3Cpath d='M8.6 7.2L12 3.5L15.4 7.2'/%3E%3Cpath d='M8.6 16.8L12 20.5L15.4 16.8'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-button.viewer-close:before,
+        html .viewer-button[data-viewer-action="mix"]:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 3.5L20.5 20.5'/%3E%3Cpath d='M20.5 3.5L3.5 20.5'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+</style>
 @endpush
 
 <x-app-layout>
@@ -264,9 +475,9 @@
             </div>
             {{-- 与上排互斥：<xl 才收起成一格「⋯」菜单 --}}
             <div class="block xl:hidden">
-                <x-dropdown direction="right">
+                <x-dropdown direction="right" labelledby="images-menu-button">
                     <x-slot name="trigger">
-                        <a class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)"><i class="fas fa-ellipsis-h text-brand"></i></a>
+                        <a id="images-menu-button" class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)"><i class="fas fa-ellipsis-h text-brand"></i></a>
                     </x-slot>
 
                     <x-slot name="content">
@@ -285,7 +496,7 @@
         </div>
         <div class="flex space-x-2 items-center">
             <input type="text" id="search" class="px-2.5 py-1.5 border-0 outline-none rounded bg-surface-3 text-sm transition-all duration-300 hidden md:block md:w-36 md:hover:w-52 md:focus:w-52" placeholder="输入关键字搜索...">
-            <x-dropdown direction="left">
+            <x-dropdown direction="left" labelledby="order">
                 <x-slot name="trigger">
                     <a id="order" class="text-sm py-2 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
                         <span>最新</span>
@@ -310,7 +521,7 @@
                  标签按用户隔离，列表来自 GET user/tags，由 JS（loadTags → renderTagFilter）
                  渲染进 #tag-filter-list；勾选任意一项立刻 resetImages({page:1, tags:[...]})。
                  多选项沿用本页约定 min-h-[44px]，手机上点得中。--}}
-            <x-dropdown direction="left">
+            <x-dropdown direction="left" labelledby="tag-filter">
                 <x-slot name="trigger">
                     {{-- 图标与文字改成 flex 居中对齐：原来纯 inline 时图标盒 14px、文字盒 16px 靠基线
                          对齐，实测图标中心比文字中心高 0.3px、底部高 1.6px（看着往上飘）。
@@ -821,7 +1032,7 @@
                 // 所以这里把库里那 11 个内置按钮按原顺序照抄一遍（`true` 与原默认行为等价），
                 // 末尾追加「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
                 toolbar: {
-                    // 放最左（库按这里的键顺序渲染）。
+                    // 最左「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
                     crop: { show: true, click: () => cropEditor.openFromViewer() },
                     // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()。
                     // 按能力探测决定要不要渲染这个键：不支持元素全屏的浏览器（iPhone Safari）
@@ -829,6 +1040,8 @@
                     ...(canViewerFullscreen()
                         ? { fullscreen: { show: true, click: () => toggleViewerFullscreen() } }
                         : {}),
+                    // 「1:1」：库内置键，位置与改动前一致（全屏之后、重置之前）。
+                    // 顶屏仍是图片的初始态、重置按钮也回顶屏；1:1 是明确看 100% 那个动作。
                     'one-to-one': true,
                     reset: true,
                     prev: true,
@@ -889,6 +1102,109 @@
                 };
             })();
 
+            /* ── 看图器「顶屏」：**图片的初始状态**（全屏与非全屏统一）──────────────────
+             * 语义：等比缩放到「先够得着的那一对边正好贴住画布」，另一对边留空 —— 不溢出、不裁切、不变形。
+             * 库自带的初始适配是 min(0.9 × 可用区, 原图)（见 viewer.min.js initImage）⇒ 四周留一圈；
+             * 顶屏去掉那个 0.9、也不夹"不超过原始像素"（小图会被放大，糊是必然代价），而且它就是「重置」的落点：
+             * 库的 reset() 是把 imageData 整体换成 initialImageData 快照 ⇒ 顶屏几何要同时镜像进那份快照。
+             *
+             * 落地方式：不改库文件，在库里 renderImage() 真正渲染**之前**改写 imageData 里的尺寸与位置
+             *   ⇒ 库自己那一次过渡（切图时新图从画布中心生长，起点由 load() 写成 0×0 + 居中）直接长到顶屏尺寸，
+             *     不会出现"先长到 90% 再补一下"的第二段。首次打开、切图、窗口 resize、进出全屏都走这一条路。
+             *
+             * 位置口径：库用 marginLeft/marginTop 相对 .viewer-canvas 的内容盒摆放图片，所以 canvas.clientWidth/
+             *   clientHeight 与 imageData 里的数值是同一坐标系 —— 比例与居中都能直接算，不需要量渲染矩形
+             *   （桌面端 html{zoom:1.1} + .viewer-container{zoom:.90909} 那套补偿也因此绕过了）。
+             *
+             * 旋转：imageData.width/height 是**未旋转**的盒子，视觉占位在 90°/270° 时宽高互换，算比例要按占位算。
+             */
+            let fsFitMode = false;                  // 「看图器处于浏览器全屏」期间为 true（只给全屏那条兜底用）
+            let fitRenderSeq = 0;                   // 库每次调 renderImage 自增，用于判断全屏后有没有发生过重排
+            /* 把 imageData 改成顶屏尺寸；返回是否真的改了（已经顶屏 / 尺寸算不出来时返回 false） */
+            const applyFitEdgeToImageData = () => {
+                const d = viewer.imageData;
+                const canvas = viewer.canvas;
+                if (! d || ! canvas || ! d.naturalWidth || ! d.naturalHeight) { return false; }
+                const cw = canvas.clientWidth;
+                const ch = canvas.clientHeight;
+                if (! (cw > 0 && ch > 0)) { return false; }
+                const vw = (viewer.viewerData && viewer.viewerData.width) || cw;
+                const vh = (viewer.viewerData && viewer.viewerData.height) || ch;
+                /* 算一份顶屏几何。rot90 决定"按旋转后的视觉占位算比例"还是"按未旋转的盒子算"：
+                 *   imageData 用前者（当前旋转下要顶住屏幕）；initialImageData 用后者 ——
+                 *   库的快照里 rotate 恒为 0（initImage 写死），重置后是按未旋转渲染的。 */
+                const fitFor = (rot90) => {
+                    const footW = rot90 ? d.naturalHeight : d.naturalWidth;    // 视觉占位宽
+                    const footH = rot90 ? d.naturalWidth : d.naturalHeight;    // 视觉占位高
+                    let r = Math.min(cw / footW, ch / footH);
+                    if (! isFinite(r) || r <= 0) { return null; }
+                    r = Math.min(r, 100);                                      // 与库 maxZoomRatio 一致
+                    /* ★ 上限夹紧（只乘一个系数 k，保住等比）：
+                     * 贴边那一维必须 <= viewerData 的对应值 —— 页面那句「完整装下」判据（isFit）与库的
+                     * isSwitchable 都是精确比较，而 natH*(ch/natH) 会算出 695.0000000000001 这种值
+                     * ⇒ 不夹的话那一类图会被判成"放大态"：滑动只回弹、切不了图。
+                     * 旋转 90°/270° 时「盒子宽」对应的是视觉高，上限要跟着换一维 —— 而且两维必须同乘 k：
+                     * 各自独立夹会把图非等比拉扁（实测过 390 画布 + 横图旋转，2.0 的宽高比被夹成 1.12）。 */
+                    const capW = rot90 ? Math.min(ch, vh) : Math.min(cw, vw);
+                    const capH = rot90 ? Math.min(cw, vw) : Math.min(ch, vh);
+                    const k = Math.min(1, capW / (d.naturalWidth * r), capH / (d.naturalHeight * r));
+                    const width = d.naturalWidth * r * k;
+                    const height = d.naturalHeight * r * k;
+                    return { width: width, height: height, ratio: width / d.naturalWidth,
+                             x: (cw - width) / 2, y: (ch - height) / 2 };      // 居中：与库同一套 margin 口径
+                };
+                const rotate = ((d.rotate || 0) % 180 + 180) % 180 === 90;
+                const fit = fitFor(rotate);
+                if (! fit) { return false; }
+                if (Math.abs(fit.width - d.width) < 0.5 && Math.abs(fit.height - d.height) < 0.5) { return false; }
+                d.oldRatio = d.ratio;
+                d.width = fit.width;
+                d.height = fit.height;
+                d.ratio = fit.ratio;
+                d.x = fit.x;
+                d.y = fit.y;
+                d.left = fit.x;
+                d.top = fit.y;
+                /* ★ 同一份几何镜像进 initialImageData：库的 reset() 就是 `imageData = {...initialImageData}`，
+                 * 镜像之后「重置」天然落回顶屏（全屏、非全屏、手机松手时那一下回弹，走的都是同一个 reset()）。
+                 * 注意镜像是**未旋转口径**（fitFor(false)）：快照里的 rotate 由库写死为 0，若把"按旋转算出来的
+                 * 尺寸"写进去，旋转后按重置就会变成"按旋转算的盒子 + 未旋转渲染" —— 比例错、也不再顶屏。
+                 * 只覆盖几何字段：rotate/scaleX/scaleY 留给库（它在 initImage 里初始化那份快照）。 */
+                if (viewer.initialImageData && typeof viewer.initialImageData === 'object') {
+                    const ini0 = fitFor(false);
+                    if (ini0) {
+                        const ini = viewer.initialImageData;
+                        ini.width = ini0.width;
+                        ini.height = ini0.height;
+                        ini.ratio = ini0.ratio;
+                        ini.oldRatio = 1;
+                        ini.x = ini0.x;
+                        ini.y = ini0.y;
+                        ini.left = ini0.x;
+                        ini.top = ini0.y;
+                    }
+                }
+                return true;
+            };
+            (function () {
+                if (typeof viewer.renderImage !== 'function') { return; }    // 产物变了就安静退出，不折腾
+                const rawRenderImage = viewer.renderImage.bind(viewer);
+                /* 不分全屏：凡是"库自己按新尺寸重排"的那类渲染（首次加载、切图、窗口 resize、进出全屏、
+                 * 重置等）一律在渲染前改成顶屏尺寸 ⇒ 一次到位，全屏与非全屏的行为因此统一。
+                 * 用户自己的滚轮缩放 / 拖动 / 旋转（库置了 zooming/moving/rotating/scaling 标志）不动，
+                 * 保持当次操作的结果 —— 想回到顶屏按「重置」即可。 */
+                viewer.renderImage = function () {
+                    fitRenderSeq += 1;
+                    if (! viewer.played && ! viewer.zooming && ! viewer.moving
+                        && ! viewer.rotating && ! viewer.scaling) {
+                        try { applyFitEdgeToImageData(); } catch (e) { /* 兜底：绝不因这一刀让看图界面挂掉 */ }
+                    }
+                    return rawRenderImage.apply(null, arguments);
+                };
+            })();
+            /* 「重置」键不用改：reset() 会把 imageData 换成 initialImageData，而那份快照已被上面改成顶屏几何
+             * ⇒ 全屏、非全屏都落回顶屏（手机松手时那一下回弹走的是同一个 reset()）。 */
+
             /* 图片裁剪（Cropper.js v1.6.3）—— 三个入口共用这一个模块：
              *   · 看图器工具栏的「裁剪」按钮（cropEditor.openFromViewer）
              *   · 选中操作条的 [data-operate="edit"]（只有单选 jpg/jpeg/png 时出现）
@@ -937,10 +1253,41 @@
             document.addEventListener('fullscreenchange', syncFullscreenIcon);
             document.addEventListener('webkitfullscreenchange', syncFullscreenIcon);
 
-            /* 全屏里鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态） */
-            const FS_UI_MS = 2500;
+            /* 全屏进出与顶屏的联动（与上面的图标同步分开写，职责清楚）：
+             *   进 ⇒ 库会因视口变化重排（那次渲染已被改成顶屏，一步到位）；再兜底 250ms ——
+             *        万一某个浏览器不改视口、压根没有那次重排，就自己渲一次（渲染那层会把尺寸改成顶屏）。
+             *   出 ⇒ 按收回后的视口重算一次（重算完仍落回顶屏，因为"渲染即顶屏"是常态）。
+             * 判据只看 document 的全屏元素，不依赖库的内部状态。 */
+            const onViewerFullscreenResize = () => {
+                const d = document;
+                const on = !!(d.fullscreenElement || d.webkitFullscreenElement);
+                if (on === fsFitMode) { return; }
+                fsFitMode = on;
+                if (on) {
+                    const seq = fitRenderSeq;
+                    setTimeout(() => {
+                        if (! fsFitMode || fitRenderSeq !== seq) { return; }   // 期间已经渲染过（那次已被改成顶屏）
+                        if (viewer.viewed && ! viewer.played) { viewer.renderImage(); }
+                    }, 250);
+                } else if (viewer.viewed && ! viewer.played && typeof viewer.initImage === 'function') {
+                    requestAnimationFrame(() => {                              // 等视口真正收回去再重算
+                        if (fsFitMode) { return; }
+                        viewer.initImage(() => viewer.renderImage());
+                    });
+                }
+            };
+            document.addEventListener('fullscreenchange', onViewerFullscreenResize);
+            document.addEventListener('webkitfullscreenchange', onViewerFullscreenResize);
+
+            /* 鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态）。
+             * 两种模式共用这一套、收的也是同样四块（工具栏/缩略图条/文件名行/关闭键）：
+             * 全屏的门是 html.ls-viewer-fs，非全屏的门是 html.ls-viewer-open + ls-ui-idle
+             * （后者在看图器开关时挂/摘）。 */
+            const VIEWER_OPEN_CLASS = 'ls-viewer-open';   // 看图器开着（含全屏期间）
+            const UI_IDLE_CLASS = 'ls-ui-idle';           // 非全屏：UI 已收起
+            const FS_UI_MS = 2000;
             let fsUiTimer = 0;
-            /* 全屏里"人还在 UI 上"就不收起 —— 第七轮要的：
+            /* "人还在 UI 上"就不收起 —— 第七轮要的：
              * "我正操作着呢 UI 自己没了，这多烦人"。原来的实现只做了"每次操作重新计时"，
              * 但鼠标停在 toolbar/缩略图条上不动时没有任何事件，计时照样走完 ⇒ UI 在手指底下消失
              * （而且此刻它们是 pointer-events:none，点下去还会穿透、甚至误关看图器）。
@@ -948,40 +1295,100 @@
              * 所以量得到矩形；不能用 :hover —— pointer-events:none 时命中测试拿不到它们），
              * 就只"续期"不排收起；手指按住期间同理。移开/松手后从那一刻重新计时。 */
             const FS_UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];
-            const pointerOverViewerUI = (x, y) => FS_UI_ZONES.some((sel) => {
+            const WINDOWED_UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];   // 非全屏收的四块，与全屏一致
+            const pointerOverZones = (zones, x, y) => zones.some((sel) => {
                 const el = document.querySelector(sel);
                 if (! el) { return false; }
                 const r = el.getBoundingClientRect();
                 return r.width > 0 && r.height > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
             });
-            const scheduleFsHide = () => {
+            const inFullscreenClass = () => document.documentElement.classList.contains('ls-viewer-fs');
+            const scheduleViewerUiHide = () => {
                 clearTimeout(fsUiTimer);
-                fsUiTimer = setTimeout(() => document.documentElement.classList.remove('ls-fs-ui'), FS_UI_MS);
+                fsUiTimer = setTimeout(() => {
+                    const html = document.documentElement;
+                    if (inFullscreenClass()) { html.classList.remove('ls-fs-ui'); return; }   // 全屏：收四块 UI
+                    if (html.classList.contains(VIEWER_OPEN_CLASS)) { html.classList.add(UI_IDLE_CLASS); }
+                }, FS_UI_MS);
             };
-            const flashFullscreenUI = (e) => {
-                if (! document.documentElement.classList.contains('ls-viewer-fs')) { return; }
-                document.documentElement.classList.add('ls-fs-ui');
+            /* 手机"点一下"之后，浏览器还会补发一串合成鼠标事件（mouseover/mousemove/mousedown/mouseup/click），
+             * 坐标正好落在刚点过的那块 UI 上。而下面"指针停在 UI 上就续期"那条判断只看事件类型 + 坐标，
+             * 于是那一发合成 mousemove 会被当成"鼠标还停在工具栏上" ⇒ 把 touchend 排下的收起计时清掉、
+             * 又不排新的 ⇒ 「点过的文件名 / 工具按钮 / 缩略图」就再也不自动收（滑动不算点击、没有合成事件，
+             * 所以照常收）。真机序列在 jsdom 里实测过：touchend 排下 T1/2500ms，紧接着的合成 mousemove 把它清掉。
+             * 闸门：最近 1.2s 内发生过触摸（含笔）⇒ 一律不认"鼠标停在 UI 上"。合成事件总在抬手后几毫秒内到，
+             * 带 300ms 点击延迟的浏览器也在窗口内；桌面鼠标永远不会命中（它不会有 touch 事件）。 */
+            const UI_TOUCH_GRACE_MS = 1200;
+            let lastRealTouchAt = 0;
+            const touchedRecently = () => (Date.now() - lastRealTouchAt) < UI_TOUCH_GRACE_MS;
+            ['touchstart', 'touchmove', 'touchend'].forEach((ev) => {
+                document.addEventListener(ev, () => { lastRealTouchAt = Date.now(); }, {capture: true, passive: true});
+            });
+            ['pointerdown', 'pointerup'].forEach((ev) => {      // 触屏/笔：pointerType 不是 mouse 才算（触控板鼠标不受影响）
+                document.addEventListener(ev, (e) => {
+                    if (e && e.pointerType && e.pointerType !== 'mouse') { lastRealTouchAt = Date.now(); }
+                }, {capture: true, passive: true});
+            });
+            const flashViewerUI = (e) => {
+                const html = document.documentElement;
+                const fs = inFullscreenClass();
+                if (! fs && ! html.classList.contains(VIEWER_OPEN_CLASS)) { return; }   // 看图器没开 ⇒ 什么都不做
+                if (fs) { html.classList.add('ls-fs-ui'); } else { html.classList.remove(UI_IDLE_CLASS); }
                 const type = (e && e.type) || '';
                 if (type.indexOf('touch') === 0) {
                     clearTimeout(fsUiTimer);            // 手指还按着 ⇒ 别收
                     return;
                 }
-                if (type !== 'keydown' && pointerOverViewerUI((e && e.clientX) || 0, (e && e.clientY) || 0)) {
-                    clearTimeout(fsUiTimer);            // 鼠标停在 UI 上 ⇒ 只续期
+                if (type !== 'keydown' && ! touchedRecently() && pointerOverZones(fs ? FS_UI_ZONES : WINDOWED_UI_ZONES,
+                        (e && e.clientX) || 0, (e && e.clientY) || 0)) {
+                    clearTimeout(fsUiTimer);            // 鼠标停在（该模式的）UI 上 ⇒ 只续期（触屏刚发生 ⇒ 不认，见 touchedRecently）
                     return;
                 }
-                scheduleFsHide();
+                scheduleViewerUiHide();
             };
             document.addEventListener('touchend', () => {
-                if (document.documentElement.classList.contains('ls-fs-ui')) {
-                    scheduleFsHide();                   // 手指抬起才开始计时
+                const html = document.documentElement;
+                if (html.classList.contains('ls-fs-ui')
+                    || (! inFullscreenClass() && html.classList.contains(VIEWER_OPEN_CLASS))) {
+                    scheduleViewerUiHide();             // 手指抬起才开始计时
                 }
             }, {capture: true, passive: true});
+            /* 「收起状态下落在 UI 上的第一下点击要吞掉」用的标记：必须在**别的 pointerdown 监听之前**
+             * 记下来 —— 下面那份名单里的 pointerdown 一跑就会把 ls-ui-idle 摘掉（UI 立刻淡回来），
+             * 等 click 到达时就再也看不出"刚才还收着"，那一下就穿到画布上变成退出看图器了。 */
+            let windowedUiHiddenAtDown = false;
+            let windowedUiHiddenAtDownTouch = false;   // 那一下是触屏点的（触屏没有 mousemove ⇒ 唤出后得自己排收起）
+            document.addEventListener('pointerdown', (e) => {
+                const html = document.documentElement;
+                windowedUiHiddenAtDown = ! inFullscreenClass()
+                    && html.classList.contains(VIEWER_OPEN_CLASS)
+                    && html.classList.contains(UI_IDLE_CLASS);
+                windowedUiHiddenAtDownTouch = windowedUiHiddenAtDown
+                    && (e.pointerType === 'touch' || e.pointerType === 'pen');
+            }, {capture: true, passive: true});
+
             /* 这些操作都算"人还在"，一律刷新那 2.5s：
                移动鼠标 / 滚轮切图 / 点 toolbar 或缩略图条 / 触摸拖动 / 按键。
-               （全部 passive：我们只看不拦，不影响任何默认行为。） */
+               （全部 passive：我们只看不拦，不影响任何默认行为 —— 特别是这份名单里**没有 click**，
+                所以"非全屏点空白 = 退出看图器"和"全屏点空白 = 唤出 UI"两条原有特性都不受影响。） */
             ['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'].forEach((ev) => {
-                document.addEventListener(ev, flashFullscreenUI, {capture: true, passive: true});
+                document.addEventListener(ev, flashViewerUI, {capture: true, passive: true});
+            });
+            /* 看图器开关：开 ⇒ 挂 ls-viewer-open，缩略图条从这一刻起参与自动隐藏（先露 2.5s）；
+             * 关 ⇒ 两个类一起摘掉，别把"收起"状态留给下一次打开。 */
+            document.addEventListener('shown', () => {
+                document.documentElement.classList.add(VIEWER_OPEN_CLASS);
+                document.documentElement.classList.remove(UI_IDLE_CLASS);
+                scheduleViewerUiHide();
+            });
+            document.addEventListener('hidden', () => {
+                document.documentElement.classList.remove(VIEWER_OPEN_CLASS, UI_IDLE_CLASS);
+                clearTimeout(fsUiTimer);
+            });
+            /* 进出全屏时把非全屏那套"收起"状态清掉：进去时干净开始，出来时缩略图条立刻在
+             * （全屏自己的显隐走 ls-fs-ui，与这个类无关，互不干扰）。 */
+            ['fullscreenchange', 'webkitfullscreenchange'].forEach((ev) => {
+                document.addEventListener(ev, () => document.documentElement.classList.remove(UI_IDLE_CLASS));
             });
 
             /* 第八轮：① 非全屏"拖动后松手"不该被当成点击；② 全屏点空白不许关、改成显示 UI。
@@ -1009,11 +1416,14 @@
                     if (! dragged && e.buttons && moved(e.clientX, e.clientY)) { dragged = true; }
                 }, true);
                 /* 触屏：安卓上控件在指针处理里 preventDefault 之后 pointermove 可能收不到，
-                 * 所以 touchmove 也记一份（与页面上双击判定用的是同一套经验）。 */
+                 * 所以 touchmove 也记一份（与页面上双击判定用的是同一套经验）。
+                 * 只读坐标、从不 preventDefault ⇒ 必须 passive：document 上的非 passive touchmove
+                 * 会让 Chrome 失去「不等 JS 就滚动/绘制」的快路径（本文件第二处 document 上的 touchmove
+                 * 旁边有详细教训：那个监听器同时处理两张手势，漏了 passive 真机上会「碰一下才画出来」）。 */
                 document.addEventListener('touchmove', (e) => {
                     const t = e.changedTouches && e.changedTouches[0];
                     if (! dragged && t && moved(t.clientX, t.clientY)) { dragged = true; }
-                }, true);
+                }, {capture: true, passive: true});
                 document.addEventListener('pointerup', () => {
                     if (dragged) { dragEndAt = Date.now(); }
                 }, true);
@@ -1021,6 +1431,26 @@
                     if (dragged) { dragEndAt = Date.now(); }
                 }, true);
                 document.addEventListener('click', (e) => {
+                    /* ③ 非全屏 + UI 收着：落在收起那几块矩形里的第一下点击 = 唤出 UI 并吞掉这一下。
+                     * 收起时它们是 pointer-events:none，这一下本来会穿到画布上 ⇒ 非全屏会"点底部直接退出
+                     * 看图器"。这里改成与全屏点空白一致的体感：先唤出界面、这一下不算数（也不会误切到
+                     * 看不见的缩略图）。判据用 pointerdown 那一刻记下的状态 —— 进到这里时 ls-ui-idle 已被摘掉。 */
+                    const hiddenAtDown = windowedUiHiddenAtDown;
+                    const downTouch = windowedUiHiddenAtDownTouch;
+                    windowedUiHiddenAtDown = false;      // 一次性：没有前置 pointerdown 的 click（键盘/脚本触发）不许沿用旧值
+                    windowedUiHiddenAtDownTouch = false;
+                    if (hiddenAtDown) {
+                        const ev0 = (e.detail && e.detail.originalEvent) || e;
+                        if (pointerOverZones(WINDOWED_UI_ZONES, ev0.clientX || 0, ev0.clientY || 0)) {
+                            e.stopPropagation();
+                            flashViewerUI({type: 'click', clientX: ev0.clientX || 0, clientY: ev0.clientY || 0});
+                            /* 触屏唤醒后要自己排一次收起：flashViewerUI 看到坐标落在 UI 矩形内就只"续期"
+                             * （鼠标停在 UI 上不该被收走，这是它本来的意图），可触屏这里没有后续 mousemove
+                             * ⇒ 不补这一下，UI 会一直挂着不回去。 */
+                            if (downTouch) { scheduleViewerUiHide(); }
+                            return;
+                        }
+                    }
                     if (! isCanvas(e.target)) { return; }
                     if (Date.now() - dragEndAt < DRAG_WINDOW) {
                         e.stopPropagation();        // ① 拖动之后的那一下不算点击 ⇒ 不关看图器
@@ -1029,7 +1459,7 @@
                     if (document.documentElement.classList.contains('ls-viewer-fs')) {
                         e.stopPropagation();        // ② 全屏：干掉"点空白关闭"
                         const src = (e.detail && e.detail.originalEvent) || e;
-                        flashFullscreenUI({type: 'click', clientX: src.clientX || 0, clientY: src.clientY || 0});
+                        flashViewerUI({type: 'click', clientX: src.clientX || 0, clientY: src.clientY || 0});
                     }
                 }, true);
             })();
@@ -1165,7 +1595,12 @@
                 const openFromViewer = () => {
                     const url = viewerUrl();
                     if (! url) { toastr.warning('没有找到当前图片'); return; }
-                    const card = document.querySelector(IMAGES_ITEM + ' img[data-original="' + url.replace(/"/g, '\\"') + '"]');
+                    /* 反查卡片：逐个比对属性，不拼选择器 —— URL 里有换行/结尾反斜杠会让拼接串解析失败
+                     * （querySelector 直接抛异常 ⇒ 按钮点了没反应），中间反斜杠还会被 CSS 转义吞掉、静默失配。 */
+                    const card = Array.prototype.find.call(
+                        document.querySelectorAll(IMAGES_ITEM + ' img[data-original]'),
+                        (el) => el.getAttribute('data-original') === url
+                    );
                     open(card || { url: url });
                 };
 
@@ -1268,7 +1703,9 @@
                     });
                 }
 
-                return { open: open, openFromViewer: openFromViewer, supported: supported, close: close };
+                // viewerUrl / infoOf 一并对外（工具栏「裁剪」要用同一套"当前图"取值口径）
+                return { open: open, openFromViewer: openFromViewer, supported: supported, close: close,
+                         viewerUrl: viewerUrl, infoOf: infoOf };
             })();
 
             /* 底部缩略图条上的快捷切图（要求的功能）。
@@ -1352,17 +1789,48 @@
              * 拦 pointermove 在真机上可能整段失效（踩过）。这里只读 viewer.action 判定是否放权，
              * 一个字都不写库的内部状态 —— 捏合/双击/过渡因此完全不受影响。 */
             (function () {
-                const FAR_RATIO = 0.18;    // 够远：视口宽的这个比例
-                const FAR_MIN = 56;        // 或至少这么多 px
-                const FAST_SPEED = 0.5;    // 够快：px/ms
+                /* 灵敏度（手机端"压一点点"，已压过两档）：手机上真正生效的是 FAR_RATIO 那一档 ——
+                 * 视口宽 390 时 max(FAR_MIN 56, 0.24×390 ≈ 94) 取 94，FAR_MIN 等于不起作用；
+                 * 所以要压灵敏度动的就是 FAR_RATIO 与"够快"那一档。
+                 * 上限（再钝就该换招，不再动这三个数）：FAR_RATIO 不过 0.30、FAST_SPEED 不过 1.0、
+                 * 位移下限不过 56 —— 过了就是"滑不动"，而且每次失败还白付一次回弹动画。 */
+                const FAR_RATIO = 0.24;    // 够远：视口宽的这个比例（0.18 → 0.21 → 0.24）
+                const FAR_MIN = 56;        // 或至少这么多 px（只在桌面窄窗口时轮到它）
+                const FAST_SPEED = 0.80;   // 够快：px/ms（0.5 → 0.65 → 0.80）
+                const SWIPE_TAIL_SLOP = 12;   // px：补发的 click 落点与抬手点基本重合；用户主动点则在别处
+                /* 这一发 click 是不是「切图那一下的尾巴」？
+                 * 触屏上浏览器会照着手指数起的位置补发一发 click；抬手点若正好落在看图器 UI 上
+                 * （起手贴着缩略图条/工具栏斜滑时会发生），那一发会被 UI 接住 ⇒ 滑一张就退出查看器、
+                 * 或跳到手指抬起的那张缩略图。判据用**坐标**，不用目标元素：按元素一刀放行（旧写法）
+                 * 会把尾巴也一并放过去；而「滑完图后主动点 UI」是另一次触碰、落点在别处 ⇒ 照旧放行。 */
+                const isSwipeTailClick = (guard, now, x, y) => !! guard && now - guard.t <= 400
+                    && Math.abs(x - guard.x) <= SWIPE_TAIL_SLOP && Math.abs(y - guard.y) <= SWIPE_TAIL_SLOP;
                 let g = null;
-                let guardClick = 0;   // 刚切过图的时刻：用来吞掉随后那发背景 click
+                let swipeGuard = null;   // 刚切过图那一下的 {t, x, y}：用来吞掉随后那发「尾巴 click」
                 const inCanvas = (el) => el instanceof Element && !!el.closest('.viewer-canvas');
                 const isFit = () => {
                     const d = viewer.imageData;
-                    const v = viewer.viewerData;
-                    if (!d || !v) return false;
-                    return d.x >= 0 && d.y >= 0 && d.width <= v.width && d.height <= v.height;
+                    const canvas = viewer.canvas;
+                    if (! d || ! canvas) return false;
+                    const bw = canvas.clientWidth;
+                    const bh = canvas.clientHeight;
+                    if (! (bw > 0 && bh > 0)) return false;
+                    /* 「图在视觉上完整装在画布里」——按**旋转后的视觉包围盒**判：
+                     * 90°/270° 宽高互换，而且旋转不改中心 ⇒ 用"中心 ± 占位/2"算 bbox，
+                     * 不能直接拿未旋转盒子的 d.x/d.y 当左上角 —— 旋转过的横图在竖屏下 x 本来就是负数
+                     * （实测 390 宽的画布、1000×500 的图，正确顶屏盒子的 x = -152.5），
+                     * 直接判会把顶屏态误判成"放大态"、滑动只回弹切不了图。
+                     * 边界用**画布**而不是 viewerData：顶屏几何是在画布上居中的（x=(cw-width)/2），
+                     * 拿 viewerData 当上限的话，一旦画布比 viewerData 宽（缩放补偿/异常窗口），
+                     * 正确的顶屏态同样会被判成"放大态"。画布才是用户看到的那块区域，口径也一致。
+                     * ±0.5 是给写回时的浮点/取整留的容差。 */
+                    const rot = ((d.rotate || 0) % 180 + 180) % 180 === 90;
+                    const w = rot ? d.height : d.width;
+                    const h = rot ? d.width : d.height;
+                    const cx = d.x + d.width / 2;                 // 旋转不改中心
+                    const cy = d.y + d.height / 2;
+                    return cx - w / 2 >= -0.5 && cy - h / 2 >= -0.5
+                        && cx + w / 2 <= bw + 0.5 && cy + h / 2 <= bh + 0.5;
                 };
                 document.addEventListener('pointerdown', (e) => {
                     if (!e.isPrimary) { if (g) g.multi = true; return; }   // 第二指 ⇒ 捏合，放权给库
@@ -1379,21 +1847,21 @@
                     const dy = e.clientY - s.y;
                     const dt = Math.max(1, e.timeStamp - s.t);
                     const far = Math.abs(dx) > Math.max(FAR_MIN, window.innerWidth * FAR_RATIO);
-                    const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 30;
+                    const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 46;   // 46 是"够快"那一档的位移下限（30 → 38 → 46）
                     if ((far || fast) && Math.abs(dx) > Math.abs(dy) * 1.5) {
                         if (dx < 0) viewer.next(false); else viewer.prev(false);
-                        guardClick = Date.now();                          // 标记：刚刚切过图
+                        swipeGuard = {t: Date.now(), x: e.clientX, y: e.clientY};   // 记下这一下的抬手时刻与位置
                     } else if (dx !== 0 || dy !== 0) {
                         viewer.reset();                                   // 带动画的回弹
                     }
                 }, false);
-                /* 手指在图片外空白处结束时，浏览器会补一发 click 落到背景上，库因此关闭查看器 ——
-                 * 于是"切图成功"和"退出查看"同时发生。这里只吞紧跟切图之后那 400ms 内的背景 click，
-                 * 且点在图片上的不算，避免误伤正常点击关闭。 */
+                /* 手指在图片外空白处结束时，浏览器会补发一发 click（落点 = 抬手点）—— 库因此关闭查看器，
+                 * 缩略图条/工具栏也会被点中 ⇒「切图成功」与「退出/跳图」同时发生。这里只吞这一发尾巴：
+                 * 切图后 400ms 内、且落点与抬手点几乎重合（见 isSwipeTailClick）。滑完图后主动去点
+                 * UI 的那一下是另一次触碰、落点在别处 ⇒ 照旧放行 —— 别改回「按目标元素一刀放行」。 */
                 document.addEventListener('click', (e) => {
-                    if (Date.now() - guardClick > 400) return;
-                    if (e.target instanceof Element && e.target.closest('.viewer-canvas img')) return;
-                    guardClick = 0;
+                    if (! isSwipeTailClick(swipeGuard, Date.now(), e.clientX || 0, e.clientY || 0)) return;
+                    swipeGuard = null;                 // 一次性：吞掉就不再拦
                     e.stopPropagation();
                     e.preventDefault();
                 }, true);
@@ -1523,11 +1991,15 @@
                     for (const i in images) {
                         html += $('#images-item-tpl').html()
                             .replace(/__id__/g, images[i].id)
-                            .replace(/__name__/g, images[i].filename.replace(/\$/g, '$$$$'))
+                            // 文件名是用户可控字符串，且 __name__ 落在 title="..." / alt="..." 两个
+                            // 属性里 —— 名字里一个双引号就能提前闭合属性（和 __json__ 那条一样必须先转义）
+                            .replace(/__name__/g, escapeHtml(String(images[i].filename)).replace(/\$/g, '$$$$'))
                             .replace(/__human_date__/g, images[i].human_date)
                             .replace(/__date__/g, images[i].date)
-                            .replace(/__url__/g, images[i].url)
-                            .replace(/__thumb_url__/g, images[i].thumb_url)
+                            // URL 也落在属性里（data-original= / src=）：名字能闭合属性，URL 一样能。
+                            // 转义不改变值 —— 浏览器的属性解析会把实体还原（jQuery .data('original') 亦然）。
+                            .replace(/__url__/g, escapeHtml(String(images[i].url)).replace(/\$/g, '$$$$'))
+                            .replace(/__thumb_url__/g, escapeHtml(String(images[i].thumb_url)).replace(/\$/g, '$$$$'))
                             .replace(/__width__/g, images[i].width)
                             .replace(/__height__/g, images[i].height)
                             // 卡片角标 = 这张图的标签（列表接口已带 tags）
@@ -2339,6 +2811,19 @@
                 if (e.button !== 0 || ! e.target || ! e.target.closest) {
                     return;
                 }
+                /* 屏幕上有菜单（下拉的 .ls-menu，或右键/长按的 .dropdown-context）时，这一发 mousedown
+                   不该被当成选中/框选的起点 —— 用户的意图是"点菜单外把它关掉"。与文件末尾那段捕获
+                   click 守卫是一对：这里挡住选中/框选（mousedown 族），那里挡住"开图/跳转"（click 族）。
+                   两端都靠这一句：
+                     · 桌面：拦住框选的起点（库的 Interaction.start 绑在区域元素的冒泡阶段，进不来），
+                       下面 mouseup 那条 selfSelect 分支同理；
+                     · 手机：浏览器在 touchend 后**合成的那一发 mousedown** 走的正是这里（见上面 2026-10-08
+                       那段说明），漏掉它就会出现"点菜单外的图片被勾上"。实测两端同源。
+                   判据用 DOM 可见性（连淡出窗口一起算，元素那时还画着）而不是内存状态 ——
+                   "菜单看得见、状态却已置 false"的那一段恰恰最容易点穿。 */
+                if (typeof lsMenusOnScreen === 'function' && lsMenusOnScreen()) {
+                    return;
+                }
                 /* 必须在这里就先刷：本监听器是捕获阶段，库的 mousedown 在冒泡阶段，
                  * 顺序上我们一定先跑，库判定时读到的才是刷新后的矩形。 */
                 dsSyncAreaRect();
@@ -2953,11 +3438,13 @@
                             detailImageId = image.id;
                             detailImageTags = (image.tags || []).map(tag => ({id: tag.id, name: tag.name}));
                             let content = $('#image-detail-tpl').html()
-                                .replace(/__thumb_url__/g, image.thumb_url)
-                                .replace(/__album_name__/g, image.album ? image.album.name : '-')
-                                .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
-                                .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-                                .replace(/__origin_name__/g, image.origin_name.replace(/\$/g, '$$$$'))
+                                // 详情卡这几个字段都是字符串且直接拼进 HTML（alt 属性 + dd 文本），
+                                // 一律先 escapeHtml 再注入：相册名/策略名是管理员可控、两个文件名是用户可控
+                                .replace(/__thumb_url__/g, escapeHtml(String(image.thumb_url)).replace(/\$/g, '$$$$'))
+                                .replace(/__album_name__/g, escapeHtml(image.album ? image.album.name : '-').replace(/\$/g, '$$$$'))
+                                .replace(/__strategy_name__/g, escapeHtml(image.strategy ? image.strategy.name : '-').replace(/\$/g, '$$$$'))
+                                .replace(/__filename__/g, escapeHtml(String(image.filename)).replace(/\$/g, '$$$$'))
+                                .replace(/__origin_name__/g, escapeHtml(String(image.origin_name)).replace(/\$/g, '$$$$'))
                                 .replace(/__size__/g, utils.formatSize(image.size * 1024))
                                 .replace(/__mimetype__/g, image.mimetype)
                                 .replace(/__width__/g, image.width)
@@ -3106,7 +3593,9 @@
                 let operate = $(this).data('operate');
                 let selected = ds.getSelection();
 
-                if (selected.length === 0) {
+                // 「刷新」与有没有选中无关：空选中时 operate 白名单里也只有它（见 bindOperates），
+                // 别被这道守卫顺手挡掉 —— 它一挡，菜单里唯一还可见的那项就成了死键。
+                if (selected.length === 0 && operate !== 'refresh') {
                     return false;
                 }
 
@@ -3142,8 +3631,119 @@
                 }
             });
 
-            // 标签列表最后拉：此时 renderDetailTagOptions / renderTagFilter 都已定义（避免 TDZ）
             loadTags();
+        </script>
+    @endpush
+
+    @push('scripts')
+        <script>
+            /* 菜单打开时点菜单外 = 只关菜单、不触发别的（两族菜单同一套拦截，别再给某一族单独加机制）。
+             *
+             * 背景：下拉菜单（.ls-menu）的关闭是 Alpine 的 @click.outside —— 注册在 document 冒泡阶段，
+             * 只执行 `open = false`，既不 preventDefault 也不 stopPropagation；而「点图片开预览」绑在内容容器
+             * 的冒泡阶段 ⇒ 同一发点击两个都跑（先开图、后关菜单）。右键/长按菜单（.dropdown-context）同病：
+             * 它的关闭一样不吞事件，而选中/框选还发生在 mousedown 那一族。
+             *
+             * 所以本页只做两件事，都在 document 的**捕获阶段**（早于页面自己的一切监听）：
+             *   ① mousedown 守卫（在本文件上半部分的框选代码里）：屏幕上有菜单 ⇒ 这一发不算选中/框选的起点；
+             *   ② 本段 click 守卫：屏幕上有菜单、且目标**不在菜单面板内** ⇒ 关掉下拉菜单 + 吞掉这一发点击。
+             *      目标在菜单面板内（含二级菜单）⇒ 完全放行：菜单项的动作、二级菜单的展开都归它们自己。
+             *
+             * 为什么不是「全屏透明盾牌层」（曾经这么做过，已撤）：盾牌只能靠 z-index 压住内容，而面板一旦挂在
+             * 别的层叠上下文里（例如吸顶工具栏是 z-[3]），面板自身的 z-[9] 只能在那个上下文内部比武 ⇒ 整棵
+             * 子树低于盾牌 ⇒ 菜单项点不动（透明层看不出来，实测踩过）。触摸端还得再配一套「碰一下就关 +
+             * 时间窗吞 click」，那套时间窗会吃掉菜单项自己的点击、也会踩右键菜单的触摸编排（二级菜单闪一下就没）。
+             * 换成 click 守卫后这些坑一起消失，形状也与 context-js 自己的守卫同构（它本来就在做同一件事）。
+             *
+             * 右键/长按那族的关菜单由 context-js 自己的捕获守卫完成（它注册在本段之前、先执行）；本段对它只
+             * 做兜底（关掉可能开着的下拉菜单 + 吞掉这一发）。两族都不需要页面上再叠元素或时间窗。
+             */
+            /* MENU-GUARD-BEGIN */
+            (() => {
+                const MENU_PANELS = '.ls-menu, .dropdown-context';   // 两族菜单的面板（二级菜单也是 .dropdown-context*）
+
+                // 「屏幕上有菜单」只看元素实际可见性，不看任何内存状态：菜单"看得见、状态却已置 false"的那一段
+                // 恰恰最容易点穿。checkVisibility 会把祖先的 display 一起算进来（「⋯」菜单在桌面端整块是
+                // hidden 的，用户看不到它就不该算）；老浏览器退回自己看 display/visibility。
+                const visible = (el) => {
+                    if (typeof el.checkVisibility === 'function') {
+                        return el.checkVisibility({
+                            visibilityProperty: true,
+                            opacityProperty: false,
+                            contentVisibilityAuto: true,
+                        });
+                    }
+                    const cs = getComputedStyle(el);
+                    return cs.display !== 'none' && cs.visibility !== 'hidden';
+                };
+                const anyVisible = (selector) => Array.prototype.some.call(document.querySelectorAll(selector), visible);
+                let menusOpen = false;
+
+                const sync = () => {
+                    menusOpen = anyVisible(MENU_PANELS);
+                };
+
+                // 菜单开合只会动面板自己的行内 style / class（x-show 与 x-transition 改 style/class；
+                // 右键菜单由 jQuery 改内联 style）
+                new MutationObserver((records) => {
+                    for (const record of records) {
+                        const target = record.target;
+                        if (target && target.nodeType === 1 && target.matches && target.matches(MENU_PANELS)) {
+                            sync();
+                            return;
+                        }
+                    }
+                }).observe(document.body, {attributes: true, attributeFilter: ['style', 'class'], subtree: true});
+
+                // 兜底：真正要动手前再对一次状态（pointerdown 早于 mousedown / click，页面里那条框选守卫读的就是它），
+                // 外加窗口尺寸变化 —— 响应式断点会把某些菜单的整块容器藏掉，而面板自己的 style 不会变。
+                document.addEventListener('pointerdown', sync, true);
+                document.addEventListener('keydown', sync, true);
+                window.addEventListener('resize', sync);
+
+                // 刻意不在脚本执行时 sync() 一次：那一刻 Alpine 还没启动、面板既没行内 display 也没吃到
+                // x-cloak，会被误判成「菜单开着」。初始状态就是「没有菜单」；Alpine 接管时给面板设 display:none
+                // 照样会触发上面的观察器。
+
+                // 关下拉菜单：直接改 Alpine 的状态 —— 不用合成点击，那会再进本守卫、也可能踩别的监听。
+                // （右键/长按那族没有对外关闭 API，也不归这里管：context-js 的守卫在它自己的路径上关。）
+                const closeDropdowns = () => {
+                    const alpine = window.Alpine;
+                    if (! alpine || typeof alpine.$data !== 'function') {
+                        return;
+                    }
+                    document.querySelectorAll('.ls-menu').forEach((panel) => {
+                        try {
+                            const data = alpine.$data(panel);
+                            if (data && 'open' in data) {
+                                data.open = false;
+                            }
+                        } catch (err) {
+                            // 拿不到组件就跳过：这一发点击照样被吞，菜单会在下一次点击时自己关掉
+                        }
+                    });
+                };
+
+                // click 守卫：屏幕上有菜单、目标不在任何菜单面板内 ⇒ 关掉下拉菜单 + 吞掉这一发点击。
+                // 目标是菜单面板（含二级菜单）内的元素 ⇒ 完全放行。
+                document.addEventListener('click', (event) => {
+                    sync();
+                    if (! menusOpen) {
+                        return;
+                    }
+                    const target = event.target;
+                    if (target && typeof target.closest === 'function' && target.closest(MENU_PANELS)) {
+                        return;
+                    }
+                    closeDropdowns();
+                    event.preventDefault();
+                    event.stopPropagation();
+                }, true);
+
+                // 给页面里那条捕获 mousedown 守卫问「现在屏幕上有没有菜单」（两族都算）
+                window.lsMenusOnScreen = () => menusOpen;
+            })();
+            /* MENU-GUARD-END */
         </script>
     @endpush
 </x-app-layout>
