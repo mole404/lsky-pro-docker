@@ -1415,11 +1415,13 @@
                     if (! dragged && e.buttons && moved(e.clientX, e.clientY)) { dragged = true; }
                 }, true);
                 /* 触屏：安卓上控件在指针处理里 preventDefault 之后 pointermove 可能收不到，
-                 * 所以 touchmove 也记一份（与页面上双击判定用的是同一套经验）。 */
+                 * 所以 touchmove 也记一份（与页面上双击判定用的是同一套经验）。
+                 * 只读坐标、从不 preventDefault ⇒ 必须 passive：document 上的非 passive touchmove
+                 * 会让 Chrome 失去「不等 JS 就滚动/绘制」的快路径（本文件 1765 行附近有详细教训）。 */
                 document.addEventListener('touchmove', (e) => {
                     const t = e.changedTouches && e.changedTouches[0];
                     if (! dragged && t && moved(t.clientX, t.clientY)) { dragged = true; }
-                }, true);
+                }, {capture: true, passive: true});
                 document.addEventListener('pointerup', () => {
                     if (dragged) { dragEndAt = Date.now(); }
                 }, true);
@@ -1848,7 +1850,10 @@
                  * 且点在图片上的不算，避免误伤正常点击关闭。 */
                 document.addEventListener('click', (e) => {
                     if (Date.now() - guardClick > 400) return;
-                    if (e.target instanceof Element && e.target.closest('.viewer-canvas img')) return;
+                    // 只吞「背景」那一下：图片本身、以及查看器自己的 UI（工具栏/缩略图条/标题/关闭键）
+                    // 都放行 —— 否则滑完图 400ms 内点它们会没反应（得再点一次）。
+                    if (e.target instanceof Element
+                        && e.target.closest('.viewer-canvas img, .viewer-toolbar, .viewer-navbar, .viewer-title, .viewer-button')) return;
                     guardClick = 0;
                     e.stopPropagation();
                     e.preventDefault();
@@ -1979,7 +1984,9 @@
                     for (const i in images) {
                         html += $('#images-item-tpl').html()
                             .replace(/__id__/g, images[i].id)
-                            .replace(/__name__/g, images[i].filename.replace(/\$/g, '$$$$'))
+                            // 文件名是用户可控字符串，且 __name__ 落在 title="..." / alt="..." 两个
+                            // 属性里 —— 名字里一个双引号就能提前闭合属性（和 __json__ 那条一样必须先转义）
+                            .replace(/__name__/g, escapeHtml(String(images[i].filename)).replace(/\$/g, '$$$$'))
                             .replace(/__human_date__/g, images[i].human_date)
                             .replace(/__date__/g, images[i].date)
                             .replace(/__url__/g, images[i].url)
@@ -3422,11 +3429,13 @@
                             detailImageId = image.id;
                             detailImageTags = (image.tags || []).map(tag => ({id: tag.id, name: tag.name}));
                             let content = $('#image-detail-tpl').html()
-                                .replace(/__thumb_url__/g, image.thumb_url)
-                                .replace(/__album_name__/g, image.album ? image.album.name : '-')
-                                .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
-                                .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-                                .replace(/__origin_name__/g, image.origin_name.replace(/\$/g, '$$$$'))
+                                // 详情卡这几个字段都是字符串且直接拼进 HTML（alt 属性 + dd 文本），
+                                // 一律先 escapeHtml 再注入：相册名/策略名是管理员可控、两个文件名是用户可控
+                                .replace(/__thumb_url__/g, escapeHtml(String(image.thumb_url)).replace(/\$/g, '$$$$'))
+                                .replace(/__album_name__/g, escapeHtml(image.album ? image.album.name : '-').replace(/\$/g, '$$$$'))
+                                .replace(/__strategy_name__/g, escapeHtml(image.strategy ? image.strategy.name : '-').replace(/\$/g, '$$$$'))
+                                .replace(/__filename__/g, escapeHtml(String(image.filename)).replace(/\$/g, '$$$$'))
+                                .replace(/__origin_name__/g, escapeHtml(String(image.origin_name)).replace(/\$/g, '$$$$'))
                                 .replace(/__size__/g, utils.formatSize(image.size * 1024))
                                 .replace(/__mimetype__/g, image.mimetype)
                                 .replace(/__width__/g, image.width)
