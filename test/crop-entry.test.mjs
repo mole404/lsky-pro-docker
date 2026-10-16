@@ -106,10 +106,10 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
     // 自定义键不补这几条就只剩 li 的黑底 ⇒「有按钮没图标」。
     check('自定义键的图标补齐了库缺的声明（content + 20×20 盒子）',
         /li\.viewer-crop:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px/.test(blade));
-    check('图标图形比盒子小一圈 —— 裁剪键 14px + 3px 居中偏移（盒子/热区不变）',
-        /li\.viewer-crop:before \{[\s\S]{0,900}background-position: 3px 3px;[\s\S]{0,200}background-size: 14px 14px;/.test(blade));
-    check('「全屏」键同样是自定义键：补了 content + 20×20 盒子 + 14px 图标',
-        /li\.viewer-fullscreen:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px[\s\S]{0,1200}background-size: 14px 14px;/.test(blade));
+    check('图标字形 16px + 2px 居中偏移 —— 裁剪键（盒子/热区不变）',
+        /li\.viewer-crop:before \{[\s\S]{0,900}background-position: 2px 2px;[\s\S]{0,200}background-size: 16px 16px;/.test(blade));
+    check('「全屏」键同样是自定义键：补了 content + 20×20 盒子 + 16px 图标',
+        /li\.viewer-fullscreen:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px[\s\S]{0,1200}background-size: 16px 16px;/.test(blade));
     check('全屏时换成「退出全屏」图标（.viewer-fullscreen.is-fs:before 另一张 SVG）',
         /li\.viewer-fullscreen\.is-fs:before \{\s*\n\s*background-image: url\("data:image\/svg\+xml,/.test(blade));
     // 「1:1」按「与改动前一致」归位（全屏之后、重置之前）；「下载原图」整条链路（键 + 函数 + 图标）已删除。
@@ -535,12 +535,12 @@ function bootViewerUi() {
     });
     // 真跑被测代码：抠出来的原文整段塞进去，只用 jsdom 的 document / Element
     // 计时器换成记账版：用来断言「触屏唤醒后确实补排了一次 2500ms 的收起」，不必真等 2.5s
-    const timerLog = { set: [], clear: [] };
+    const timerLog = { set: [], clear: [], ops: [], live: new Map() };
     const api = new Function('document', 'Element', 'setTimeout', 'clearTimeout',
         IDLE_SRC + '\n' + 'return { zones: WINDOWED_UI_ZONES, fsZones: FS_UI_ZONES, hiddenAtDown: () => windowedUiHiddenAtDown, downTouch: () => windowedUiHiddenAtDownTouch };')(
         w.document, w.Element,
-        (fn, ms) => { timerLog.set.push(ms); return w.setTimeout(fn, ms); },
-        (id) => { timerLog.clear.push(id); return w.clearTimeout(id); });
+        (fn, ms) => { timerLog.set.push(ms); timerLog.ops.push(['set', ms]); const id = w.setTimeout(fn, ms); timerLog.live.set(id, ms); return id; },
+        (id) => { timerLog.clear.push(id); timerLog.ops.push(['clear']); timerLog.live.delete(id); return w.clearTimeout(id); });
     const center = (sel) => {
         const r = UI_RECTS[sel];
         return [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
@@ -614,9 +614,11 @@ function bootViewerUi() {
         check('② 触屏按下：记下「刚才收着」且认得出是触屏', x.api.hiddenAtDown() === true && x.api.downTouch() === true);
         x.timerLog.set.length = 0;
         x.fire('.viewer-canvas', xy, 'click', true);
-        check('② 触屏收起态点底部：吞掉那一下 + 补排一次 2500ms 的收起（否则 UI 会一直挂着）',
-            x.lib.length === 0 && x.timerLog.set.length === 1 && x.timerLog.set[0] === 2500,
-            `lib=${JSON.stringify(x.lib)} timers=${JSON.stringify(x.timerLog.set)}`);
+        // 口径改成「活计时器」：闸门加上后，这一下的 flashViewerUI 自己也会走到收起分支，
+        // 再加上下面那句补排 ⇒ 会排两次（第二次清掉第一次、重新计时，净效果仍是 2.5s 一个计时器）。
+        check('② 触屏收起态点底部：吞掉那一下 + 补排 2500ms 的收起（否则 UI 会一直挂着）',
+            x.lib.length === 0 && x.timerLog.live.size === 1 && [...x.timerLog.live.values()][0] === 2500,
+            `lib=${JSON.stringify(x.lib)} live=${x.timerLog.live.size} timers=${JSON.stringify(x.timerLog.set)}`);
         x.dom.window.close();
     }
     {
@@ -697,6 +699,100 @@ function bootViewerUi() {
         x.tapHiddenZone(sel);
         check(`⑥ 收起时落在 ${sel} 矩形内的第一下：被吞掉且 UI 被唤出`,
             x.lib.length === 0 && x.idle() === false, `lib=${JSON.stringify(x.lib)} idle=${x.idle()}`);
+        x.dom.window.close();
+    }
+    // ⑦ 手机「点一下 UI」之后必须仍然自动收起，⑧ 手机滑动依然收，⑨ 桌面鼠标停在 UI 上依然只续期
+    // 为什么单列一节：真机序列在 jsdom 里量出来的根因 —— 抬手那一刻 touchend 监听器排下了 2500ms 收起，
+    // 紧接着浏览器补发的**合成 mousemove**（坐标正好落在刚点过的那块 UI 上）走了「指针停在 UI 上 ⇒ 只续期」
+    // 分支，把计时器清掉且不排新的 ⇒ 点过的文件名/工具按钮/缩略图就再也不自动收；滑动不算点击、没有合成
+    // 事件 ⇒ 计时器存活 ⇒ 正常收（看到的行为差异就是这么来的）。改法是给续期分支加「刚发生过触摸就不认」。
+    const mobileTap = (x, sel) => {
+        const el = x.w.document.querySelector(sel);
+        const xy = x.center(sel);
+        el.dispatchEvent(new x.w.PointerEvent('pointerdown', {bubbles: true, clientX: xy[0], clientY: xy[1], buttons: 1, pointerType: 'touch'}));
+        el.dispatchEvent(new x.w.Event('touchstart', {bubbles: true}));
+        el.dispatchEvent(new x.w.Event('touchend', {bubbles: true}));
+        return xy;
+    };
+    const syntheticMouse = (x, sel, xy) => {          // 浏览器在手机点按后补发的那一串（MouseEvent，无 pointerType）
+        const el = x.w.document.querySelector(sel);
+        for (const type of ['mouseover', 'mousemove', 'mousedown', 'mouseup']) {
+            el.dispatchEvent(new x.w.MouseEvent(type, {bubbles: true, clientX: xy[0], clientY: xy[1]}));
+        }
+    };
+    const live = (x) => x.timerLog.live.size;
+    const lastOp = (x) => (x.timerLog.ops[x.timerLog.ops.length - 1] || ['无'])[0];
+
+    check('① 续期分支已经加上「刚发生过触摸就不认」的闸门（合成事件不许再把它当成鼠标停在 UI 上）',
+        /type !== 'keydown' && ! touchedRecently\(\) && pointerOverZones\(/.test(code));
+    check('② 时间窗实现：1200ms + 三个 touch 事件都刷新 lastRealTouchAt（capture + passive）',
+        /const UI_TOUCH_GRACE_MS = 1200;/.test(code)
+        && /let lastRealTouchAt = 0;/.test(code)
+        && /const touchedRecently = \(\) => \(Date\.now\(\) - lastRealTouchAt\) < UI_TOUCH_GRACE_MS/.test(code)
+        && ['touchstart', 'touchmove', 'touchend'].every((ev) => code.includes(`document.addEventListener(ev, () => { lastRealTouchAt = Date.now(); }, {capture: true, passive: true})`))
+        && /'touchstart', 'touchmove', 'touchend'\]\.forEach/.test(code));
+    check('③ 触屏/笔的 pointerdown、pointerup 也刷新（且要求 pointerType 不是 mouse —— 触控板鼠标不受影响）',
+        /'pointerdown', 'pointerup'\]\.forEach/.test(code)
+        && /if \(e && e\.pointerType && e\.pointerType !== 'mouse'\) \{ lastRealTouchAt = Date\.now\(\); \}/.test(code));
+
+    // 真跑：四个区域逐个走「手机点一下」的完整序列（他报的三处：文件名 / 工具按钮 / 缩略图条，外加关闭按钮）
+    for (const sel of UI_ZONES) {
+        const x = bootViewerUi();
+        const xy = mobileTap(x, sel);
+        check(`④ 手机点 ${sel}：抬手那一刻排下了收起计时`, live(x) === 1 && lastOp(x) === 'set',
+            `live=${live(x)} last=${lastOp(x)}`);
+        syntheticMouse(x, sel, xy);
+        check(`④ 手机点 ${sel}：随后补发的合成鼠标事件不许清掉它（改前这里 live 会变 0 ⇒ UI 永不收）`,
+            live(x) === 1 && lastOp(x) === 'set',
+            `live=${live(x)} last=${lastOp(x)} ops=${JSON.stringify(x.timerLog.ops.slice(-3))}`);
+        x.dom.window.close();
+    }
+
+    // 真跑：滑动缩略图条（没有合成事件）—— 手指按着不收，抬手才计时，且此后无人清它
+    {
+        const x = bootViewerUi();
+        const el = x.w.document.querySelector('.viewer-navbar li');
+        const xy = x.center('.viewer-navbar');
+        el.dispatchEvent(new x.w.PointerEvent('pointerdown', {bubbles: true, clientX: xy[0], clientY: xy[1], buttons: 1, pointerType: 'touch'}));
+        el.dispatchEvent(new x.w.Event('touchstart', {bubbles: true}));
+        for (let i = 1; i <= 3; i++) { el.dispatchEvent(new x.w.Event('touchmove', {bubbles: true})); }
+        check('⑤ 滑动中（手指按着）不收：没有活着的收起计时器', live(x) === 0, `live=${live(x)}`);
+        el.dispatchEvent(new x.w.Event('touchend', {bubbles: true}));
+        check('⑤ 滑完抬手：排下收起计时（这条本来就正常，别被闸门改坏）', live(x) === 1 && lastOp(x) === 'set', `live=${live(x)}`);
+        x.dom.window.close();
+    }
+
+    // 真跑：桌面鼠标（无任何触摸）停在四块 UI 上仍然只续期 —— 闸门不许误伤桌面
+    {
+        const x = bootViewerUi();
+        for (const sel of UI_ZONES) {
+            const el = x.w.document.querySelector(sel);
+            const xy = x.center(sel);
+            el.dispatchEvent(new x.w.MouseEvent('mousemove', {bubbles: true, clientX: xy[0], clientY: xy[1]}));
+        }
+        check('⑥ 桌面鼠标停在四块 UI 上：只续期、不收（没有活着的收起计时器）', live(x) === 0, `live=${live(x)}`);
+        x.w.document.querySelector('.viewer-canvas').dispatchEvent(
+            new x.w.MouseEvent('mousemove', {bubbles: true, clientX: 195, clientY: 300}));
+        check('⑥ 桌面鼠标移开 UI 到画布：开始计时（原有行为不变）', live(x) === 1 && lastOp(x) === 'set', `live=${live(x)}`);
+        x.dom.window.close();
+    }
+
+    // 真跑：触屏按下后 1.2s 窗口外的真鼠标（如触控板）仍算停在 UI 上 —— 闸门是时间窗，不是永久拉黑
+    {
+        const x = bootViewerUi();
+        const el = x.w.document.querySelector('.viewer-toolbar');
+        const xy = x.center('.viewer-toolbar');
+        el.dispatchEvent(new x.w.PointerEvent('pointerdown', {bubbles: true, clientX: xy[0], clientY: xy[1], buttons: 1, pointerType: 'touch'}));
+        el.dispatchEvent(new x.w.Event('touchend', {bubbles: true}));
+        const realNow = Date.now;
+        Date.now = () => realNow() + 5000;                 // 把表往前拨 5s（窗口外）
+        try {
+            el.dispatchEvent(new x.w.MouseEvent('mousemove', {bubbles: true, clientX: xy[0], clientY: xy[1]}));
+            check('⑦ 时间窗之外的真鼠标停在 UI 上：恢复「只续期」（live=0）',
+                live(x) === 0, `live=${live(x)} last=${lastOp(x)}`);
+        } finally {
+            Date.now = realNow;
+        }
         x.dom.window.close();
     }
 }

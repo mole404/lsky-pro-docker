@@ -495,9 +495,9 @@ console.log('\n[B2] CSS：download 图标整条删除 / 两个自定义键图标
     const cropBody = ruleOf('html .viewer-toolbar > ul > li.viewer-crop:before');
     check('「裁剪」自定义键的图标规则仍在（content + 20×20 盒子）',
         !! cropBody && /content:\s*''/.test(cropBody) && /width:\s*20px/.test(cropBody) && /height:\s*20px/.test(cropBody));
-    check('裁剪图标：14px 内联 SVG + 3px 居中偏移（热区不变）',
-        !! cropBody && /background-size:\s*14px\s+14px/.test(cropBody)
-        && /background-position:\s*3px\s+3px/.test(cropBody)
+    check('裁剪图标：16px 内联 SVG + 2px 居中偏移（热区不变；与库那批图标尺寸统一）',
+        !! cropBody && /background-size:\s*16px\s+16px/.test(cropBody)
+        && /background-position:\s*2px\s+2px/.test(cropBody)
         && /background-image:\s*url\("data:image\/svg\+xml/.test(cropBody));
     const fsBody = ruleOf('html .viewer-toolbar > ul > li.viewer-fullscreen:before');
     check('「全屏」自定义键的图标规则仍在（自定义键同样要补 content + 20×20 盒子）',

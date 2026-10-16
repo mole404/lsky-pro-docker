@@ -242,10 +242,10 @@
             width: 20px;
             height: 20px;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v14a2 2 0 0 0 2 2h14'/%3E%3Cpath d='M18 22V8a2 2 0 0 0-2-2H2'/%3E%3C/svg%3E");
-            /* 图形比盒子小一圈（14px 配 3px 居中偏移）；盒子仍 20×20、按钮仍 24×24 ⇒ 热区不变。 */
-            background-position: 3px 3px;
+            /* 字形 16px 配 2px 居中偏移（与库那批图标统一）；盒子仍 20×20、按钮仍 24×24 ⇒ 热区不变。 */
+            background-position: 2px 2px;
             background-repeat: no-repeat;
-            background-size: 14px 14px;
+            background-size: 16px 16px;
         }
 
         /* 看图器工具栏的「全屏」按钮图标。库 1.10.4 的工具栏里**没有**"只全屏"的键
@@ -257,12 +257,160 @@
             width: 20px;
             height: 20px;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3H5a2 2 0 0 0-2 2v3'/%3E%3Cpath d='M16 3h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M21 16v3a2 2 0 0 1-2 2h-3'/%3E%3Cpath d='M3 16v3a2 2 0 0 0 2 2h3'/%3E%3C/svg%3E");
-            background-position: 3px 3px;
+            background-position: 2px 2px;
             background-repeat: no-repeat;
-            background-size: 14px 14px;
+            background-size: 16px 16px;
         }
         html .viewer-toolbar > ul > li.viewer-fullscreen.is-fs:before {
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v3a2 2 0 0 1-2 2H3'/%3E%3Cpath d='M21 8h-3a2 2 0 0 1-2-2V3'/%3E%3Cpath d='M3 16h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M16 21v-3a2 2 0 0 1 2-2h3'/%3E%3C/svg%3E");
+        }
+
+        /* 工具栏图标：库那 14 个内置键的图标是 viewer.min.css 里内嵌的一张 **280×20 的 1x 位图雪碧图**
+           （每格 20×20，用 background-position:-0/-20/… 切格），高分屏（手机 2x/3x）放大后发糊。
+           这里把其中 12 个键换成与 crop / fullscreen 同款的内联 SVG：24×24 viewBox、无填充、
+           2.5 描边、圆头圆角 —— 矢量图标无论屏幕密度都锐利，且 data URI 内联、不增加请求。
+           盒子：库的 li 是 24×24、:before 有 margin:2px ⇒ :before 盒正好 20×20 居中；字形统一 16px
+           （background-position:2px 2px + background-size:16px 16px），li 仍 24×24 ⇒ 热区不变，
+           只是图标更大更锐。hover 时库只把圆底加深（rgba(0,0,0,.8)）、不做黑白反转 ⇒ 图标保持白色描边。
+
+           「关闭 ×」为什么要写两条选择器：viewer 1.10.4 的关闭按钮 DOM 是
+           <div class="viewer-button" data-viewer-action="mix">，源码里**根本没有** viewer-close 这个类
+           （fork 与上游 npm 包的 viewer.min.js / viewer.js 都确认过）⇒ 库 CSS 里的 .viewer-close:before
+           是永远命不中的死规则，那个圆底此前一直没有图标。所以两条都写着：今天靠
+           [data-viewer-action="mix"] 出图，以后谁给按钮补上 viewer-close 也能接住。两条都只声明
+           content / 盒子 / 背景，库的 .viewer-button:before{bottom:15px;left:15px;position:absolute}
+           原封不动保留 ⇒ × 仍落在右上角那个四分之一圆里。 */
+        html .viewer-toolbar > ul > li.viewer-zoom-in:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5v17'/%3E%3Cpath d='M3.5 12h17'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-zoom-out:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 12h17'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-one-to-one:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.3 8.6L7.4 5.5v14.5'/%3E%3Cpath d='M19.7 8.6L16.6 5.5v14.5'/%3E%3Cpath d='M12 8.85v0.7'/%3E%3Cpath d='M12 14.25v0.7'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-reset:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18.58 8.2A7.6 7.6 0 1 1 12 4.4'/%3E%3Cpath d='M9.4 5.9L12 4.4L9.4 2.9'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-prev:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.8 4.2L8 12L15.8 19.8'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-play:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.8 4.6L17 12L6.8 19.4Z'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-next:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.2 4.2L16 12L8.2 19.8'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-rotate-left:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.5 17.36A7 7 0 1 0 12 5'/%3E%3Cpath d='M14.7 6.55L12 5L14.7 3.45'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-rotate-right:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16.5 17.36A7 7 0 1 1 12 5'/%3E%3Cpath d='M9.3 6.55L12 5L9.3 3.45'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-flip-horizontal:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 12h17'/%3E%3Cpath d='M7.2 8.6L3.5 12L7.2 15.4'/%3E%3Cpath d='M16.8 8.6L20.5 12L16.8 15.4'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-toolbar > ul > li.viewer-flip-vertical:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5v17'/%3E%3Cpath d='M8.6 7.2L12 3.5L15.4 7.2'/%3E%3Cpath d='M8.6 16.8L12 20.5L15.4 16.8'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
+        }
+
+        html .viewer-button.viewer-close:before,
+        html .viewer-button[data-viewer-action="mix"]:before {
+            content: '';
+            display: block;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 3.5L20.5 20.5'/%3E%3Cpath d='M20.5 3.5L3.5 20.5'/%3E%3C/svg%3E");
+            background-position: 2px 2px;
+            background-repeat: no-repeat;
+            background-size: 16px 16px;
         }
 </style>
 @endpush
@@ -1122,6 +1270,24 @@
                     if (html.classList.contains(VIEWER_OPEN_CLASS)) { html.classList.add(UI_IDLE_CLASS); }
                 }, FS_UI_MS);
             };
+            /* 手机"点一下"之后，浏览器还会补发一串合成鼠标事件（mouseover/mousemove/mousedown/mouseup/click），
+             * 坐标正好落在刚点过的那块 UI 上。而下面"指针停在 UI 上就续期"那条判断只看事件类型 + 坐标，
+             * 于是那一发合成 mousemove 会被当成"鼠标还停在工具栏上" ⇒ 把 touchend 排下的收起计时清掉、
+             * 又不排新的 ⇒ 「点过的文件名 / 工具按钮 / 缩略图」就再也不自动收（滑动不算点击、没有合成事件，
+             * 所以照常收）。真机序列在 jsdom 里实测过：touchend 排下 T1/2500ms，紧接着的合成 mousemove 把它清掉。
+             * 闸门：最近 1.2s 内发生过触摸（含笔）⇒ 一律不认"鼠标停在 UI 上"。合成事件总在抬手后几毫秒内到，
+             * 带 300ms 点击延迟的浏览器也在窗口内；桌面鼠标永远不会命中（它不会有 touch 事件）。 */
+            const UI_TOUCH_GRACE_MS = 1200;
+            let lastRealTouchAt = 0;
+            const touchedRecently = () => (Date.now() - lastRealTouchAt) < UI_TOUCH_GRACE_MS;
+            ['touchstart', 'touchmove', 'touchend'].forEach((ev) => {
+                document.addEventListener(ev, () => { lastRealTouchAt = Date.now(); }, {capture: true, passive: true});
+            });
+            ['pointerdown', 'pointerup'].forEach((ev) => {      // 触屏/笔：pointerType 不是 mouse 才算（触控板鼠标不受影响）
+                document.addEventListener(ev, (e) => {
+                    if (e && e.pointerType && e.pointerType !== 'mouse') { lastRealTouchAt = Date.now(); }
+                }, {capture: true, passive: true});
+            });
             const flashViewerUI = (e) => {
                 const html = document.documentElement;
                 const fs = inFullscreenClass();
@@ -1132,9 +1298,9 @@
                     clearTimeout(fsUiTimer);            // 手指还按着 ⇒ 别收
                     return;
                 }
-                if (type !== 'keydown' && pointerOverZones(fs ? FS_UI_ZONES : WINDOWED_UI_ZONES,
+                if (type !== 'keydown' && ! touchedRecently() && pointerOverZones(fs ? FS_UI_ZONES : WINDOWED_UI_ZONES,
                         (e && e.clientX) || 0, (e && e.clientY) || 0)) {
-                    clearTimeout(fsUiTimer);            // 指针停在（该模式的）UI 上 ⇒ 只续期
+                    clearTimeout(fsUiTimer);            // 鼠标停在（该模式的）UI 上 ⇒ 只续期（触屏刚发生 ⇒ 不认，见 touchedRecently）
                     return;
                 }
                 scheduleViewerUiHide();
