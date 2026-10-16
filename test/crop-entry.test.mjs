@@ -1,7 +1,8 @@
 /*
  * 「编辑图片（裁剪）」入口与规则的静态契约测试（不需要浏览器）
- *  + [9]/[10]：把 downloadViewerImage / openFromViewer 从 blade 抠出真身、注入假环境**真跑**
- *    （下载路径此前只有文本断言，审计点名这是缺口）。
+ *  + [10]：把 openFromViewer 从 blade 抠出真身、注入假环境**真跑**
+ *  + [11]：把「UI 自动收起 + 收起状态下第一下点击」那段从 blade 抠出真身，放进 jsdom 里
+ *    用真实 DOM 事件（pointerdown / 库补发的 click）驱动，逐条核对吞不吞那一下。
  *
  * 背景：目标是「看图器里能裁图」，且入口不止一处 —— 看图器工具栏、选中单张时的操作条、
  * 右键/长按菜单都要有「编辑图片」；只有 jpg/jpeg/png 给入口；导出格式跟随原图
@@ -12,6 +13,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { JSDOM } from 'jsdom';
 
 const here = path.dirname(decodeURIComponent(new URL(import.meta.url).pathname));
 const SRC = path.join(here, '..', 'src');
@@ -55,9 +57,10 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
 {
     // ① 看图器工具栏（自定义 toolbar 必须把要用的内置按钮照抄，否则它们会消失）
     // 注意：+ / − （zoom-in / zoom-out）已按要求去掉，原位换成自定义的「全屏」键；
-    // 1:1（one-to-one）与后来的「顶屏」（fit-edge）键也都去掉了，最左那格换成自定义的「下载原图」
-    // ⇒ 自定义键只剩 download / crop / fullscreen，内置键仍是这 8 个。
-    const builtins = ['reset', 'prev', 'play', 'next', 'rotate-left', 'rotate-right', 'flip-horizontal', 'flip-vertical'];
+    // 「1:1」（one-to-one）按「与改动前一致」归位到全屏之后、重置之前；
+    // 「下载原图」整条链路（键 + downloadViewerImage + CSS 图标）已删除
+    // ⇒ 自定义键只剩 crop / fullscreen，内置键是这 9 个（含归位后的 1:1）。
+    const builtins = ['one-to-one', 'reset', 'prev', 'play', 'next', 'rotate-left', 'rotate-right', 'flip-horizontal', 'flip-vertical'];
     const toolbarStart = code.indexOf('toolbar: {');
     // 注意：不能拿第一个 '},' 当结尾 —— crop 那行自己的结尾就是 `},`（它现在排在最前）。
     const toolbarBlock = toolbarStart < 0 ? '' : code.slice(toolbarStart, code.indexOf("'flip-vertical': true", toolbarStart) + 400);
@@ -93,12 +96,10 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
         && code.indexOf('const syncFullscreenIcon') > -1
         && code.indexOf('const syncFullscreenIcon') < code.indexOf('const cropEditor = (function ()'));
     {
-        const dlIdx = toolbarBlock.indexOf('download: {');
         const cropIdx = toolbarBlock.indexOf('crop: {');
         const fsIdx = toolbarBlock.indexOf('fullscreen: {');
-        check('「下载原图」排最左、裁剪其次、全屏第三（看图时最顺手的三个动作在前）',
-            dlIdx > -1 && cropIdx > -1 && fsIdx > -1 && dlIdx < cropIdx && cropIdx < fsIdx,
-            `download@${dlIdx} crop@${cropIdx} fullscreen@${fsIdx}`);
+        check('「裁剪」排最左、「全屏」其次（= 原来 +/− 的位置）',
+            cropIdx > -1 && fsIdx > -1 && cropIdx < fsIdx, `crop@${cropIdx} fullscreen@${fsIdx}`);
         check('工具栏里已无「顶屏」（fit-edge）键', toolbarBlock.indexOf('fit-edge') === -1);
     }
     // 自定义键的画廊图标：库只给 14 个内置键写了规则（含 content 与 20×20 盒子），
@@ -111,25 +112,24 @@ console.log('\n[2] 三处入口都在，且都指向同一个 cropEditor');
         /li\.viewer-fullscreen:before \{[\s\S]{0,500}content: ''[\s\S]{0,500}width: 20px[\s\S]{0,200}height: 20px[\s\S]{0,1200}background-size: 14px 14px;/.test(blade));
     check('全屏时换成「退出全屏」图标（.viewer-fullscreen.is-fs:before 另一张 SVG）',
         /li\.viewer-fullscreen\.is-fs:before \{\s*\n\s*background-image: url\("data:image\/svg\+xml,/.test(blade));
-    // 1:1（one-to-one）与「顶屏」（fit-edge）都已去掉，最左那格换成自定义的「下载原图」键。
-    check('原 1:1 / 顶屏 键都换成自定义「下载原图」键（click 调 downloadViewerImage），工具栏里不再有 one-to-one',
-        /download:\s*\{\s*show:\s*true,\s*click:\s*\(\)\s*=>\s*downloadViewerImage\(\)/.test(toolbarBlock)
-        && !/'one-to-one'/.test(toolbarBlock)
-        && toolbarBlock.indexOf('fit-edge') === -1);
+    // 「1:1」按「与改动前一致」归位（全屏之后、重置之前）；「下载原图」整条链路（键 + 函数 + 图标）已删除。
     {
-        const m = /html\s+\.viewer-toolbar\s*>\s*ul\s*>\s*li\.viewer-download:before\s*\{([\s\S]*?)\}/.exec(blade);
-        const body = m ? m[1] : '';
-        check('「下载原图」键补了图标（content + 20×20 盒子 + 14px 内联 SVG）',
-            /content:\s*''/.test(body) && /width:\s*20px/.test(body) && /height:\s*20px/.test(body)
-            && /background-size:\s*14px\s+14px/.test(body) && /background-image:\s*url\("data:image\/svg\+xml/.test(body));
-        const paths = (body.match(/%3Cpath\b/g) || []).length;
-        check('下载图标是「下箭头 + 底线」3 条 path', paths === 3, `path ${paths} 条`);
+        const fsIdx = toolbarBlock.indexOf('fullscreen:');
+        const otoIdx = toolbarBlock.indexOf("'one-to-one'");
+        const resetIdx = toolbarBlock.indexOf('reset:');
+        check("「1:1」已归位：'one-to-one' 在 fullscreen 之后、reset 之前",
+            otoIdx > -1 && otoIdx > fsIdx && otoIdx < resetIdx, `fs@${fsIdx} one-to-one@${otoIdx} reset@${resetIdx}`);
+        check('「下载原图」键已从工具栏删除（工具栏区间里没有 download 键）',
+            ! /\bdownload\s*:/.test(toolbarBlock));
     }
-    check('downloadViewerImage 定义在 viewer 同级作用域（不然工具栏点了会 is not defined）',
-        /const downloadViewerImage = \(\) => \{/.test(code)
-        && code.indexOf('const downloadViewerImage') > -1
-        && code.indexOf('const downloadViewerImage') < code.indexOf('const cropEditor = (function ()'));
-    check('cropEditor 对外暴露 viewerUrl / infoOf（下载键与裁剪模块共用同一套「当前图」取值口径）',
+    {
+        check('「下载原图」的图标规则已整条删除（全文件不见 .viewer-download）', ! /viewer-download/.test(blade));
+        check('自定义键的图标规则只剩 crop / fullscreen 两条（download 那条没留下空壳）',
+            (blade.match(/li\.viewer-(crop|fullscreen):before/g) || []).length === 2);
+    }
+    check('「下载原图」的实现函数已删除（downloadViewerImage 全文件不见）',
+        ! blade.includes('downloadViewerImage') && ! code.includes('downloadViewerImage'));
+    check('cropEditor 对外暴露 viewerUrl / infoOf（裁剪入口的「当前图」取值口径仍在）',
         /viewerUrl: viewerUrl, infoOf: infoOf \}/.test(code)
         && /const viewerUrl = \(\) => \{[\s\S]{0,400}\.viewer-canvas img/.test(code));
 
@@ -295,9 +295,9 @@ console.log('\n[6] 看图器：全屏观感 / 打开不漏重排 / 缩略图条�
 // ---------------------------------------------------------------- 7. 侧栏上起框 / 全屏操作不消失
 console.log('\n[7] 区域外（侧栏）起框 + 全屏操作期间 UI 不消失');
 {
-    check('② 全屏里鼠标停在 UI 上就不收起（只续期）—— 矩形判定，不依赖 pointer-events；非全屏只看缩略图条',
+    check('② 全屏里鼠标停在 UI 上就不收起（只续期）—— 矩形判定，不依赖 pointer-events；非全屏收的是同样那四块',
         /const FS_UI_ZONES = \['\.viewer-toolbar', '\.viewer-navbar', '\.viewer-title', '\.viewer-button'\]/.test(code)
-        && /const WINDOWED_UI_ZONES = \['\.viewer-navbar'\]/.test(code)
+        && /const WINDOWED_UI_ZONES = \['\.viewer-toolbar', '\.viewer-navbar', '\.viewer-title', '\.viewer-button'\]/.test(code)
         && /const pointerOverZones = \(zones, x, y\) => zones\.some/.test(code)
         && /pointerOverZones\(fs \? FS_UI_ZONES : WINDOWED_UI_ZONES,[\s\S]{0,160}clearTimeout\(fsUiTimer\)/.test(code));
     check('② 手指按住期间不收起，抬起才开始计时（触屏端同样"操作中不消失"）',
@@ -359,15 +359,41 @@ console.log('\n[8] 看图器「点空白」：拖动后不算点击 + 全屏改�
         && /const src = \(e\.detail && e\.detail\.originalEvent\) \|\| e;/.test(code));
     check('⑧ 拦截点是 document 捕获阶段 + 只认 .viewer-canvas（不然会误伤工具栏按钮）',
         /const isCanvas = \(el\) => el instanceof Element && el\.classList\.contains\('viewer-canvas'\)/.test(code)
-        && /addEventListener\('click', \(e\) => \{\n\s*if \(! isCanvas\(e\.target\)\) \{ return; \}[\s\S]{0,9000}\}, true\)/.test(code));
+        && /addEventListener\('click', \(e\) => \{[\s\S]{0,2000}if \(! isCanvas\(e\.target\)\) \{ return; \}[\s\S]{0,9000}\}, true\)/.test(code));
+    check('⑧ 新增的「非全屏 + UI 收着」守卫在 click 捕获处理里、排在 isCanvas 判定之前',
+        (() => {
+            const iDef = code.indexOf('const isCanvas = (el) =>');
+            const iGuard = code.indexOf('if (hiddenAtDown) {');
+            const iCall = code.indexOf('if (! isCanvas(e.target)) { return; }');
+            return iDef > -1 && iGuard > iDef && iCall > iGuard;
+        })());
+    check('⑧ 标记是一次性取值：先读进局部量、随即复位（没有前置 pointerdown 的合成 click 不许沿用旧值）',
+        /const hiddenAtDown = windowedUiHiddenAtDown;[\s\S]{0,240}windowedUiHiddenAtDown = false;/.test(code)
+        && /const downTouch = windowedUiHiddenAtDownTouch;[\s\S]{0,240}windowedUiHiddenAtDownTouch = false;/.test(code));
+    check('⑧ 只有触屏/笔才补排收起（鼠标停在 UI 上时不该被收走）',
+        /windowedUiHiddenAtDownTouch = windowedUiHiddenAtDown[\s\S]{0,160}e\.pointerType === 'touch' \|\| e\.pointerType === 'pen'/.test(code)
+        && /if \(downTouch\) \{ scheduleViewerUiHide\(\); \}/.test(code));
     check('⑧ 触屏也记"拖动"（pointermove 在部分安卓上会被 preventDefault 吃掉）',
         /addEventListener\('touchmove'[\s\S]{0,220}dragged = true/.test(code));
 }
 
-// ---------------------------------------------------------------- 9. 「下载原图」执行型（真跑）
-// 审计点名的缺口：下载路径此前只有「源码文本」断言。这里把 downloadViewerImage / openFromViewer 从 blade
-// 里按花括号配对抠出真身（不手抄），用 new Function 注入假 document / location / navigator / toastr / cropEditor
-// 直接跑，逐条核对 <a> 的下载属性、toastr 条数与内容、异常 URL（换行/反斜杠）的反查是否还能命中。
+// ---------------------------------------------------------------- 9. 「下载原图」已彻底移除
+console.log('\n[9] 「下载原图」整条链路已移除（键 / 函数 / 图标 / 提示语 都钉住）');
+{
+    const tbStart = code.indexOf('toolbar: {');
+    const toolbar = tbStart < 0 ? '' : code.slice(tbStart, code.indexOf("'flip-vertical': true", tbStart) + 400);
+    check('工具栏区间里没有 download 键', !! toolbar && ! /\bdownload\s*:/.test(toolbar));
+    check('全文件没有 downloadViewerImage（定义或调用都没有）',
+        ! blade.includes('downloadViewerImage') && ! code.includes('downloadViewerImage'));
+    check('CSS 里没有 .viewer-download 图标规则（连空壳都没留）', ! blade.includes('viewer-download'));
+    check('页面上没有残留的「下载原图」文案（注释之外）', ! code.includes('下载原图'));
+    check('下载路径专用的跨域提示也没留下（原图在新标签页打开）', ! code.includes('原图在新标签页打开'));
+    check('下载路径专用的 iOS 提示也没留下（存储到照片）', ! code.includes('存储到照片'));
+}
+
+// ---------------------------------------------------------------- 10. 裁剪入口的反查同源行为（真跑）
+// 把 openFromViewer 从 blade 里按花括号配对抠出真身（不手抄），用 new Function 注入假
+// document / toastr / open 直接跑，逐条核对「命中 / 兜底 / 空图」三条路径。
 function extractArrowFn(text, name) {
     const marker = `const ${name} = `;
     const start = text.indexOf(marker);
@@ -387,15 +413,11 @@ const IMAGES_ITEM_VAL = (/const IMAGES_ITEM = '([^']+)';/.exec(blade) || [null, 
 const GALLERY_HREF = 'https://gallery.example.com/#/user/images';
 const GALLERY_ORIGIN = 'https://gallery.example.com';
 const UA_DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
-const UA_IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1';
-const SAME_URL = 'https://gallery.example.com/storage/2026/10/IMG_0001.HEIC';
-const CARD_NAME = 'IMG_0001.HEIC';
 const CROSS_URL = 'https://cdn.other.example.com/storage/2026/10/IMG_0002.jpg';
 const CROSS_HINT = '原图在新标签页打开';
 const IOS_HINT = '存储到照片';
 
-// 假环境：document（querySelectorAll 返回带 getAttribute 的假元素、createElement 造出假 <a>）、
-// location、navigator、toastr、cropEditor（viewerUrl 给指定 url、infoOf 与真身同一套契约）。
+// 假环境：document（querySelectorAll 返回带 getAttribute 的假元素）、toastr、viewerUrl。
 function makeEnv(opts) {
     const env = {
         url: opts.url,
@@ -403,50 +425,23 @@ function makeEnv(opts) {
             __card: true, __url: c.url, __name: c.name,
             getAttribute: (k) => (k === 'data-original' ? c.url : null),
         })),
-        created: [], appended: [], selector: null,
-        toastrCalls: [], infoArgs: [], opened: [], threw: null,
+        selector: null,
+        toastrCalls: [], opened: [], threw: null,
     };
     env.doc = {
         querySelectorAll(sel) { env.selector = sel; return env.els; },
-        createElement(tag) {
-            const el = { tag: tag, href: '', clicked: false, removed: false,
-                click() { el.clicked = true; }, remove() { el.removed = true; } };
-            env.created.push(el);
-            return el;
-        },
-        body: { appendChild(el) { env.appended.push(el); return el; } },
     };
     env.toastr = {
         warning: (m) => env.toastrCalls.push(['warning', m]),
         info: (m) => env.toastrCalls.push(['info', m]),
     };
-    env.location = { href: opts.href || GALLERY_HREF, origin: opts.origin || GALLERY_ORIGIN };
-    env.navigator = { userAgent: opts.ua || UA_DESKTOP };
     env.open = (item) => env.opened.push(item);
-    env.cropEditor = {
-        viewerUrl: () => opts.url,
-        // 与真身同一套契约：卡片元素 → 卡片的 origin_name；纯 {url} 兜底对象 → name 为空串
-        infoOf: (item) => {
-            env.infoArgs.push(item);
-            if (item && item.__card) { return { url: item.__url, name: item.__name }; }
-            return { url: (item && item.url) || '', name: (item && item.name) || '' };
-        },
-    };
-    env.a = () => env.created[0];
+    env.viewerUrl = () => opts.url;
     env.toasts = () => env.toastrCalls.map((c) => c[0] + ':' + c[1]);
-    env.hasToast = (needle) => env.toastrCalls.some((c) => String(c[1]).includes(needle));
-    env.runDownload = () => {
-        try {
-            const fn = new Function('cropEditor', 'toastr', 'document', 'location', 'navigator', 'IMAGES_ITEM',
-                `${dlSrc};\nreturn downloadViewerImage;`)(env.cropEditor, env.toastr, env.doc, env.location, env.navigator, IMAGES_ITEM_VAL);
-            fn();
-        } catch (e) { env.threw = e; }
-        return env;
-    };
     env.runOpenFromViewer = (viewerUrlFn) => {
         try {
             const fn = new Function('viewerUrl', 'open', 'toastr', 'document', 'IMAGES_ITEM',
-                `${ovSrc};\nreturn openFromViewer;`)(viewerUrlFn || (() => env.url), env.open, env.toastr, env.doc, IMAGES_ITEM_VAL);
+                `${ovSrc};\nreturn openFromViewer;`)(viewerUrlFn || env.viewerUrl, env.open, env.toastr, env.doc, IMAGES_ITEM_VAL);
             fn();
         } catch (e) { env.threw = e; }
         return env;
@@ -454,143 +449,9 @@ function makeEnv(opts) {
     return env;
 }
 
-let dlSrc = '', ovSrc = '';
-try { dlSrc = extractArrowFn(blade, 'downloadViewerImage'); } catch (e) { /* 下面断言报错 */ }
+let ovSrc = '';
 try { ovSrc = extractArrowFn(blade, 'openFromViewer'); } catch (e) { /* 下面断言报错 */ }
 
-console.log('\n[9] 「下载原图」真跑：同源 / 跨域 / iOS / 异常 URL / blob / data / 反查未命中');
-{
-    check('从 blade 里抠到 downloadViewerImage 真身（未手抄）',
-        dlSrc.startsWith('const downloadViewerImage = '), dlSrc.slice(0, 44).replace(/\n/g, ' '));
-    check('从 blade 里抠到 openFromViewer 真身（未手抄）',
-        ovSrc.startsWith('const openFromViewer = '), ovSrc.slice(0, 36).replace(/\n/g, ' '));
-    check('IMAGES_ITEM 按源码原值取用（反查选择器对比的就是它）', IMAGES_ITEM_VAL === '.images-item',
-        `IMAGES_ITEM=${JSON.stringify(IMAGES_ITEM_VAL)}`);
-
-    // a) 同源 + 命中卡片 ⇒ download = info.name、无 target/rel、无 toastr
-    {
-        const env = makeEnv({ url: SAME_URL, cards: [{ url: SAME_URL, name: CARD_NAME }] }).runDownload();
-        const a = env.a() || {};
-        check('a) 同源 + 命中卡片：不抛异常', env.threw === null, env.threw ? env.threw.message : 'null');
-        check('a) 反查真命中那张卡片（infoOf 拿到的实参就是卡片元素本身）',
-            env.infoArgs.length === 1 && env.infoArgs[0] === env.els[0],
-            `infoArgs[0]===card? ${env.infoArgs[0] === env.els[0]}`);
-        check('a) 反查选择器是常量（URL 没被拼进选择器）',
-            env.selector === IMAGES_ITEM_VAL + ' img[data-original]', `selector=${env.selector}`);
-        check('a) a.download === 卡片文件名', a.download === CARD_NAME, `download=${JSON.stringify(a.download)}`);
-        check('a) 不设 target / rel', ! ('target' in a) && ! ('rel' in a), `target=${a.target} rel=${a.rel}`);
-        check('a) 一条 toastr 都没有', env.toastrCalls.length === 0, JSON.stringify(env.toasts()));
-        check('a) a.href 就是当前图直链，append → click → remove 都走完',
-            a.href === SAME_URL && a.clicked === true && a.removed === true && env.appended[0] === a,
-            `href=${a.href} clicked=${a.clicked} removed=${a.removed}`);
-    }
-
-    // b) 跨域 + 命中卡片 ⇒ target=_blank / rel=noopener、无 download、恰一条跨域 toastr
-    {
-        const env = makeEnv({ url: CROSS_URL, cards: [{ url: CROSS_URL, name: CARD_NAME }] }).runDownload();
-        const a = env.a() || {};
-        check('b) 跨域 + 命中卡片：不抛异常', env.threw === null, env.threw ? env.threw.message : 'null');
-        check('b) target === \'_blank\'', a.target === '_blank', `target=${a.target}`);
-        check('b) rel === \'noopener\'', a.rel === 'noopener', `rel=${a.rel}`);
-        check('b) 不设 download（跨域下它本来也不生效，得改成新标签打开）',
-            ! ('download' in a), `download=${JSON.stringify(a.download)}`);
-        check('b) 恰好一条 toastr', env.toastrCalls.length === 1, JSON.stringify(env.toasts()));
-        check('b) 那条是跨域提示（不是 iOS 那条）',
-            env.hasToast(CROSS_HINT) && ! env.hasToast(IOS_HINT), JSON.stringify(env.toasts()));
-    }
-
-    // c) 跨域 + iOS UA ⇒ 仍只出跨域那条（互斥优先级）
-    {
-        const env = makeEnv({ url: CROSS_URL, cards: [{ url: CROSS_URL, name: CARD_NAME }], ua: UA_IOS }).runDownload();
-        check('c) 跨域 + iOS UA：只出一条 toastr', env.toastrCalls.length === 1, JSON.stringify(env.toasts()));
-        check('c) 出的是跨域那条，不是 iOS 那条（两条不再叠成一串）',
-            env.hasToast(CROSS_HINT) && ! env.hasToast(IOS_HINT), JSON.stringify(env.toasts()));
-    }
-
-    // d) 同源 + iOS UA ⇒ 只出 iOS 那条
-    {
-        const env = makeEnv({ url: SAME_URL, cards: [{ url: SAME_URL, name: CARD_NAME }], ua: UA_IOS }).runDownload();
-        const a = env.a() || {};
-        check('d) 同源 + iOS UA：只出一条 toastr', env.toastrCalls.length === 1, JSON.stringify(env.toasts()));
-        check('d) 出的是 iOS 那条（含「存储到照片」），不是跨域那条',
-            env.hasToast(IOS_HINT) && ! env.hasToast(CROSS_HINT), JSON.stringify(env.toasts()));
-        check('d) iOS 上照样给 download（iOS 13+ 支持，所以措辞只说「若没保存」）',
-            a.download === CARD_NAME && ! ('target' in a), `download=${JSON.stringify(a.download)}`);
-    }
-
-    // e) URL 含换行 / 结尾反斜杠 / 中间反斜杠 ⇒ 不抛异常且反查仍命中
-    {
-        const WEIRD = [
-            ['URL 含换行', 'https://gallery.example.com/storage/a\nb.HEIC'],
-            ['URL 结尾是反斜杠', 'https://gallery.example.com/storage/name\\'],
-            ['URL 中间是反斜杠', 'https://gallery.example.com/storage/a\\b.HEIC'],
-        ];
-        check('e) 前置：三条 URL 真的各带换行 / 结尾反斜杠 / 中间反斜杠',
-            WEIRD[0][1].includes('\n') && WEIRD[1][1].endsWith('\\') && WEIRD[2][1].includes('\\b'),
-            `len=${WEIRD.map((w) => w[1].length).join('/')}`);
-        for (const [label, u] of WEIRD) {
-            const env = makeEnv({ url: u, cards: [{ url: u, name: 'weird.png' }] }).runDownload();
-            const a = env.a() || {};
-            check(`e) ${label}：不抛异常（旧写法拼选择器会在这里抛 SyntaxError）`,
-                env.threw === null, env.threw ? env.threw.message : 'null');
-            check(`e) ${label}：反查命中卡片 ⇒ download=weird.png`, a.download === 'weird.png',
-                `download=${JSON.stringify(a.download)}`);
-            check(`e) ${label}：选择器是常量（URL 一个字都没进选择器）`,
-                env.selector === IMAGES_ITEM_VAL + ' img[data-original]', `selector=${env.selector}`);
-            check(`e) ${label}：同源 ⇒ 不设 target/rel`, ! ('target' in a) && ! ('rel' in a),
-                `target=${a.target} rel=${a.rel}`);
-        }
-    }
-
-    // f) 同源但反查不到卡片 ⇒ download 为空串（不是字符串 'undefined'）
-    {
-        const env = makeEnv({ url: SAME_URL, cards: [{ url: 'https://gallery.example.com/storage/other.jpg', name: 'other.jpg' }] }).runDownload();
-        const a = env.a() || {};
-        check('f) 同源但反查不到卡片：不抛异常', env.threw === null, env.threw ? env.threw.message : 'null');
-        check('f) infoOf 拿到的是兜底对象 {url}（不是卡片元素）',
-            env.infoArgs.length === 1 && env.infoArgs[0] !== env.els[0] && env.infoArgs[0].url === SAME_URL,
-            `arg.url=${env.infoArgs[0] && env.infoArgs[0].url}`);
-        check('f) 兜底对象只有 url 一个字段（name 交给 infoOf 推）',
-            Object.keys(env.infoArgs[0] || {}).join(',') === 'url', Object.keys(env.infoArgs[0] || {}).join(','));
-        check("f) a.download === ''（空串，不写字符串 'undefined'）",
-            a.download === '' && typeof a.download === 'string', `download=${JSON.stringify(a.download)}`);
-        check('f) 同源且非 iOS ⇒ 无 toastr', env.toastrCalls.length === 0, JSON.stringify(env.toasts()));
-    }
-
-    // g) blob: / data: ⇒ 按同源处理（给 download、不给 target）
-    {
-        const BLOB = 'blob:https://cdn.other.example.com/9a8b7c6d';
-        const DATA = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
-        check('g) 前置：blob 的内层 origin 是外部域、data 的 origin 是 "null"（不加协议放行就会误判成跨域）',
-            new URL(BLOB).origin !== GALLERY_ORIGIN && new URL(DATA).origin === 'null',
-            `blob.origin=${new URL(BLOB).origin} data.origin=${new URL(DATA).origin}`);
-        for (const [label, u, name] of [['blob:', BLOB, 'blob-name.png'], ['data:', DATA, 'data-name.png']]) {
-            const env = makeEnv({ url: u, cards: [{ url: u, name: name }] }).runDownload();
-            const a = env.a() || {};
-            check(`g) ${label} 按同源处理：不抛异常`, env.threw === null, env.threw ? env.threw.message : 'null');
-            check(`g) ${label} 给 download（= 卡片文件名）、不给 target/rel`,
-                a.download === name && ! ('target' in a) && ! ('rel' in a),
-                `download=${JSON.stringify(a.download)} target=${a.target} rel=${a.rel}`);
-            check(`g) ${label} 无 toastr（没被当成跳域）`, env.toastrCalls.length === 0, JSON.stringify(env.toasts()));
-        }
-    }
-
-    // 源码层面把这几条改动钉住（执行断言之外，防止「改回拼选择器/单条 toastr」的回归）
-    const dlCode = dlSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    const ovCode = ovSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    check('源码：两处反查都是 Array.prototype.find.call + 常量选择器（不拼 URL、不做 replace）',
-        /Array\.prototype\.find\.call\(\s*document\.querySelectorAll\(IMAGES_ITEM \+ ' img\[data-original\]'\),/.test(dlCode)
-        && /Array\.prototype\.find\.call\(\s*document\.querySelectorAll\(IMAGES_ITEM \+ ' img\[data-original\]'\),/.test(ovCode)
-        && ! /data-original="/.test(dlCode) && ! /data-original="/.test(ovCode)
-        && ! /\.replace\(/.test(dlCode) && ! /\.replace\(/.test(ovCode));
-    check('源码：sameOrigin 放行 blob:/data:（origin 为 null 时不被误判成跳域）',
-        /abs\.origin === location\.origin \|\| \/\^\(blob\|data\):\$\/\.test\(abs\.protocol\)/.test(dlCode));
-    check("源码：download 写 info.name || ''（不把 undefined 写进去）", /a\.download = info\.name \|\| '';/.test(dlCode));
-    check('源码：两条提示互斥且跳域优先（if (! sameOrigin) … else if (isIOS)）',
-        /if \(! sameOrigin\) \{[\s\S]{0,220}toastr\.info\('原图在新标签页打开[\s\S]{0,320}\} else if \(isIOS\) \{[\s\S]{0,220}toastr\.info\(/.test(dlCode));
-}
-
-// ---------------------------------------------------------------- 10. 裁剪入口的反查同源行为（真跑）
 console.log('\n[10] 看图器「裁剪」入口 openFromViewer 真跑：异常 URL 不抛异常 + 命中 / 兜底 / 空图');
 {
     const NL_URL = 'https://gallery.example.com/storage/a\nb.HEIC';
@@ -627,11 +488,216 @@ console.log('\n[10] 看图器「裁剪」入口 openFromViewer 真跑：异常 U
             env.toastrCalls.length === 1 && env.toastrCalls[0][0] === 'warning' && env.opened.length === 0,
             JSON.stringify(env.toasts()));
     }
+}
+
+// ---------------------------------------------------------------- 11. 非全屏 UI 收起时的「第一下点击」（jsdom 真跑）
+// 把 blade 里「UI 自动收起 + 第一下点击守卫」那一整段（常量、pointerOverZones、flashViewerUI、
+// scheduleViewerUiHide、windowedUiHiddenAtDown 记录器、第八轮那个 IIFE）按位置抠出来，注入 jsdom 的
+// document / Element **直接运行**，再用真实 DOM 事件（PointerEvent / 库补发的 CustomEvent click）驱动。
+// 库那一侧用一个注册在 .viewer-container 冒泡阶段的监听代理（与压缩产物里 wt(viewer, 'click', ...) 的
+// 落点一致）：点在缩略图上 ⇒ 记一次 view（库会切图）；点在画布上 ⇒ 记一次 close（库会关掉看图器）。
+console.log('\n[11] 收起状态下的第一下点击：真 DOM 事件驱动（jsdom）');
+const UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];
+const UI_RECTS = {
+    '.viewer-toolbar': { left: 100, top: 8, right: 290, bottom: 48 },
+    '.viewer-navbar': { left: 0, top: 600, right: 390, bottom: 660 },   // 390px 视口下的缩略图条
+    '.viewer-title': { left: 8, top: 24, right: 120, bottom: 48 },
+    '.viewer-button': { left: 350, top: 8, right: 382, bottom: 40 },
+};
+const IDLE_SRC = (() => {
+    const a = blade.indexOf("const VIEWER_OPEN_CLASS = 'ls-viewer-open';");
+    const b = blade.indexOf('/* 点背景 / 按 × 关掉看图器时', a);
+    return (a >= 0 && b > a) ? blade.slice(a, b) : '';
+})();
+
+function bootViewerUi() {
+    const dom = new JSDOM(`<!DOCTYPE html><html class="ls-viewer-open"><body>
+        <div class="viewer-container">
+            <div class="viewer-canvas"><img alt="cur"></div>
+            <ul class="viewer-toolbar"><li class="viewer-crop"></li></ul>
+            <ul class="viewer-navbar"><li class="thumb">thumb</li></ul>
+            <div class="viewer-title">t</div>
+            <button class="viewer-button"></button>
+        </div></body></html>`, { pretendToBeVisual: true });
+    const w = dom.window;
+    Object.defineProperty(w, 'innerWidth', { value: 390, configurable: true });      // 手机宽度
+    // jsdom 不做布局 ⇒ 矩形要自己钉（pointerOverZones 要求 width/height > 0）
+    for (const sel of UI_ZONES) {
+        const el = w.document.querySelector(sel);
+        const r = UI_RECTS[sel];
+        el.getBoundingClientRect = () => ({ ...r, width: r.right - r.left, height: r.bottom - r.top, x: r.left, y: r.top });
+    }
+    // 库那一侧的 click 处理（冒泡阶段，与库里 wt(viewer, 'click', ...) 的落点一致）
+    const lib = [];
+    w.document.querySelector('.viewer-container').addEventListener('click', (e) => {
+        const thumb = e.target.closest && e.target.closest('.viewer-navbar li');
+        lib.push(thumb ? 'view' : 'close');
+    });
+    // 真跑被测代码：抠出来的原文整段塞进去，只用 jsdom 的 document / Element
+    // 计时器换成记账版：用来断言「触屏唤醒后确实补排了一次 2500ms 的收起」，不必真等 2.5s
+    const timerLog = { set: [], clear: [] };
+    const api = new Function('document', 'Element', 'setTimeout', 'clearTimeout',
+        IDLE_SRC + '\n' + 'return { zones: WINDOWED_UI_ZONES, fsZones: FS_UI_ZONES, hiddenAtDown: () => windowedUiHiddenAtDown, downTouch: () => windowedUiHiddenAtDownTouch };')(
+        w.document, w.Element,
+        (fn, ms) => { timerLog.set.push(ms); return w.setTimeout(fn, ms); },
+        (id) => { timerLog.clear.push(id); return w.clearTimeout(id); });
+    const center = (sel) => {
+        const r = UI_RECTS[sel];
+        return [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
+    };
+    const fire = (sel, xy, kind, libClick, pointerType) => {
+        const el = w.document.querySelector(sel);
+        if (kind === 'click') {
+            el.dispatchEvent(libClick
+                // 库里那条链路：pointerup 时若目标是画布，它向画布补发一个 CustomEvent('click')，
+                // 坐标在 detail.originalEvent 里（不在 e.clientX 上）
+                ? new w.CustomEvent('click', { bubbles: true, detail: { originalEvent: { clientX: xy[0], clientY: xy[1] } } })
+                : new w.MouseEvent('click', { bubbles: true, clientX: xy[0], clientY: xy[1] }));
+        } else {
+            el.dispatchEvent(new w.PointerEvent('pointerdown', {
+                bubbles: true, clientX: xy[0], clientY: xy[1], buttons: 1,
+                pointerType: pointerType || 'mouse',       // 真机一定是 mouse/touch/pen 之一
+            }));
+        }
+    };
+    return {
+        dom, w, lib, api, center, fire,
+        html: w.document.documentElement,
+        idle: () => w.document.documentElement.classList.contains('ls-ui-idle'),
+        timerLog,
+        // 「收起时按在 UI 上」的完整链路：指针落在画布（收起时 UI 不接指针）→ 库补发 click 到画布
+        tapHiddenZone: (sel) => {
+            const xy = center(sel);
+            fire('.viewer-canvas', xy, 'pointerdown');
+            fire('.viewer-canvas', xy, 'click', true);
+        },
+    };
+}
+
+{
+    check('抠到「UI 收起 + 第一下点击」那段真身（未手抄）',
+        IDLE_SRC.length > 3000 && IDLE_SRC.includes('const pointerOverZones')
+        && IDLE_SRC.includes('let windowedUiHiddenAtDown = false;') && IDLE_SRC.includes('if (! isCanvas(e.target))'),
+        `${IDLE_SRC.length} 字符`);
+    check('抠出来的那段和源码里那四块常量对得上（真跑的就是生产代码）',
+        IDLE_SRC.includes("const WINDOWED_UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button']"));
+
+    // ① 非全屏 + ls-ui-idle + 落在缩略图条矩形内（pointer-events:none ⇒ 命中的是画布）
     {
-        const env = makeEnv({ url: '', cards: [] }).runDownload();
-        check('⑩ 下载键：当前图为空 ⇒ 只弹一条 warning、不建 <a>',
-            env.toastrCalls.length === 1 && env.toastrCalls[0][0] === 'warning' && env.created.length === 0,
-            JSON.stringify(env.toasts()));
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        check('① 前置：非全屏（无 .ls-viewer-fs）+ 看图器开着 + UI 已收起',
+            ! x.html.classList.contains('ls-viewer-fs') && x.html.classList.contains('ls-viewer-open') && x.idle());
+        const xy = x.center('.viewer-navbar');
+        x.fire('.viewer-canvas', xy, 'pointerdown');
+        check('① 按下这一下就把「刚才还收着」记下来了（记录器确实排在刷新 UI 的名单之前）',
+            x.api.hiddenAtDown() === true);
+        check('① 同一个 pointerdown 也把 ls-ui-idle 摘掉 ⇒ UI 立刻淡回来（唤出）', x.idle() === false);
+        check('① 记录器读到的四块矩形表就是生产代码里那份',
+            Array.isArray(x.api.zones) && x.api.zones.join('|') === UI_ZONES.join('|'), `zones=${x.api.zones}`);
+        x.fire('.viewer-canvas', xy, 'click', true);
+        check('① 库的 click 回调一次都没被调到（stopPropagation 真生效）', x.lib.length === 0, JSON.stringify(x.lib));
+        check('① 那一下也没被当成「点空白退出」（既不切图也不关看图器）',
+            ! x.lib.includes('view') && ! x.lib.includes('close'));
+        x.fire('.viewer-navbar li', xy, 'pointerdown');
+        check('① UI 已可见后再按一下，记录器回到 false（每次按下都重算，不是一次性的）',
+            x.api.hiddenAtDown() === false);
+        x.dom.window.close();
+    }
+
+    // ② 触屏唤醒后自己排一次收起（鼠标只续期）；标记一次性
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        const xy = x.center('.viewer-navbar');
+        x.fire('.viewer-canvas', xy, 'pointerdown', false, 'touch');
+        check('② 触屏按下：记下「刚才收着」且认得出是触屏', x.api.hiddenAtDown() === true && x.api.downTouch() === true);
+        x.timerLog.set.length = 0;
+        x.fire('.viewer-canvas', xy, 'click', true);
+        check('② 触屏收起态点底部：吞掉那一下 + 补排一次 2500ms 的收起（否则 UI 会一直挂着）',
+            x.lib.length === 0 && x.timerLog.set.length === 1 && x.timerLog.set[0] === 2500,
+            `lib=${JSON.stringify(x.lib)} timers=${JSON.stringify(x.timerLog.set)}`);
+        x.dom.window.close();
+    }
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        const xy = x.center('.viewer-navbar');
+        x.fire('.viewer-canvas', xy, 'pointerdown', false, 'mouse');
+        check('② 鼠标按下：同样记下「刚才收着」，但不判为触屏', x.api.hiddenAtDown() === true && x.api.downTouch() === false);
+        x.timerLog.set.length = 0;
+        x.fire('.viewer-canvas', xy, 'click', true);
+        check('② 鼠标收起态点底部：也吞掉那一下，但只续期、不补排（指针停在 UI 上不该被收走）',
+            x.lib.length === 0 && x.timerLog.set.length === 0,
+            `lib=${JSON.stringify(x.lib)} timers=${JSON.stringify(x.timerLog.set)}`);
+        x.dom.window.close();
+    }
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        const xy = x.center('.viewer-navbar');
+        x.fire('.viewer-canvas', xy, 'pointerdown', false, 'mouse');
+        x.fire('.viewer-canvas', xy, 'click', true);          // 第一次：被吞
+        check('② 第一次确实被吞了', x.lib.length === 0, JSON.stringify(x.lib));
+        x.fire('.viewer-canvas', xy, 'click', true);          // 没有前置 pointerdown 的合成 click
+        check('② 一次性：合成 click 不再沿用旧标记（否则会被当成第二次「第一下」再吞一次）',
+            x.lib.includes('close'), JSON.stringify(x.lib));
+        x.dom.window.close();
+    }
+
+    // ② UI 可见时点缩略图 ⇒ 照常切图
+    {
+        const x = bootViewerUi();
+        const xy = x.center('.viewer-navbar');
+        x.fire('.viewer-navbar li', xy, 'pointerdown');
+        x.fire('.viewer-navbar li', xy, 'click');
+        check('② UI 可见时点缩略图：库的 view 照常被调到（没被守卫吞掉）',
+            x.lib.length === 1 && x.lib[0] === 'view', JSON.stringify(x.lib));
+        x.dom.window.close();
+    }
+
+    // ③ UI 可见时点画布空白 ⇒ 照常退出看图器
+    {
+        const x = bootViewerUi();
+        x.fire('.viewer-canvas', [195, 300], 'pointerdown');
+        x.fire('.viewer-canvas', [195, 300], 'click');
+        check('③ UI 可见时点画布空白：库收到 close（原有「点空白退出」没被破坏）',
+            x.lib.length === 1 && x.lib[0] === 'close', JSON.stringify(x.lib));
+        x.dom.window.close();
+    }
+
+    // ④ 全屏点空白 ⇒ 只唤出，不退出
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-viewer-fs');
+        x.fire('.viewer-canvas', [195, 300], 'pointerdown');
+        check('④ 全屏下记录器恒为 false（③ 只管非全屏，全屏仍走它自己那条分支）',
+            x.api.hiddenAtDown() === false);
+        x.fire('.viewer-canvas', [195, 300], 'click');
+        check('④ 全屏点空白：库没收到 close（不许关掉看图器）', x.lib.length === 0, JSON.stringify(x.lib));
+        check('④ 同时把 UI 唤出来（加了 ls-fs-ui）', x.html.classList.contains('ls-fs-ui'));
+        x.dom.window.close();
+    }
+
+    // ⑤ 收起状态下点在四块之外 ⇒ 该退还是退（守卫只认那几块矩形，没有扩大成整屏）
+    {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        x.fire('.viewer-canvas', [195, 300], 'pointerdown');     // 画布中部：四块都不覆盖
+        x.fire('.viewer-canvas', [195, 300], 'click', true);
+        check('⑤ UI 收着时点四块之外：库照常收到 close（守卫没把整屏都吞掉）',
+            x.lib.length === 1 && x.lib[0] === 'close', JSON.stringify(x.lib));
+        x.dom.window.close();
+    }
+
+    // ⑥ 四块逐块真跑：收起时落在任何一块矩形里的第一下都被吞掉
+    for (const sel of UI_ZONES) {
+        const x = bootViewerUi();
+        x.html.classList.add('ls-ui-idle');
+        x.tapHiddenZone(sel);
+        check(`⑥ 收起时落在 ${sel} 矩形内的第一下：被吞掉且 UI 被唤出`,
+            x.lib.length === 0 && x.idle() === false, `lib=${JSON.stringify(x.lib)} idle=${x.idle()}`);
+        x.dom.window.close();
     }
 }
 

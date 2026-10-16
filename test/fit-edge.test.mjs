@@ -7,13 +7,14 @@
  *      贴边那一维的上限夹紧、initialImageData 快照镜像，以及模拟库的 reset() 之后是否仍落回顶屏；
  *      [A12] 专测 isFit 的「完整装下」判据（边界是画布、不是 viewerData）。
  *      （不手抄产品代码：抠出来的是什么就跑什么。）
- *   B. 源码文本 —— 工具栏（download 在最左、fit-edge 已删）、CSS 图标、renderImage 包装
- *      （不再有 fsFitMode 前置条件）、全屏钩子、快照镜像、非全屏自隐、灵敏度常量、重置键没被覆盖。
+ *   B. 源码文本 —— 工具栏（裁剪最左、全屏其次、1:1 已归位、download 整条链路已删）、CSS 图标、renderImage 包装
+ *      （不再有 fsFitMode 前置条件）、全屏钩子、快照镜像、非全屏收起四块、灵敏度常量（390px 视口真算）、重置键没被覆盖。
  *
  * 跑法：cd tree/test && node fit-edge.test.mjs
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { JSDOM } from 'jsdom';
 
 const here = path.dirname(decodeURIComponent(new URL(import.meta.url).pathname));
 const SRC = path.join(here, '..', 'src');
@@ -453,40 +454,67 @@ console.log('\n[A14] 浮点夹紧有区分力：natW*(cw/natW) 会算出 > 画�
 }
 
 // ================================================================ B. 源码文本
-console.log('\n[B1] 工具栏：download 在最左、fit-edge / one-to-one 都已移除、reset 没被覆盖');
+console.log('\n[B1] 工具栏：裁剪最左、全屏其次、1:1 归位、download 整条链路已删除');
 {
     const tbStart = src.indexOf('toolbar: {');
     const tbEnd = src.indexOf('slideOnTouch', tbStart);
     const toolbar = (tbStart >= 0 && tbEnd > tbStart) ? src.slice(tbStart, tbEnd) : '';
     check('定位到工具栏区间', toolbar.length > 200, `toolbar 区间 ${toolbar.length} 字符`);
 
-    const dlKey = /download\s*:\s*\{\s*show:\s*true\s*,\s*click:\s*\(\)\s*=>\s*downloadViewerImage\(\)\s*\}/.exec(toolbar);
-    check("工具栏最左是 download: { show: true, click: () => downloadViewerImage() }", !!dlKey,
-        dlKey ? dlKey[0] : '未匹配');
-
+    const cropIdx = toolbar.indexOf('crop: ');
+    const fsIdx = toolbar.indexOf('fullscreen:');
+    const otoIdx = toolbar.indexOf("'one-to-one': true");
+    const resetIdx = toolbar.indexOf('reset: true');
+    check('最左是「裁剪」自定义键（click 调 cropEditor.openFromViewer）',
+        cropIdx > -1 && /crop:\s*\{\s*show:\s*true,\s*click:\s*\(\)\s*=>\s*cropEditor\.openFromViewer\(\)\s*\}/.test(toolbar),
+        `crop@${cropIdx}`);
+    check('「全屏」紧随「裁剪」之后（= 原来 +/− 的位置）', fsIdx > cropIdx, `crop@${cropIdx} fullscreen@${fsIdx}`);
+    check("「1:1」归位：'one-to-one': true 在 fullscreen 之后、reset 之前",
+        otoIdx > -1 && otoIdx > fsIdx && otoIdx < resetIdx,
+        `fullscreen@${fsIdx} one-to-one@${otoIdx} reset@${resetIdx}`);
+    check("1:1 用的是库内置键的写法（'one-to-one': true，不是自定义对象）", /'one-to-one':\s*true,/.test(toolbar));
+    check('「重置」键没被覆盖：工具栏里仍是 reset: true', resetIdx > -1);
     check('「顶屏」键（fit-edge）已从工具栏移除', ! toolbar.includes('fit-edge'));
     check('fitEdgeNow 这个函数在全文件里也已删掉', ! src.includes('fitEdgeNow'));
-
-    const oneToOneCount = (toolbar.match(/one-to-one/g) || []).length;
-    check('工具栏区间内已无 one-to-one', oneToOneCount === 0, `出现 ${oneToOneCount} 次`);
-    check('全文件都不再有 one-to-one', ! src.includes('one-to-one'));
-
-    check('「重置」键没被覆盖：工具栏里仍是 reset: true', /\breset\s*:\s*true\b/.test(toolbar),
-        (/\breset\s*:\s*true\b/.exec(toolbar) || ['未找到 reset: true'])[0]);
+    check('工具栏里已无 download 键', ! /\bdownload\s*:/.test(toolbar));
+    check('全文件不再有 downloadViewerImage（工具栏回调与函数一起删）', ! src.includes('downloadViewerImage'));
 }
 
-console.log('\n[B2] CSS：li.viewer-download:before 图标规则（原 fit-edge 图标已换掉）');
+console.log('\n[B2] CSS：download 图标整条删除 / 两个自定义键图标仍在 / <style> 花括号配平');
 {
-    const m = /html\s+\.viewer-toolbar\s*>\s*ul\s*>\s*li\.viewer-download:before\s*\{([\s\S]*?)\}/.exec(src);
-    const body = m ? m[1] : '';
-    check('存在 li.viewer-download:before 规则', !!m);
-    check("含 content: ''", /content:\s*''/.test(body));
-    check('20×20 盒子', /width:\s*20px/.test(body) && /height:\s*20px/.test(body));
-    check('background-size: 14px 14px', /background-size:\s*14px\s+14px/.test(body));
-    check('内联 SVG data URI', /background-image:\s*url\("data:image\/svg\+xml/.test(body));
-    const paths = (body.match(/%3Cpath\b/g) || []).length;
-    check('SVG 里有 3 条 path（下箭头 + 底线）', paths === 3, `path ${paths} 条`);
-    check('老的 li.viewer-fit-edge:before 规则已删干净', ! /li\.viewer-fit-edge/.test(src));
+    check('全文件不再有 .viewer-download（图标规则已整条删除）', ! /viewer-download/.test(src));
+    check('老的 li.viewer-fit-edge:before 规则也没回来', ! /li\.viewer-fit-edge/.test(src));
+
+    // 规则体 = 选择器后面第一对花括号之间的内容（不跨规则，够用）
+    const ruleOf = (sel) => {
+        const i = src.indexOf(sel + ' {');
+        if (i < 0) return null;
+        const b = src.indexOf('{', i), e = src.indexOf('}', b);
+        return src.slice(b + 1, e);
+    };
+    const cropBody = ruleOf('html .viewer-toolbar > ul > li.viewer-crop:before');
+    check('「裁剪」自定义键的图标规则仍在（content + 20×20 盒子）',
+        !! cropBody && /content:\s*''/.test(cropBody) && /width:\s*20px/.test(cropBody) && /height:\s*20px/.test(cropBody));
+    check('裁剪图标：14px 内联 SVG + 3px 居中偏移（热区不变）',
+        !! cropBody && /background-size:\s*14px\s+14px/.test(cropBody)
+        && /background-position:\s*3px\s+3px/.test(cropBody)
+        && /background-image:\s*url\("data:image\/svg\+xml/.test(cropBody));
+    const fsBody = ruleOf('html .viewer-toolbar > ul > li.viewer-fullscreen:before');
+    check('「全屏」自定义键的图标规则仍在（自定义键同样要补 content + 20×20 盒子）',
+        !! fsBody && /content:\s*''/.test(fsBody) && /width:\s*20px/.test(fsBody) && /height:\s*20px/.test(fsBody));
+    const fsPaths = fsBody ? (fsBody.match(/%3Cpath\b/g) || []).length : -1;
+    check('全屏图标是「四角」4 条 path', fsPaths === 4, `path ${fsPaths} 条`);
+    check('自定义键的图标规则只剩这两条（download 那条没留下空壳）',
+        (src.match(/li\.viewer-(crop|fullscreen):before/g) || []).length === 2);
+
+    // 上一轮顺手删掉的多余 `}`：对 @push('styles') 的 <style> 段做一次真配平
+    const st0 = src.indexOf("@push('styles')");
+    const st1 = src.indexOf('</style>', st0);
+    const styleBlock = (st0 >= 0 && st1 > st0) ? src.slice(st0, st1) : '';
+    const open = (styleBlock.match(/\{/g) || []).length;
+    const close = (styleBlock.match(/\}/g) || []).length;
+    check("@push('styles') 的 <style> 段花括号配平（改前多一个 `}` 的那个回归）",
+        styleBlock.length > 1000 && open === close, `{=${open} }=${close}`);
 }
 
 console.log('\n[B3] viewer.renderImage 包装：渲染前一律改成顶屏（不再有全屏前置条件）');
@@ -557,34 +585,80 @@ console.log('\n[B5] 顶屏几何镜像进 viewer.initialImageData（库的 reset
         /if \(viewer\.initialImageData && typeof viewer\.initialImageData === 'object'\) \{/.test(body));
 }
 
-console.log('\n[B6] 非全屏自隐：ls-viewer-open / ls-ui-idle 生命周期 + 缩略图条自动隐');
+console.log('\n[B6] 非全屏收起四块：选择器 / 声明 + 与全屏那三条互不干扰');
 {
-    const rule = /html\.ls-viewer-open\.ls-ui-idle:not\(\.ls-viewer-fs\) \.viewer-navbar \{([\s\S]*?)\}/.exec(src);
-    check('CSS 有 html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-navbar 规则', !!rule);
-    {
-        const body = rule ? rule[1] : '';
-        check('该规则只写 opacity: 0，且不写 visibility / pointer-events（条子藏着但仍接指针，落在上面的第一下点击不被白吞）',
-            /opacity:\s*0(?![\d.])/.test(body) && ! /visibility\s*:/.test(body) && ! /pointer-events\s*:/.test(body),
-            body.replace(/\s+/g, ' ').trim().slice(0, 80));
-    }
-    // 全屏那套三条规则仍完整（非全屏这条不许抢它们）
-    {
-        const pick = (re) => { const m = re.exec(src); return m ? m[1] : ''; };
-        const fsHide = pick(/html\.ls-viewer-fs \.viewer-toolbar,[\s\S]*?\{([\s\S]*?)\}/);
-        check('全屏①：默认 opacity: 0 !important + visibility: hidden',
-            /opacity:\s*0\s*!important/.test(fsHide) && /visibility:\s*hidden/.test(fsHide),
-            fsHide.replace(/\s+/g, ' ').trim().slice(0, 80));
-        const fsShow = pick(/html\.ls-viewer-fs\.ls-fs-ui \.viewer-toolbar,[\s\S]*?\{([\s\S]*?)\}/);
-        check('全屏②：.ls-fs-ui 时 opacity: 1 !important + visibility: visible',
-            /opacity:\s*1\s*!important/.test(fsShow) && /visibility:\s*visible/.test(fsShow),
-            fsShow.replace(/\s+/g, ' ').trim().slice(0, 80));
-        const fsPe = pick(/html\.ls-viewer-fs:not\(\.ls-fs-ui\) \.viewer-toolbar,[\s\S]*?\{([\s\S]*?)\}/);
-        check('全屏③：:not(.ls-fs-ui) 时 pointer-events: none',
-            /pointer-events:\s*none/.test(fsPe),
-            fsPe.replace(/\s+/g, ' ').trim().slice(0, 80));
-    }
-    check('配套过渡规则也排除全屏（不抢全屏那三条）',
-        /html\.ls-viewer-open:not\(\.ls-viewer-fs\) \.viewer-navbar \{[\s\S]{0,200}transition:/.test(src));
+    const ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];
+    // 一条规则的「选择器 + 声明体」：从第一行选择器到其后第一对花括号
+    const ruleGroup = (firstSel) => {
+        const i = src.indexOf(firstSel);
+        if (i < 0) return null;
+        const b = src.indexOf('{', i), e = src.indexOf('}', b);
+        return { selectors: src.slice(i, b), body: src.slice(b + 1, e), at: i };
+    };
+    const WIN = 'html.ls-viewer-open:not(.ls-viewer-fs)';
+    const IDLE = 'html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs)';
+    const hasZones = (selectors, prefix) => ZONES.every((z) => selectors.includes(`${prefix} ${z}`));
+    const pick = (re) => { const m = re.exec(src); return m ? m[1] : ''; };
+
+    // ① 过渡规则（四块一起参与者一条）
+    const trans = ruleGroup(`${WIN} .viewer-toolbar,`);
+    check('过渡规则把四块都列上了（工具栏 / 缩略图条 / 文件名行 / 关闭键）',
+        !! trans && hasZones(trans.selectors, WIN), trans ? trans.selectors.replace(/\s+/g, ' ').trim() : '未找到');
+    check('过渡规则只写 transition（不碰 opacity / visibility / pointer-events）',
+        !! trans && /transition:\s*opacity/.test(trans.body)
+        && ! /opacity\s*:/.test(trans.body) && ! /visibility\s*:/.test(trans.body) && ! /pointer-events\s*:/.test(trans.body),
+        trans ? trans.body.replace(/\s+/g, ' ').trim().slice(0, 60) : '');
+    check('过渡规则的选择器排除 .ls-viewer-fs（不抢全屏那三条）', !! trans && trans.selectors.includes(':not(.ls-viewer-fs)'));
+
+    // ② 收起规则（新增：四块 + pointer-events: none）
+    const idleRule = ruleGroup(`${IDLE} .viewer-toolbar,`);
+    check('收起规则把四块都列上了',
+        !! idleRule && hasZones(idleRule.selectors, IDLE), idleRule ? idleRule.selectors.replace(/\s+/g, ' ').trim() : '未找到');
+    check('收起规则写 opacity: 0（淡出，盒子仍在布局里 ⇒ 不重排）',
+        !! idleRule && /opacity:\s*0(?![\d.])/.test(idleRule.body),
+        idleRule ? idleRule.body.replace(/\s+/g, ' ').trim().slice(0, 60) : '');
+    check('★ 收起规则里带 pointer-events: none（看不见的缩略图不许再接住点击）',
+        !! idleRule && /pointer-events:\s*none/.test(idleRule.body));
+    check('收起规则不写 visibility（保持布局与过渡，不闪）',
+        !! idleRule && ! /visibility\s*:/.test(idleRule.body));
+    check('收起规则的选择器也排除 .ls-viewer-fs', !! idleRule && idleRule.selectors.includes(':not(.ls-viewer-fs)'));
+
+    // ③ 全屏那三条：一字未改，且各自四块列全
+    const fsHide = ruleGroup('html.ls-viewer-fs .viewer-toolbar,');
+    check('全屏①：四块列全（默认 UI 全隐）',
+        !! fsHide && hasZones(fsHide.selectors, 'html.ls-viewer-fs'));
+    check('全屏①：默认 opacity: 0 !important + visibility: hidden',
+        !! fsHide && /opacity:\s*0\s*!important/.test(fsHide.body) && /visibility:\s*hidden/.test(fsHide.body),
+        fsHide ? fsHide.body.replace(/\s+/g, ' ').trim().slice(0, 80) : '');
+    const fsShow = ruleGroup('html.ls-viewer-fs.ls-fs-ui .viewer-toolbar,');
+    check('全屏②：四块列全 + .ls-fs-ui 时 opacity: 1 !important + visibility: visible',
+        !! fsShow && hasZones(fsShow.selectors, 'html.ls-viewer-fs.ls-fs-ui')
+        && /opacity:\s*1\s*!important/.test(fsShow.body) && /visibility:\s*visible/.test(fsShow.body),
+        fsShow ? fsShow.body.replace(/\s+/g, ' ').trim().slice(0, 80) : '');
+    const fsPe = ruleGroup('html.ls-viewer-fs:not(.ls-fs-ui) .viewer-toolbar,');
+    check('全屏③：四块列全 + :not(.ls-fs-ui) 时 pointer-events: none',
+        !! fsPe && hasZones(fsPe.selectors, 'html.ls-viewer-fs:not(.ls-fs-ui)')
+        && /pointer-events:\s*none/.test(fsPe.body),
+        fsPe ? fsPe.body.replace(/\s+/g, ' ').trim().slice(0, 80) : '');
+    check('CSS 顺序：全屏三条写在前面、非全屏两条在后面（后面这两条抢不了全屏）',
+        !! fsHide && !! fsShow && !! fsPe && !! trans && !! idleRule
+        && fsHide.at < trans.at && fsShow.at < trans.at && fsPe.at < trans.at
+        && trans.at < idleRule.at);
+    check('全屏那套仍然只走 ls-fs-ui 这一个门（② 是 .ls-fs-ui、③ 是 :not(.ls-fs-ui)）',
+        !! fsShow && fsShow.selectors.includes('html.ls-viewer-fs.ls-fs-ui')
+        && !! fsPe && fsPe.selectors.includes('html.ls-viewer-fs:not(.ls-fs-ui)'));
+
+    // ④ JS：四块常量 + 收起/唤出 + 第一下点击守卫
+    const zones = pick(/const WINDOWED_UI_ZONES = (\[[^\]]*\]);/);
+    const fsZones = pick(/const FS_UI_ZONES = (\[[^\]]*\]);/);
+    check('常量定义齐全：VIEWER_OPEN_CLASS / UI_IDLE_CLASS',
+        /const VIEWER_OPEN_CLASS = 'ls-viewer-open';/.test(src) && /const UI_IDLE_CLASS = 'ls-ui-idle';/.test(src));
+    check('WINDOWED_UI_ZONES 就是那四块（不再是只收缩略图条一条）',
+        zones === "['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button']", `WINDOWED_UI_ZONES=${zones}`);
+    check('两种模式的收起范围一致（WINDOWED_UI_ZONES === FS_UI_ZONES）', zones !== '' && zones === fsZones,
+        `fs=${fsZones}`);
+    check('flashViewerUI 按模式选矩形表（全屏 FS_UI_ZONES / 非全屏 WINDOWED_UI_ZONES）',
+        /pointerOverZones\(fs \? FS_UI_ZONES : WINDOWED_UI_ZONES,[\s\S]{0,160}clearTimeout\(fsUiTimer\)/.test(src));
     check("shown：挂 ls-viewer-open 并排一次收起计时",
         /addEventListener\('shown',[\s\S]{0,200}classList\.add\(VIEWER_OPEN_CLASS\)[\s\S]{0,200}scheduleViewerUiHide\(\)/.test(src));
     check('hidden：两个类一起摘（不把「已收起」留给下一次打开）',
@@ -593,18 +667,82 @@ console.log('\n[B6] 非全屏自隐：ls-viewer-open / ls-ui-idle 生命周期 +
         /const scheduleViewerUiHide = \(\) => \{[\s\S]{0,600}if \(inFullscreenClass\(\)\) \{ html\.classList\.remove\('ls-fs-ui'\); return; \}[\s\S]{0,200}classList\.add\(UI_IDLE_CLASS\)/.test(src));
     check('进出全屏时额外摘一次 ls-ui-idle（与全屏那套 ls-fs-ui 互不干扰）',
         /\['fullscreenchange', 'webkitfullscreenchange'\]\.forEach\([\s\S]{0,200}classList\.remove\(UI_IDLE_CLASS\)/.test(src));
-    check('常量定义齐全：VIEWER_OPEN_CLASS / UI_IDLE_CLASS / WINDOWED_UI_ZONES',
-        /const VIEWER_OPEN_CLASS = 'ls-viewer-open';/.test(src)
-        && /const UI_IDLE_CLASS = 'ls-ui-idle';/.test(src)
-        && /const WINDOWED_UI_ZONES = \['\.viewer-navbar'\];/.test(src));
+    const iRec = src.indexOf('let windowedUiHiddenAtDown = false;');
+    const iFlash = src.indexOf("['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'].forEach");
+    const iGuard = src.indexOf('if (hiddenAtDown) {');
+    const iCanvas = src.indexOf('if (! isCanvas(e.target)) { return; }');
+    check('★ 「按下那一刻收着」的标记在刷新 UI 的监听名单之前注册（否则被自己摘掉，看不出刚才在收）',
+        iRec > 0 && iFlash > iRec, `rec@${iRec} flash@${iFlash}`);
+    check('★ 第一下点击的守卫写在 click 捕获处理的最前面（在 .viewer-canvas 判定之前）',
+        iGuard > 0 && iCanvas > iGuard, `guard@${iGuard} isCanvas@${iCanvas}`);
+    check('守卫内容：矩形命中（四块）⇒ stopPropagation + 唤出 UI + return', (() => {
+        // 用"守卫区间内的出现次序"判，不写容易随注释变脆的长正则
+        const iGuard = src.indexOf('if (hiddenAtDown) {');
+        const iNext = src.indexOf('if (! isCanvas(e.target)) { return; }', iGuard);
+        if (iGuard < 0 || iNext < 0) { return false; }
+        const seg = src.slice(iGuard, iNext);
+        const iPoz = seg.indexOf('pointerOverZones(WINDOWED_UI_ZONES');
+        const iStop = seg.indexOf('e.stopPropagation();');
+        const iFlash = seg.indexOf("flashViewerUI({type: 'click'");
+        const iRet = seg.indexOf('return;');
+        return iPoz > 0 && iStop > iPoz && iFlash > iStop && iRet > iFlash;
+    })());
+    check('守卫是一次性的 + 触屏补排收起（读进局部量后复位；只有 touch/pen 才补排）',
+        /windowedUiHiddenAtDownTouch = windowedUiHiddenAtDown[\s\S]{0,160}pointerType === 'touch'/.test(src)
+        && /if \(downTouch\) \{ scheduleViewerUiHide\(\); \}/.test(src));
 }
 
-console.log('\n[B7] 手机滑动灵敏度：三个常量与「够快」那一档的位移下限');
+console.log('\n[B7] 手机滑动灵敏度：常量 + 用 390px 视口真算三档阈值');
 {
-    check('FAR_RATIO = 0.21（原 0.18，压灵敏度）', /const FAR_RATIO = 0\.21;/.test(src));
-    check('FAST_SPEED = 0.65（原 0.5）', /const FAST_SPEED = 0\.65;/.test(src));
-    check('「够快」那一档的位移下限是 38（原 30）',
-        /Math\.abs\(dx\) \/ dt > FAST_SPEED && Math\.abs\(dx\) > 38;/.test(src));
+    const numOf = (name) => Number(((new RegExp(`const ${name} = ([0-9.]+);`)).exec(src) || [])[1]);
+    const FAR_RATIO = numOf('FAR_RATIO');
+    const FAR_MIN = numOf('FAR_MIN');
+    const FAST_SPEED = numOf('FAST_SPEED');
+    const farRe = /Math\.abs\(dx\) > Math\.max\(FAR_MIN, window\.innerWidth \* FAR_RATIO\)/.exec(src);
+    const fastRe = /Math\.abs\(dx\) \/ dt > FAST_SPEED && Math\.abs\(dx\) > (\d+)/.exec(src);
+
+    check('FAR_RATIO = 0.24（0.18 → 0.21 → 0.24）', FAR_RATIO === 0.24, `FAR_RATIO=${FAR_RATIO}`);
+    check('FAST_SPEED = 0.80（0.5 → 0.65 → 0.80）', FAST_SPEED === 0.8, `FAST_SPEED=${FAST_SPEED}`);
+    check('FAR_MIN 仍是 56（这一档两次都没动）', FAR_MIN === 56, `FAR_MIN=${FAR_MIN}`);
+    check('「够快」那一档的位移下限 38 → 46', (fastRe ? Number(fastRe[1]) : 0) === 46,
+        fastRe ? fastRe[0] : '未匹配');
+    check('两处判据表达式都能从源码里抠到（下面真跑的就是它们，不是手抄）', !! farRe && !! fastRe);
+
+    // 真跑：把抠出来的表达式放在一个 390px 的窗口里求值
+    const dom = new JSDOM('', { pretendToBeVisual: true });
+    const setW = (v) => Object.defineProperty(dom.window, 'innerWidth', { value: v, configurable: true });
+    setW(390);
+    const farAt = (v) => new Function('window', 'FAR_MIN', 'FAR_RATIO', 'dx',
+        `return (${farRe[0]});`)(dom.window, FAR_MIN, FAR_RATIO, v);
+    const fastAt = (dx, dt) => new Function('FAST_SPEED', 'dx', 'dt',
+        `return (${fastRe[0]});`)(FAST_SPEED, dx, dt);
+    // 对照：旧一组常量（手写值，只用来证明「确实变钝了」）
+    const farOld = (v) => new Function('window', 'FAR_MIN', 'FAR_RATIO', 'dx',
+        'return (Math.abs(dx) > Math.max(FAR_MIN, window.innerWidth * FAR_RATIO));')(dom.window, 56, 0.21, v);
+    const fastOld = (dx, dt) => new Function('FAST_SPEED', 'dx', 'dt',
+        'return (Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 38);')(0.65, dx, dt);
+
+    check('390px 视口：0.24 × 390 = 93.6（源码注释写「≈94」），这一档就是「够远」', Math.abs(390 * FAR_RATIO - 93.6) < 1e-9,
+        `0.24×390=${390 * FAR_RATIO}`);
+    check('390px 视口：FAR_MIN（56）在这里不生效（56 < 93.6 ⇒ 取 93.6）',
+        FAR_MIN < 390 * FAR_RATIO && Math.max(FAR_MIN, 390 * FAR_RATIO) === 93.6,
+        `max=${Math.max(FAR_MIN, 390 * FAR_RATIO)}`);
+    check('真跑：390px 上 dx=93.6 不算「够远」、dx=94 才算（阈值就是 93.6，不是 94 取整前的旧值）',
+        farAt(93.6) === false && farAt(94) === true);
+    check('三档对比：390px 上「够远」门槛 93.6 比「够快」的位移下限 46 严得多（轻扫走「够快」那档）',
+        390 * FAR_RATIO > Number(fastRe[1]));
+    check('真跑「够快」：dx=50 / 60ms（0.83 px/ms > 0.80 且 50 > 46）⇒ 切图', fastAt(50, 60) === true);
+    check('真跑「够快」：dx=44 / 50ms（0.88 > 0.80 但位移不到 46）⇒ 不切图（新加的位移下限真在起作用）',
+        fastAt(44, 50) === false);
+    check('真跑「够快」：dx=60 / 80ms（0.75 < 0.80）⇒ 不切图（速度门槛抬到 0.80 后挡下的正是这种）',
+        fastAt(60, 80) === false);
+    check('对照（旧 0.21 档）：390px 上 dx=90 会切图；新档不会', farOld(90) === true && farAt(90) === false);
+    check('对照（旧 0.65 / 38 档）：dx=60 / 80ms 会切图；新档不会', fastOld(60, 80) === true && fastAt(60, 80) === false);
+
+    setW(200);
+    check('窄桌面窗口（200px）：0.24×200=48 < 56 ⇒ FAR_MIN 兜底，阈值就是 56（真跑 55 不算 / 57 算）',
+        Math.max(FAR_MIN, 200 * FAR_RATIO) === 56 && farAt(55) === false && farAt(57) === true);
+    dom.window.close();
 }
 
 // ---------------------------------------------------------------- 汇总

@@ -208,18 +208,27 @@
         html.ls-viewer-fs:not(.ls-fs-ui) .viewer-button {
             pointer-events: none;
         }
-        /* 非全屏（只是看图器开着）也让底部缩略图条自动隐藏 —— 与全屏同一套节奏（2.5s 无操作即隐、
-           一动鼠标/一触碰就现），只是门从「全屏中」换成「看图器开着」。工具栏不参与：非全屏时它常驻。
+        /* 非全屏（只是看图器开着）也把**整套 UI** 自动收起来 —— 与全屏同一套节奏（2.5s 无操作即隐、
+           一动鼠标/一触碰就现、指针停在 UI 上只续期），只是门从「全屏中」换成「看图器开着」。
+           收的是与全屏一模一样的四块：工具栏、缩略图条、文件名行、右上角关闭键。
            为什么用 opacity 而不是 display:none：盒子仍在布局里 ⇒ 画布尺寸不变 ⇒ 已经顶屏的
-           图不会因为「条隐藏了」而重算、也就不会抖一下（库的 initImage 会把 footer.offsetHeight 从可用高里扣掉）。
-           ★ 这里**故意不写** visibility/pointer-events（全屏那套才写）：条子虽然看不见，但还接指针 ⇒
-           落在它上面的第一下点击不会白吞（而且 pointerdown 那一刻就会把它淡出来，用户看到的是"点哪儿哪儿亮"）。
+           图不会因为「UI 收起」而重算、也就不会抖一下（库的 initImage 会把 footer.offsetHeight 从可用高里扣掉）。
+           ★ 收起时必须把指针也关掉（pointer-events:none）：否则看不见的缩略图仍然接得住点击 ⇒
+           一按就切图，用户体感是"点到了隐形的条子"。关掉之后落在这些区域的点击由捕获阶段守卫接住
+           （见「收起状态下第一下点击」那段）：唤出 UI 并吞掉这一下，不切图也不退出。
            ★ 选择器里排除 .ls-viewer-fs：全屏那三条规则写在前面，这里不去碰它们（不然会抢成可见）。 */
-        html.ls-viewer-open:not(.ls-viewer-fs) .viewer-navbar {
+        html.ls-viewer-open:not(.ls-viewer-fs) .viewer-toolbar,
+        html.ls-viewer-open:not(.ls-viewer-fs) .viewer-navbar,
+        html.ls-viewer-open:not(.ls-viewer-fs) .viewer-title,
+        html.ls-viewer-open:not(.ls-viewer-fs) .viewer-button {
             transition: opacity .25s ease, visibility .25s ease;
         }
-        html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-navbar {
+        html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-toolbar,
+        html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-navbar,
+        html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-title,
+        html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-button {
             opacity: 0;
+            pointer-events: none;
         }
 
         /* 看图器工具栏的「裁剪」按钮图标。
@@ -254,22 +263,6 @@
         }
         html .viewer-toolbar > ul > li.viewer-fullscreen.is-fs:before {
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v3a2 2 0 0 1-2 2H3'/%3E%3Cpath d='M21 8h-3a2 2 0 0 1-2-2V3'/%3E%3Cpath d='M3 16h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M16 21v-3a2 2 0 0 1 2-2h3'/%3E%3C/svg%3E");
-        }
-
-        /* 看图器工具栏的「下载原图」按钮图标。库里根本没有 download 这个键（源码里一次都没出现），
-           自定义键不在那张雪碧图枚举里 ⇒ 图标要自己补 content 与 20×20 盒子，做法与「裁剪」「全屏」一致。
-           图形取「向下箭头 + 底线」，与「全屏」的四角括号、裁剪的边框一眼能分开。 */
-        html .viewer-toolbar > ul > li.viewer-download:before {
-            content: '';
-            display: block;
-            width: 20px;
-            height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5v11'/%3E%3Cpath d='M7.5 10 12 14.5 16.5 10'/%3E%3Cpath d='M4.5 20.5h15'/%3E%3C/svg%3E");
-            background-position: 3px 3px;
-            background-repeat: no-repeat;
-            background-size: 14px 14px;
-        }
-    
         }
 </style>
 @endpush
@@ -850,9 +843,7 @@
                 // 所以这里把库里那 11 个内置按钮按原顺序照抄一遍（`true` 与原默认行为等价），
                 // 末尾追加「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
                 toolbar: {
-                    // 「下载原图」放最左（库按这里的键顺序渲染）：看图时最常用的动作，放最好按的位置。
-                    download: { show: true, click: () => downloadViewerImage() },
-                    // 其次「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
+                    // 最左「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
                     crop: { show: true, click: () => cropEditor.openFromViewer() },
                     // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()。
                     // 按能力探测决定要不要渲染这个键：不支持元素全屏的浏览器（iPhone Safari）
@@ -860,6 +851,9 @@
                     ...(canViewerFullscreen()
                         ? { fullscreen: { show: true, click: () => toggleViewerFullscreen() } }
                         : {}),
+                    // 「1:1」：库内置键，位置与改动前一致（全屏之后、重置之前）。
+                    // 顶屏仍是图片的初始态、重置按钮也回顶屏；1:1 是明确看 100% 那个动作。
+                    'one-to-one': true,
                     reset: true,
                     prev: true,
                     play: true,
@@ -1097,8 +1091,9 @@
             document.addEventListener('webkitfullscreenchange', onViewerFullscreenResize);
 
             /* 鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态）。
-             * 两种模式共用这一套：全屏时管 toolbar/缩略图条/标题/关闭键四块；非全屏时只有缩略图条会自动隐
-             * （工具栏本来就常驻）。门分别是 html.ls-viewer-fs 与 html.ls-viewer-open（后者在看图器开关时挂/摘）。 */
+             * 两种模式共用这一套、收的也是同样四块（工具栏/缩略图条/文件名行/关闭键）：
+             * 全屏的门是 html.ls-viewer-fs，非全屏的门是 html.ls-viewer-open + ls-ui-idle
+             * （后者在看图器开关时挂/摘）。 */
             const VIEWER_OPEN_CLASS = 'ls-viewer-open';   // 看图器开着（含全屏期间）
             const UI_IDLE_CLASS = 'ls-ui-idle';           // 非全屏：UI 已收起
             const FS_UI_MS = 2500;
@@ -1111,7 +1106,7 @@
              * 所以量得到矩形；不能用 :hover —— pointer-events:none 时命中测试拿不到它们），
              * 就只"续期"不排收起；手指按住期间同理。移开/松手后从那一刻重新计时。 */
             const FS_UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];
-            const WINDOWED_UI_ZONES = ['.viewer-navbar'];   // 非全屏只有缩略图条会自动隐，就只看它
+            const WINDOWED_UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];   // 非全屏收的四块，与全屏一致
             const pointerOverZones = (zones, x, y) => zones.some((sel) => {
                 const el = document.querySelector(sel);
                 if (! el) { return false; }
@@ -1151,6 +1146,20 @@
                     scheduleViewerUiHide();             // 手指抬起才开始计时
                 }
             }, {capture: true, passive: true});
+            /* 「收起状态下落在 UI 上的第一下点击要吞掉」用的标记：必须在**别的 pointerdown 监听之前**
+             * 记下来 —— 下面那份名单里的 pointerdown 一跑就会把 ls-ui-idle 摘掉（UI 立刻淡回来），
+             * 等 click 到达时就再也看不出"刚才还收着"，那一下就穿到画布上变成退出看图器了。 */
+            let windowedUiHiddenAtDown = false;
+            let windowedUiHiddenAtDownTouch = false;   // 那一下是触屏点的（触屏没有 mousemove ⇒ 唤出后得自己排收起）
+            document.addEventListener('pointerdown', (e) => {
+                const html = document.documentElement;
+                windowedUiHiddenAtDown = ! inFullscreenClass()
+                    && html.classList.contains(VIEWER_OPEN_CLASS)
+                    && html.classList.contains(UI_IDLE_CLASS);
+                windowedUiHiddenAtDownTouch = windowedUiHiddenAtDown
+                    && (e.pointerType === 'touch' || e.pointerType === 'pen');
+            }, {capture: true, passive: true});
+
             /* 这些操作都算"人还在"，一律刷新那 2.5s：
                移动鼠标 / 滚轮切图 / 点 toolbar 或缩略图条 / 触摸拖动 / 按键。
                （全部 passive：我们只看不拦，不影响任何默认行为 —— 特别是这份名单里**没有 click**，
@@ -1212,6 +1221,26 @@
                     if (dragged) { dragEndAt = Date.now(); }
                 }, true);
                 document.addEventListener('click', (e) => {
+                    /* ③ 非全屏 + UI 收着：落在收起那几块矩形里的第一下点击 = 唤出 UI 并吞掉这一下。
+                     * 收起时它们是 pointer-events:none，这一下本来会穿到画布上 ⇒ 非全屏会"点底部直接退出
+                     * 看图器"。这里改成与全屏点空白一致的体感：先唤出界面、这一下不算数（也不会误切到
+                     * 看不见的缩略图）。判据用 pointerdown 那一刻记下的状态 —— 进到这里时 ls-ui-idle 已被摘掉。 */
+                    const hiddenAtDown = windowedUiHiddenAtDown;
+                    const downTouch = windowedUiHiddenAtDownTouch;
+                    windowedUiHiddenAtDown = false;      // 一次性：没有前置 pointerdown 的 click（键盘/脚本触发）不许沿用旧值
+                    windowedUiHiddenAtDownTouch = false;
+                    if (hiddenAtDown) {
+                        const ev0 = (e.detail && e.detail.originalEvent) || e;
+                        if (pointerOverZones(WINDOWED_UI_ZONES, ev0.clientX || 0, ev0.clientY || 0)) {
+                            e.stopPropagation();
+                            flashViewerUI({type: 'click', clientX: ev0.clientX || 0, clientY: ev0.clientY || 0});
+                            /* 触屏唤醒后要自己排一次收起：flashViewerUI 看到坐标落在 UI 矩形内就只"续期"
+                             * （鼠标停在 UI 上不该被收走，这是它本来的意图），可触屏这里没有后续 mousemove
+                             * ⇒ 不补这一下，UI 会一直挂着不回去。 */
+                            if (downTouch) { scheduleViewerUiHide(); }
+                            return;
+                        }
+                    }
                     if (! isCanvas(e.target)) { return; }
                     if (Date.now() - dragEndAt < DRAG_WINDOW) {
                         e.stopPropagation();        // ① 拖动之后的那一下不算点击 ⇒ 不关看图器
@@ -1233,49 +1262,6 @@
                     if (exit) { exit.call(d); }
                 }
             });
-
-            /* 工具栏「下载原图」（最左那个键）：直链就是 canvas 里当前那张 <img> 的 src
-             * （页面用 url:'data-original' ⇒ 库里插进来的 img 的 src 即原图直链，与裁剪模块同一套取值），
-             * 文件名优先用卡片的 origin_name（反查方式与 openFromViewer 一致）。
-             * ★ 必须定义在这一层（与 viewer 同级）：工具栏的 click 回调在外层作用域里跑。 */
-            const downloadViewerImage = () => {
-                const url = cropEditor.viewerUrl();
-                if (! url) { toastr.warning('没有找到当前图片'); return; }
-                /* 反查卡片：用"逐个比对属性"而不是拼选择器 —— URL 里万一有反斜杠/换行，
-                 * 字符串拼接会静默匹配失败（甚至 querySelector 抛 SyntaxError、按钮点了没反应）。 */
-                const card = Array.prototype.find.call(
-                    document.querySelectorAll(IMAGES_ITEM + ' img[data-original]'),
-                    (el) => el.getAttribute('data-original') === url
-                );
-                const info = cropEditor.infoOf(card || { url: url });
-                /* download 属性只对同源 / blob / data 生效：存储策略在外部域名时浏览器会忽略它，
-                 * 于是变成"当前标签页导航过去"（图库页被顶掉）。跨域就换成新标签打开 + 提示。
-                 * blob:/data: 的 origin 是 "null"，会被 origin 比较误判成跨域，单独放行。 */
-                let sameOrigin = false;
-                try {
-                    const abs = new URL(url, location.href);
-                    sameOrigin = abs.origin === location.origin || /^(blob|data):$/.test(abs.protocol);
-                } catch (e) { sameOrigin = false; }
-                const a = document.createElement('a');
-                a.href = url;
-                if (sameOrigin) {
-                    a.download = info.name || '';
-                } else {
-                    a.target = '_blank';
-                    a.rel = 'noopener';
-                }
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                /* 两条提示互斥，避免叠成一串：跨域那条信息量更大，优先；
-                 * 同源 + iOS 才提醒"不一定直接落盘"（iOS 13+ 支持 download，所以措辞不断言失败）。 */
-                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-                if (! sameOrigin) {
-                    toastr.info('原图在新标签页打开（存储不在本站时无法直接下载）');
-                } else if (isIOS) {
-                    toastr.info('已开始下载；若没保存，可长按图片选「存储到照片」');
-                }
-            };
 
             const cropEditor = (function () {
                 const SUPPORTED = ['jpg', 'jpeg', 'png'];
@@ -1507,7 +1493,7 @@
                     });
                 }
 
-                // viewerUrl / infoOf 一并对外（工具栏「下载原图」要用同一套"当前图"取值口径）
+                // viewerUrl / infoOf 一并对外（工具栏「裁剪」要用同一套"当前图"取值口径）
                 return { open: open, openFromViewer: openFromViewer, supported: supported, close: close,
                          viewerUrl: viewerUrl, infoOf: infoOf };
             })();
@@ -1593,12 +1579,14 @@
              * 拦 pointermove 在真机上可能整段失效（踩过）。这里只读 viewer.action 判定是否放权，
              * 一个字都不写库的内部状态 —— 捏合/双击/过渡因此完全不受影响。 */
             (function () {
-                /* 灵敏度（手机端"压一点点"）：手机上真正生效的是 FAR_RATIO 那一档 ——
-                 * 视口宽 390 时 max(FAR_MIN 56, 0.18×390 ≈ 70) 取 70，FAR_MIN 等于不起作用；
-                 * 所以要压灵敏度动的是 FAR_RATIO 与"够快"那一档。 */
-                const FAR_RATIO = 0.21;    // 够远：视口宽的这个比例（原 0.18）
+                /* 灵敏度（手机端"压一点点"，已压过两档）：手机上真正生效的是 FAR_RATIO 那一档 ——
+                 * 视口宽 390 时 max(FAR_MIN 56, 0.24×390 ≈ 94) 取 94，FAR_MIN 等于不起作用；
+                 * 所以要压灵敏度动的就是 FAR_RATIO 与"够快"那一档。
+                 * 上限（再钝就该换招，不再动这三个数）：FAR_RATIO 不过 0.30、FAST_SPEED 不过 1.0、
+                 * 位移下限不过 56 —— 过了就是"滑不动"，而且每次失败还白付一次回弹动画。 */
+                const FAR_RATIO = 0.24;    // 够远：视口宽的这个比例（0.18 → 0.21 → 0.24）
                 const FAR_MIN = 56;        // 或至少这么多 px（只在桌面窄窗口时轮到它）
-                const FAST_SPEED = 0.65;   // 够快：px/ms（原 0.5）
+                const FAST_SPEED = 0.80;   // 够快：px/ms（0.5 → 0.65 → 0.80）
                 let g = null;
                 let guardClick = 0;   // 刚切过图的时刻：用来吞掉随后那发背景 click
                 const inCanvas = (el) => el instanceof Element && !!el.closest('.viewer-canvas');
@@ -1641,7 +1629,7 @@
                     const dy = e.clientY - s.y;
                     const dt = Math.max(1, e.timeStamp - s.t);
                     const far = Math.abs(dx) > Math.max(FAR_MIN, window.innerWidth * FAR_RATIO);
-                    const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 38;   // 38 是"够快"那一档的位移下限（原 30）
+                    const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 46;   // 46 是"够快"那一档的位移下限（30 → 38 → 46）
                     if ((far || fast) && Math.abs(dx) > Math.abs(dy) * 1.5) {
                         if (dx < 0) viewer.next(false); else viewer.prev(false);
                         guardClick = Date.now();                          // 标记：刚刚切过图
