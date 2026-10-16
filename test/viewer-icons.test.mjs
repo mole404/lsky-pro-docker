@@ -156,6 +156,55 @@ console.log('\n[3] 旧图标同步 + 不动库文件');
         nestProblems.length ? nestProblems.join('；') : `${styleBlock.split('{').length - 1} 个块全部闭合`);
 }
 
+
+console.log('\n[4] 全屏右上角关闭键的几何（手机物理圆角不切 × 的数学约束）');
+{
+    // 现场解析真值：不留硬编码副本（改错了断言就跟着算出来打脸）
+    const ruleBody = (sel) => {
+        const i = blade.indexOf(sel);
+        if (i < 0) { return ''; }
+        return blade.slice(blade.indexOf('{', i) + 1, blade.indexOf('}', i));
+    };
+    const num = (body, prop) => {
+        const m = new RegExp(`${prop}:\\s*(-?[\\d.]+)px`).exec(body);
+        return m ? parseFloat(m[1]) : NaN;
+    };
+    // 注意：`html.ls-viewer-fs .viewer-button` 这个选择器现在有**两条**规则（先是最早那三条
+    // opacity/visibility 收起规则，后是本块的几何规则）⇒ 要挑「带 width」的那条，不能取第一条。
+    const fsBtn = [...blade.matchAll(/html\.ls-viewer-fs \.viewer-button \{([^}]*)\}/g)]
+        .map((m) => m[1]).find((b) => /width\s*:/.test(b)) || '';
+    const fsIcon = ruleBody('html.ls-viewer-fs .viewer-button:before {');
+    const iconRule = ruleBody('html .viewer-button[data-viewer-action="mix"]:before {');
+
+    const W = num(fsBtn, 'width'), H = num(fsBtn, 'height');
+    const right = num(fsBtn, 'right'), top = num(fsBtn, 'top');
+    const insetBottom = num(fsIcon, 'bottom'), insetLeft = num(fsIcon, 'left');
+    const bgPos = num(iconRule, 'background-position');
+    const bgSize = num(iconRule, 'background-size');
+    const R = W / 2;                                   // 可见四分之一圆的半径
+    const glyphNear = R - (insetLeft + bgPos + bgSize); // × 靠角那一侧：距右边/上边多少 px
+    const glyphFar = R - (insetLeft + bgPos);           // × 外角那一侧
+    const rimGap = R - glyphFar * Math.SQRT2;           // × 外角离那圈黑底边缘还有多少余量
+
+    check('① 解析到全屏那两条规则与图标盒（未手抄）',
+        W > 0 && H > 0 && insetLeft > 0 && bgPos > 0 && bgSize > 0,
+        `按钮 ${W}×${H} right/top ${right}/${top}，图标 inset ${insetLeft}/${insetBottom}，盒内字形 ${bgPos}+${bgSize}`);
+    check('② 圆心仍正好压在屏幕角上（宽 = 2×偏移；否则可见的就不是四分之一圆了）',
+        W === 2 * Math.abs(right) && H === 2 * Math.abs(top), `${W} vs ${2 * Math.abs(right)} / ${H} vs ${2 * Math.abs(top)}`);
+    check('③ × 靠角那一侧距右边/上边 ≥ 10px —— 物理圆角半径 30px 也切不到',
+        glyphNear >= 10, `实际 ${glyphNear}px（旧库值 7px，这就是被切的原因）`);
+    check('④ × 的外角仍落在那圈黑底里，且留 ≥ 4px 余量（否则会戳出黑圆、露在照片上）',
+        glyphFar * Math.SQRT2 <= R && rimGap >= 4,
+        `外角半径 ${(glyphFar * Math.SQRT2).toFixed(1)} ≤ 圆半径 ${R}，余量 ${rimGap.toFixed(1)}px`);
+    check('⑤ 只改尺寸/位置，不动库画的那个圆的形状（不碰 position / border-radius / overflow）',
+        ! /(position|border-radius|overflow)\s*:/.test(fsBtn));
+    check('⑥ 非全屏不动：页面里对 .viewer-button 几何的覆盖全部只在 html.ls-viewer-fs 作用域内',
+        ! /(^|\n)\s*(html\s+)?\.viewer-button\s*\{\s*\n\s*(width|height|right|top):/m.test(blade));
+    check('⑦ 图标仍是 16px 盒内字形、盒子 20×20（本次只挪位置，不放大小）',
+        num(iconRule, 'width') === 20 && num(iconRule, 'height') === 20 && bgSize === 16 && bgPos === 2,
+        `盒 ${num(iconRule, 'width')}×${num(iconRule, 'height')}，字形 ${bgSize}@${bgPos}`);
+}
+
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => ! r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);

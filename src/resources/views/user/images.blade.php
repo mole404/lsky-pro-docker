@@ -208,6 +208,26 @@
         html.ls-viewer-fs:not(.ls-fs-ui) .viewer-button {
             pointer-events: none;
         }
+        /* 全屏里把右上角关闭键整体放大一圈 —— 手机屏幕的**物理圆角**（常见半径 20~30px）会啃掉那个
+           四分之一圆最靠角的一小块，而库那套几何里（80×80、圆心正好压在屏幕角上、图标 inset 15px）
+           × 的白色尖端离角只有 7px ⇒ 会被切到一点。可见区本来就只有 40×40，图标靠里最多挪 3px，
+           再挪 × 的外角就会戳出黑圆、露在照片上。所以全屏改成：按钮 100×100（圆心仍压在角上 ⇒
+           可见四分之一圆半径 40→50px）+ 图标 inset 20px ⇒ × 落在距右边/上边 12~30px、尖端离角 12px，
+           物理圆角再大也切不到（约束：图标外角要落在那圈黑底里，dx_max = 半径−(inset+2) = 28，
+           28√2 ≈ 39.6 ≤ 50 ✓；旧的 25√2 ≈ 35.4 ≤ 40 也安全，这就是「旧版只能挪 3px」的由来）。
+           非全屏（库原样）不动：那边浏览器自带边距，且收起态那三条 opacity/pointer-events 规则与此无关
+           —— 本块只改尺寸与位置，不碰 position/border-radius（那个圆是库画的）。 */
+        html.ls-viewer-fs .viewer-button {
+            width: 100px;
+            height: 100px;
+            right: -50px;
+            top: -50px;
+        }
+        html.ls-viewer-fs .viewer-button:before {
+            bottom: 20px;
+            left: 20px;
+        }
+
         /* 非全屏（只是看图器开着）也把**整套 UI** 自动收起来 —— 与全屏同一套节奏（2.5s 无操作即隐、
            一动鼠标/一触碰就现、指针停在 UI 上只续期），只是门从「全屏中」换成「看图器开着」。
            收的是与全屏一模一样的四块：工具栏、缩略图条、文件名行、右上角关闭键。
@@ -307,7 +327,7 @@
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.3 8.6L7.4 5.5v14.5'/%3E%3Cpath d='M19.7 8.6L16.6 5.5v14.5'/%3E%3Cpath d='M12 8.85v0.7'/%3E%3Cpath d='M12 14.25v0.7'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.6 7.85L7.7 4.75v14.5'/%3E%3Cpath d='M16.3 7.85L19.4 4.75v14.5'/%3E%3Cpath d='M12 8.95v0.5'/%3E%3Cpath d='M12 14.55v0.5'/%3E%3C/svg%3E");
             background-position: 2px 2px;
             background-repeat: no-repeat;
             background-size: 16px 16px;
@@ -362,7 +382,7 @@
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.5 17.36A7 7 0 1 0 12 5'/%3E%3Cpath d='M14.7 6.55L12 5L14.7 3.45'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.5 17.36A7 7 0 1 0 12 5'/%3E%3Cpath d='M17 7.45L12 5L17 2.55'/%3E%3C/svg%3E");
             background-position: 2px 2px;
             background-repeat: no-repeat;
             background-size: 16px 16px;
@@ -373,7 +393,7 @@
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16.5 17.36A7 7 0 1 1 12 5'/%3E%3Cpath d='M9.3 6.55L12 5L9.3 3.45'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16.5 17.36A7 7 0 1 1 12 5'/%3E%3Cpath d='M7 7.45L12 5L7 2.55'/%3E%3C/svg%3E");
             background-position: 2px 2px;
             background-repeat: no-repeat;
             background-size: 16px 16px;
