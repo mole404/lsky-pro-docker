@@ -347,7 +347,13 @@ diff -rq --exclude=.git --exclude=node_modules --exclude=vendor --exclude=storag
 # 分类：内容不同 / 只在 src（我们新增）/ 只在上游（我们删了）
 DIFFERS=$(grep -oE '^Files .* and src/.* differ$' "$TMP/raw.txt" | sed -E 's#^Files .* and (src/.*) differ$#\1#' | sort || true)
 ONLY_SRC=$(grep -oE "^Only in src.*: .*$" "$TMP/raw.txt" | sed -E 's#^Only in (src[^:]*): (.*)$#\1/\2#' | sed 's#^\./##' | sort || true)
-ONLY_UP=$(grep -oE "^Only in .*lsky-pro.*: .*$" "$TMP/raw.txt" | grep -v 'Only in src' | sed -E 's#^Only in [^:]*: (.*)$#\1#' | sort || true)
+# ⚠ 上游侧这一行的路径锚点必须是 $TMP/up —— 快照目录名里**没有**仓库名（旧版写成 `.*lsky-pro.*`
+#    ⇒ 恒不匹配，这条清单永远打不出东西，被吞掉的正是我们删掉的那 5 个上游文件）。
+#    改锚点时注意 $TMP 是 `mktemp -d` 出来的路径（可能含 `.` 这类正则元字符，只会多匹配不会漏匹配）。
+UP_DIR="${TMP}/up"
+ONLY_UP=$(grep -oE "^Only in ${UP_DIR}[^:]*: .*$" "$TMP/raw.txt" \
+    | sed -E "s#^Only in ${UP_DIR}/?([^:]*): (.*)\$#\1/\2#" \
+    | sed -E 's#^/##' | sort || true)
 
 # 空字符串要变成「零行」（不能变成一行空行，否则 comm 会误判）
 lines() { [ -n "${1:-}" ] && printf '%s\n' "$1" || true; }

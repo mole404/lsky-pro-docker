@@ -57,10 +57,10 @@
 #   勾选=加上、取消=移除两态；入口：工具栏 / 手机 ⋯ 菜单 / 图片右键菜单 / 标签下拉底部）/
 #   「显示图片标签」开关（存 localStorage）与（2）原「图片权限」界面临口全部下线
 #   （原「设置权限」按钮与筛选下拉换成标签）。diff 因此大得多。
-# 这几个文件当前的 md5（2026-10-16 复核；前三条与 Dockerfile「自证 2」的期望值一致）：
+# 这几个文件当前的 md5（2026-10-17 复核；前三条与 Dockerfile「自证 2」的期望值一致）：
 #   5cf4921912df67a6de657dee02284e65  src/resources/js/context-js.js
 #   5cf4921912df67a6de657dee02284e65  src/public/js/context-js/context-js.js
-#   f91da3c12630beb12265679031b34a12  src/resources/views/user/images.blade.php
+c31f3161a9821cd1c4ee8fee11f1ac2b  src/resources/views/user/images.blade.php
 #   1e797bc8356bda1f192ca2d704f80623  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不在 Dockerfile「自证 2」那三条里，只在本档存档对照；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里。历史值（c1b339b1… / 5ddf0eed… / c0e51e96…）只作对照，一律以 Dockerfile「自证 2」为准）
@@ -3052,7 +3052,7 @@
 ---- src/resources/views/user/images.blade.php
 --- lsky-pro@38d52c46/resources/views/user/images.blade.php	（上游原文件）
 +++ src/resources/views/user/images.blade.php	（本 fork）
-@@ -3,46 +3,503 @@
+@@ -3,46 +3,504 @@
  @push('styles')
      <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
      <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
@@ -3267,22 +3267,23 @@
 +           图标 inset 15px）里 × 的白色尖端离角只有 9.3px ⇒ 会被切到一点；而可见区只有 40×40，
 +           图标靠里最多挪 3px，再挪 × 的外角就会戳出黑圆、露在照片上。
 +           于是分两步：先（100×100 / inset 20）把尖端挪到 13.5px —— 切不到了，但"刚够用"；
-+           现在再放大一档：按钮 120×120（圆心仍压在角上 ⇒ 可见四分之一圆半径 50→60px）+ 图标 inset 27px
-+           + × 字形 16→20px（盒 20→24）⇒ × 落在距右边/上边 12.9~35px，物理圆角再大也切不到。
-+           约束：图标盒外角必须落在那圈黑底里 —— 盒外角离角 9×√2 ≈ 12.7 ≤ 60 ✓。
++           再放大一档到 120×120（可见四分之一圆半径 60px）；其后又略收一成：按钮 108×108
++           （圆心仍压在角上 ⇒ 半径 54px）+ 图标 inset 23px + × 字形 18px（盒 24→22）
++           ⇒ × 靠角那侧仍距右边/上边 11px（与 120 那版一致，物理圆角同样切不到），盘子整体小一成。
++           约束：图标盒外角必须落在那圈黑底里 —— 盒外角离角 9×√2 ≈ 12.7 ≤ 54 ✓；× 外角 29×√2 ≈ 41 ≤ 54 ✓。
 +           非全屏（库原样 80px/inset 15）不动：那边浏览器自带边距，且收起态那三条 opacity/pointer-events
 +           规则与此无关 —— 本块只改尺寸与位置，不碰 position/border-radius（那个圆是库画的）。 */
 +        html.ls-viewer-fs .viewer-button {
-+            width: 120px;
-+            height: 120px;
-+            right: -60px;
-+            top: -60px;
++            width: 108px;
++            height: 108px;
++            right: -54px;
++            top: -54px;
 +        }
 +        html.ls-viewer-fs .viewer-button:before {
-+            bottom: 27px;
-+            left: 27px;
++            bottom: 23px;
++            left: 23px;
 +        }
-+        /* × 随盘子等比放大（字形 16→20px；盒子 20→24、盒内偏移仍 2px ⇒ 盒与字形同心）。
++        /* × 随盘子等比放大（全屏这一档：字形 16→18px；盒子 20→22、盒内偏移仍 2px ⇒ 盒与字形同心）。
 +           ⚠ 必须挂上第二个类把特异性提到 (0,3,1)：下面那批共享图标规则
 +           `html .viewer-button[data-viewer-action="mix"]:before` 是 (0,2,1)，与
 +           `html.ls-viewer-fs .viewer-button:before` **相等**，而共享规则在文件里更靠后 ⇒
@@ -3290,10 +3291,10 @@
 +           盒子一放大，× 就会贴到视口角只剩 ~5px。 */
 +        html.ls-viewer-fs .viewer-button.viewer-close:before,
 +        html.ls-viewer-fs .viewer-button[data-viewer-action="mix"]:before {
-+            width: 24px;
-+            height: 24px;
++            width: 22px;
++            height: 22px;
 +            background-position: 2px 2px;
-+            background-size: 20px 20px;
++            background-size: 18px 18px;
 +        }
 +
 +        /* 非全屏（只是看图器开着）也把**整套 UI** 自动收起来 —— 与全屏同一套节奏（2.5s 无操作即隐、
@@ -3575,7 +3576,7 @@
                      </a>
                  </x-slot>
  
-@@ -57,38 +514,122 @@
+@@ -57,38 +515,122 @@
                      </x-dropdown-link>
                  </x-slot>
              </x-dropdown>
@@ -3717,7 +3718,7 @@
          </div>
      </div>
  
-@@ -96,112 +637,309 @@
+@@ -96,112 +638,309 @@
          <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
              <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
                  <div class="p-1 text-xl sm:text-2xl">
@@ -4092,7 +4093,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +955,1027 @@
+@@ -217,44 +956,1027 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -5142,7 +5143,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -269,14 +1990,20 @@
+@@ -269,14 +1991,22 @@
                      for (const i in images) {
                          html += $('#images-item-tpl').html()
                              .replace(/__id__/g, images[i].id)
@@ -5152,8 +5153,12 @@
 +                            .replace(/__name__/g, escapeHtml(String(images[i].filename)).replace(/\$/g, '$$$$'))
                              .replace(/__human_date__/g, images[i].human_date)
                              .replace(/__date__/g, images[i].date)
-                             .replace(/__url__/g, images[i].url)
-                             .replace(/__thumb_url__/g, images[i].thumb_url)
+-                            .replace(/__url__/g, images[i].url)
+-                            .replace(/__thumb_url__/g, images[i].thumb_url)
++                            // URL 也落在属性里（data-original= / src=）：名字能闭合属性，URL 一样能。
++                            // 转义不改变值 —— 浏览器的属性解析会把实体还原（jQuery .data('original') 亦然）。
++                            .replace(/__url__/g, escapeHtml(String(images[i].url)).replace(/\$/g, '$$$$'))
++                            .replace(/__thumb_url__/g, escapeHtml(String(images[i].thumb_url)).replace(/\$/g, '$$$$'))
                              .replace(/__width__/g, images[i].width)
                              .replace(/__height__/g, images[i].height)
 -                            .replace(/__json__/g, JSON.stringify(images[i]).replace(/\$/g, '$$$$'))
@@ -5165,7 +5170,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +2027,73 @@
+@@ -300,22 +2030,73 @@
                  }
              });
  
@@ -5243,7 +5248,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +2106,43 @@
+@@ -328,29 +2109,43 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -5300,7 +5305,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +2150,13 @@
+@@ -358,12 +2153,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -5316,7 +5321,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +2165,18 @@
+@@ -372,13 +2168,18 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -5338,7 +5343,7 @@
                              );
                          }
                      });
-@@ -386,6 +2184,12 @@
+@@ -386,6 +2187,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -5351,7 +5356,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +2199,14 @@
+@@ -395,12 +2202,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -5368,7 +5373,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +2238,18 @@
+@@ -432,15 +2241,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -5390,7 +5395,7 @@
                  });
              }
  
-@@ -449,9 +2258,366 @@
+@@ -449,9 +2261,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -5760,7 +5765,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +2634,288 @@
+@@ -468,11 +2637,288 @@
              });
          </script>
          <script>
@@ -6049,7 +6054,7 @@
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +2929,14 @@
+@@ -486,10 +2932,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -6066,7 +6071,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -497,22 +2944,112 @@
+@@ -497,22 +2947,112 @@
                  $(operates.map(item => `[data-operate=${item}]`).toString()).css('display', 'block');
              };
  
@@ -6183,7 +6188,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +3070,250 @@
+@@ -533,27 +3073,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -6451,7 +6456,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +3324,9 @@
+@@ -564,7 +3327,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -6462,7 +6467,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +3334,19 @@
+@@ -572,47 +3337,19 @@
                          }
                      });
                  },
@@ -6519,7 +6524,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +3383,10 @@
+@@ -649,6 +3386,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -6530,7 +6535,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +3400,23 @@
+@@ -662,13 +3403,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -6556,7 +6561,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,21 +3431,30 @@
+@@ -683,21 +3434,30 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -6593,7 +6598,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +3476,11 @@
+@@ -719,6 +3479,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -6605,7 +6610,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +3545,9 @@
+@@ -783,9 +3548,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -6618,7 +6623,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +3565,10 @@
+@@ -803,9 +3568,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -6630,7 +6635,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -827,7 +3590,9 @@
+@@ -827,7 +3593,9 @@
                  let operate = $(this).data('operate');
                  let selected = ds.getSelection();
  
@@ -6641,7 +6646,7 @@
                      return false;
                  }
  
-@@ -844,17 +3609,138 @@
+@@ -844,17 +3612,138 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;
