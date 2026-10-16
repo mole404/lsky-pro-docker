@@ -46,6 +46,11 @@ const sliceBetween = (text, startAnchor, endAnchor, what) => {
     return text.slice(a, b);
 };
 
+// 分段条的类名从组件里抠（不硬编码）：类名被改掉时下面的真跑用例会一起红，
+// 而不是「模板改了、测试还在测一个模板里不存在的类名」那种假绿。
+const segComponent = read(path.join(srcRoot, 'resources/views/components/storage-segments.blade.php'));
+const SEG_CLASS = (segComponent.match(/class="([^"]*\bls-seg\b[^"]*)"/) || [])[1] || 'ls-seg';
+
 const sourceJs = read(path.join(srcRoot, 'resources/js/app.js'));
 const bundleJs = read(path.join(srcRoot, 'public/js/app.js'));
 
@@ -78,7 +83,7 @@ const buildUtils = (win, methods, label) => {
 const FIXTURE = (usedKb, capKb, shares) => `
 <div id="capacity-progress" data-used-kb="${usedKb}" data-capacity-kb="${capKb}">
     <div class="ls-segbar">
-${shares.map((s) => `        <div class="ls-seg" data-share="${s}" style="width:0%"></div>`).join('\n')}
+${shares.map((s) => `        <div class="${SEG_CLASS}" data-share="${s}" style="width:0%"></div>`).join('\n')}
     </div>
     <p class="meta"><span class="used">x</span> / <span class="total">y</span></p>
 </div>`;
@@ -182,15 +187,25 @@ runVariant('产物 src/public/js/app.js（线上加载的那份）', BUNDLE_METH
 
 /* ── 模板契约：JS 依赖的那几个钩子必须在模板里 ──────────────────────────────── */
 section('模板契约（JS ↔ 模板）');
-const sidebar = read(path.join(srcRoot, 'resources/views/layouts/sidebar.blade.php'));
+const sidebarRaw = read(path.join(srcRoot, 'resources/views/layouts/sidebar.blade.php'));
+// 断言先剥掉 blade 注释：注释里为了说明历史会提到 <progress> / #capacity-progress 这类字样，
+// 直接搜全文会把「解释为什么改」的一句注释当成「还在用旧元素」判红（实测踩过）。
+const sidebar = sidebarRaw.replace(/\{\{--[\s\S]*?--\}\}/g, '');
 assert(/id="capacity-progress"/.test(sidebar), '侧栏有 #capacity-progress');
 assert(/data-used-kb="\{\{/.test(sidebar), '侧栏给了 data-used-kb 基准');
 assert(/data-capacity-kb="\{\{/.test(sidebar), '侧栏给了 data-capacity-kb 基准');
-assert(/<progress[^>]*id="capacity-progress"|<progress/.test(sidebar) === false,
-    '侧栏已不再使用 <progress>（换成分段条后，基准只能走 data-*）');
+assert(/<progress/.test(sidebar) === false,
+    '侧栏已不再使用 <progress>（换成分段条后，基准只能走 data-*）',
+    (sidebar.match(/[^\n]*<progress[^\n]*/) || [''])[0].trim().slice(0, 100));
+assert(/<progress/.test(sidebarRaw), '（附带确认：上面剥掉的注释里确实提到了旧元素，说明这条断言不是空转）');
 
-const segComponent = read(path.join(srcRoot, 'resources/views/components/storage-segments.blade.php'));
 assert(/data-share=/.test(segComponent), '分段条组件为每段输出 data-share');
+assert(segComponent.includes(`class="${SEG_CLASS}"`), `上面真跑用例用的就是组件里的类名 ${SEG_CLASS}（不是硬编码的另一套）`);
+assert(/data-share="\{\{ round\(\$segment\['share'\], \d+\) \}\}"/.test(segComponent),
+    'data-share 绑的是算出来的占比（写死 100 之类会让容量条永远满格而测试照绿）',
+    (segComponent.match(/data-share="[^"]*"/) || [''])[0]);
+assert(/style="width: \{\{ round\(\$width, \d+\) \}\}%/.test(segComponent),
+    '段宽同样绑的是算出来的值');
 
 const layoutsApp = read(path.join(srcRoot, 'resources/views/layouts/app.blade.php'));
 assert(/js\/app\.js/.test(layoutsApp), '页面加载的确实是 src/public/js/app.js（测的就是线上那份）');

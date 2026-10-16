@@ -42,6 +42,7 @@ final class ExportConcurrencyTest
         $this->legacyTimestampShape();
         $this->malformedEntryIsDead();
         $this->capBoundaries();
+        $this->lockTimeoutIsConservative();
         $this->cacheFailureDegrades();
 
         if ($this->failed > 0) {
@@ -193,7 +194,39 @@ final class ExportConcurrencyTest
         $fallback = \App\Support\ExportConcurrency::cap();
         $this->assert($fallback >= 1 && $fallback <= 4, 'EV=abc（非法）→ 回退到自动取值，且落在 1..4', 'got '.$fallback);
 
+        // 只断言「落在 1..4」的话，把非法值当成 1 也能绿 ⇒ 这里钉住它与「未设置」**完全相等**
+        // （桩里 workers() 读不到环境 ⇒ 未设置时必走 DEFAULT_CAP）
         putenv('EXPORT_MAX_CONCURRENCY');
+        $auto = \App\Support\ExportConcurrency::cap();
+        putenv('EXPORT_MAX_CONCURRENCY=0');
+        $this->assert(\App\Support\ExportConcurrency::cap() === $auto, 'EV=0（非法）与 EV 未设置走同一条自动取值', 'auto='.$auto);
+        putenv('EXPORT_MAX_CONCURRENCY=abc');
+        $this->assert(\App\Support\ExportConcurrency::cap() === $auto, 'EV=abc（非法）与 EV 未设置走同一条自动取值', 'auto='.$auto);
+
+        putenv('EXPORT_MAX_CONCURRENCY');
+    }
+
+    /**
+     * 拿不到短锁（别人正在读改写占位表）时的回退方向。
+     *
+     * 这是「保守 vs 放行」的岔路口：acquire 那一路必须退回**保守的 'full'**（宁可当场拒掉，
+     * 也不能放两笔导出并行跑）；而缓存层本身坏掉那一路才退回 null（见下一个用例）。
+     * 桩用 $lockTimeout 模拟「等待 MUTEX_WAIT 秒仍拿不到锁」。
+     */
+    private function lockTimeoutIsConservative(): void
+    {
+        putenv('EXPORT_MAX_CONCURRENCY=4');
+        \Illuminate\Support\Facades\Cache::reset();
+        \Illuminate\Support\Facades\Cache::$lockTimeout = true;
+
+        $this->assert(\App\Support\ExportConcurrency::acquire(3) === 'full', '拿不到锁 → acquire 保守拒绝（full）');
+        $this->assert(\App\Support\ExportConcurrency::active() === 0, '拿不到锁 → 活跃数按 0 处理（不崩）');
+        $this->assert(\App\Support\ExportConcurrency::progress(3) === null, '拿不到锁 → 读进度返回 null');
+
+        \Illuminate\Support\Facades\Cache::$lockTimeout = false;
+        \Illuminate\Support\Facades\Cache::reset();
+        $this->assert(\App\Support\ExportConcurrency::acquire(3) === null, '锁恢复后立刻能占位（不残留假拒绝）');
+        \App\Support\ExportConcurrency::release(3);
     }
 
     /** 缓存层坏掉时：宁可丢掉并发保护，也不能拦住用户导出（且只留一行日志） */
@@ -208,10 +241,13 @@ final class ExportConcurrencyTest
         $this->assert(\App\Support\ExportConcurrency::isActive(1) === false, '缓存不可用 → 不声称有人在做');
         \App\Support\ExportConcurrency::touch(1, ['done' => 1]);
         \App\Support\ExportConcurrency::release(1);
-        // 不依赖 Laravel 的 class_basename() 助手（桩里没提供）：这条断言要的是「不许按张数刷屏」，
-        // 所以判据是「最多一行」，而不是「恰好一行」。
-        $lines = count(\Illuminate\Support\Facades\Log::$lines);
-        $this->assert($lines <= 1, '按张数的循环里日志不刷屏（最多 1 行）', 'got '.$lines.' 行');
+        // 判据是**恰好一行**（$warned 那道 latch 的语义）。
+        // 桩里现在补了 class_basename()：没有它的时候，Log::warning 那行的实参求值会抛 Error、
+        // 被 catch (\Throwable) 吞掉 ⇒ 日志恒为 0 行 ⇒ 这里写「最多一行」就永远绿（实测过）。
+        $lines = \Illuminate\Support\Facades\Log::$lines;
+        $count = count($lines);
+        $this->assert($count === 1, '按张数的循环里日志恰好一行（latch 生效）', 'got '.$count.' 行');
+        $this->assert(($lines[0] ?? null) === 'export cache unavailable', '日志内容是「缓存不可用」（还证明 class_basename 可用）', 'got '.var_export($lines[0] ?? null, true));
 
         \Illuminate\Support\Facades\Cache::reset();
         \Illuminate\Support\Facades\Log::$lines = [];

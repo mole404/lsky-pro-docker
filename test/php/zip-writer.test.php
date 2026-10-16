@@ -35,6 +35,7 @@ final class ZipWriterTest
     public function run(): int
     {
         $this->testInternalAssertions();
+        $this->testEntryNameNormalization();
         $this->testErrorPaths();
 
         if ($this->failed > 0) {
@@ -166,6 +167,47 @@ final class ZipWriterTest
         rewind($stream);
 
         return $stream;
+    }
+
+    /**
+     * 条目名归一化 normalizeName() 的契约。
+     *
+     * 为什么单独测它：ExportController 现在用**同一个**静态函数算去重键（键 == 最终写进包里的名字），
+     * 两边一旦分叉，两个不同的键会写出同一个条目名 —— 解压时后者覆盖前者，用户静默丢图。
+     * 本轮修的就是这条：控制器曾用自己的清洗规则把 `相册A/. . .` 洗成 `相册A/.`，
+     * 而 writer 会把「只剩点号」的段整段丢掉 ⇒ 两个不同的源名撞成同一个条目名。
+     *
+     * 注：这里只钉住 writer 这一侧的契约；「控制器确实调用了它」由 release-discipline 测试静态钉住。
+     */
+    private function testEntryNameNormalization(): void
+    {
+        $cases = [
+            '普通/文件.jpg'              => '普通/文件.jpg',
+            '相册/. '                    => '相册',        // 洗成 '.' 的段被丢掉（本轮修的那条的另一面）
+            '相册/..'                    => '相册',
+            '相册/ . /f.jpg'             => '相册/f.jpg',
+            '相册//空白段/f.jpg'          => '相册/空白段/f.jpg',
+            '/前导斜杠/f.jpg'             => '前导斜杠/f.jpg',
+            '  空格两端  /f.jpg'          => '空格两端/f.jpg',
+            'a\\b:c*.jpg'                => 'a/b_c_.jpg',
+            '相册/. . .'                 => '相册/. . .',   // 只有恰好 '' / '.' / '..' 才丢；点加空格不是
+            ''                           => '',
+            '   '                        => '',
+            '.'                          => '',
+            '..'                         => '',
+        ];
+
+        foreach ($cases as $in => $want) {
+            $got = StreamedZipWriter::normalizeName($in);
+            $this->assert($got === $want, sprintf(
+                'normalizeName(%s) === %s（实际 %s）', var_export($in, true), var_export($want, true), var_export($got, true)
+            ));
+            // 幂等：控制器把归一化结果直接当最终名字用，再洗一次必须一字不改
+            $this->assert(
+                StreamedZipWriter::normalizeName($got) === $got,
+                sprintf('normalizeName(%s) 幂等（再洗一次不变）', var_export($got, true))
+            );
+        }
     }
 
     private function assert(bool $condition, string $label): void

@@ -32,6 +32,9 @@ class Cache
     /** true = 读写一律抛错，用来测「缓存不可用就降级，绝不拦着用户导出」 */
     public static bool $fail = false;
 
+    /** true = lock()->block() 抛 LockTimeoutException，用来测「拿不到锁时的保守回退」 */
+    public static bool $lockTimeout = false;
+
     public static function get(string $key, $default = null)
     {
         if (self::$fail) {
@@ -62,6 +65,11 @@ class Cache
         return new class {
             public function block(int $wait, callable $callback)
             {
+                if (\Illuminate\Support\Facades\Cache::$lockTimeout) {
+                    // 真环境里这是「等待 MUTEX_WAIT 秒仍拿不到锁」（别人正在读改写占位表）
+                    throw new \Illuminate\Contracts\Cache\LockTimeoutException('lock timeout');
+                }
+
                 return $callback();
             }
         };
@@ -71,6 +79,7 @@ class Cache
     {
         self::$store = [];
         self::$fail = false;
+        self::$lockTimeout = false;
     }
 }
 
@@ -82,5 +91,27 @@ class Log
     public static function warning($message, array $context = []): void
     {
         self::$lines[] = (string) $message;
+    }
+}
+
+
+namespace App\Support;
+
+/**
+ * 被测代码在日志分支里调用了 Laravel 的全局助手 class_basename()。真框架里有，这套零依赖装置里没有。
+ *
+ * 没有它的时候会漏测（实测过）：class_basename() 未定义 ⇒ 那行 Log::warning(...) 的**实参求值**就抛 Error
+ * ⇒ 被 ExportConcurrency 的 `catch (\Throwable)` 吞掉 ⇒ Log::warning 永远不被调用 ⇒
+ * 「缓存坏了也不许按张数刷屏」那条断言恒真 —— 把 $warned 那道 latch 删掉测试照样绿。
+ *
+ * 声明在 App\Support 命名空间下即可被同命名空间的类解析到（PHP 对未限定函数名先查当前命名空间，
+ * 再退回全局），无需 use。
+ */
+if (! function_exists('App\Support\class_basename')) {
+    function class_basename($class)
+    {
+        $class = is_object($class) ? get_class($class) : (string) $class;
+
+        return basename(str_replace('\\', '/', $class));
     }
 }
