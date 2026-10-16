@@ -377,7 +377,7 @@
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.6 4.6L18.8 12L8.6 19.4Z'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.9 4.6L17.1 12L6.9 19.4Z'/%3E%3C/svg%3E");
             background-position: 2px 2px;
             background-repeat: no-repeat;
             background-size: 16px 16px;
@@ -402,7 +402,7 @@
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.87 17.97A7 7 0 1 0 11.37 5.61'/%3E%3Cpath d='M16.37 8.06L11.37 5.61L16.37 3.16'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.25 18.59A7 7 0 1 0 10.75 6.23'/%3E%3Cpath d='M15.75 8.68L10.75 6.23L15.75 3.78'/%3E%3C/svg%3E");
             background-position: 2px 2px;
             background-repeat: no-repeat;
             background-size: 16px 16px;
@@ -413,7 +413,7 @@
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.13 17.97A7 7 0 1 1 12.63 5.61'/%3E%3Cpath d='M7.63 8.06L12.63 5.61L7.63 3.16'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.75 18.59A7 7 0 1 1 13.25 6.23'/%3E%3Cpath d='M8.25 8.68L13.25 6.23L8.25 3.78'/%3E%3C/svg%3E");
             background-position: 2px 2px;
             background-repeat: no-repeat;
             background-size: 16px 16px;
@@ -1284,7 +1284,7 @@
              * （后者在看图器开关时挂/摘）。 */
             const VIEWER_OPEN_CLASS = 'ls-viewer-open';   // 看图器开着（含全屏期间）
             const UI_IDLE_CLASS = 'ls-ui-idle';           // 非全屏：UI 已收起
-            const FS_UI_MS = 2500;
+            const FS_UI_MS = 2000;
             let fsUiTimer = 0;
             /* "人还在 UI 上"就不收起 —— 第七轮要的：
              * "我正操作着呢 UI 自己没了，这多烦人"。原来的实现只做了"每次操作重新计时"，

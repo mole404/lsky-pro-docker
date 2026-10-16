@@ -26,6 +26,8 @@ const code = blade
     .replace(/\{\{--[\s\S]*?--\}\}/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/[^\n]*/g, '');
+// 收起延时直接从被测代码里读（以后调数值不用再改测试）
+const FS_UI_MS = Number(/const FS_UI_MS = (\d+);/.exec(code)[1]);
 
 const results = [];
 function check(name, pass, detail = '') {
@@ -534,7 +536,7 @@ function bootViewerUi() {
         lib.push(thumb ? 'view' : 'close');
     });
     // 真跑被测代码：抠出来的原文整段塞进去，只用 jsdom 的 document / Element
-    // 计时器换成记账版：用来断言「触屏唤醒后确实补排了一次 2500ms 的收起」，不必真等 2.5s
+    // 计时器换成记账版：用来断言「触屏唤醒后确实补排了一次 FS_UI_MS 的收起」，不必真等它到点
     const timerLog = { set: [], clear: [], ops: [], live: new Map() };
     const api = new Function('document', 'Element', 'setTimeout', 'clearTimeout',
         IDLE_SRC + '\n' + 'return { zones: WINDOWED_UI_ZONES, fsZones: FS_UI_ZONES, hiddenAtDown: () => windowedUiHiddenAtDown, downTouch: () => windowedUiHiddenAtDownTouch };')(
@@ -615,9 +617,9 @@ function bootViewerUi() {
         x.timerLog.set.length = 0;
         x.fire('.viewer-canvas', xy, 'click', true);
         // 口径改成「活计时器」：闸门加上后，这一下的 flashViewerUI 自己也会走到收起分支，
-        // 再加上下面那句补排 ⇒ 会排两次（第二次清掉第一次、重新计时，净效果仍是 2.5s 一个计时器）。
-        check('② 触屏收起态点底部：吞掉那一下 + 补排 2500ms 的收起（否则 UI 会一直挂着）',
-            x.lib.length === 0 && x.timerLog.live.size === 1 && [...x.timerLog.live.values()][0] === 2500,
+        // 再加上下面那句补排 ⇒ 会排两次（第二次清掉第一次、重新计时，净效果仍是一个计时器）。
+        check(`② 触屏收起态点底部：吞掉那一下 + 补排 ${FS_UI_MS}ms 的收起（否则 UI 会一直挂着）`,
+            x.lib.length === 0 && x.timerLog.live.size === 1 && [...x.timerLog.live.values()][0] === FS_UI_MS,
             `lib=${JSON.stringify(x.lib)} live=${x.timerLog.live.size} timers=${JSON.stringify(x.timerLog.set)}`);
         x.dom.window.close();
     }
@@ -702,7 +704,7 @@ function bootViewerUi() {
         x.dom.window.close();
     }
     // ⑦ 手机「点一下 UI」之后必须仍然自动收起，⑧ 手机滑动依然收，⑨ 桌面鼠标停在 UI 上依然只续期
-    // 为什么单列一节：真机序列在 jsdom 里量出来的根因 —— 抬手那一刻 touchend 监听器排下了 2500ms 收起，
+    // 为什么单列一节：真机序列在 jsdom 里量出来的根因 —— 抬手那一刻 touchend 监听器排下了 FS_UI_MS 的收起，
     // 紧接着浏览器补发的**合成 mousemove**（坐标正好落在刚点过的那块 UI 上）走了「指针停在 UI 上 ⇒ 只续期」
     // 分支，把计时器清掉且不排新的 ⇒ 点过的文件名/工具按钮/缩略图就再也不自动收；滑动不算点击、没有合成
     // 事件 ⇒ 计时器存活 ⇒ 正常收（看到的行为差异就是这么来的）。改法是给续期分支加「刚发生过触摸就不认」。
