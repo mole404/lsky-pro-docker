@@ -213,22 +213,23 @@
            图标 inset 15px）里 × 的白色尖端离角只有 9.3px ⇒ 会被切到一点；而可见区只有 40×40，
            图标靠里最多挪 3px，再挪 × 的外角就会戳出黑圆、露在照片上。
            于是分两步：先（100×100 / inset 20）把尖端挪到 13.5px —— 切不到了，但"刚够用"；
-           现在再放大一档：按钮 120×120（圆心仍压在角上 ⇒ 可见四分之一圆半径 50→60px）+ 图标 inset 27px
-           + × 字形 16→20px（盒 20→24）⇒ × 落在距右边/上边 12.9~35px，物理圆角再大也切不到。
-           约束：图标盒外角必须落在那圈黑底里 —— 盒外角离角 9×√2 ≈ 12.7 ≤ 60 ✓。
+           再放大一档到 120×120（可见四分之一圆半径 60px）；其后又略收一成：按钮 108×108
+           （圆心仍压在角上 ⇒ 半径 54px）+ 图标 inset 23px + × 字形 18px（盒 24→22）
+           ⇒ × 靠角那侧仍距右边/上边 11px（与 120 那版一致，物理圆角同样切不到），盘子整体小一成。
+           约束：图标盒外角必须落在那圈黑底里 —— 盒外角离角 9×√2 ≈ 12.7 ≤ 54 ✓；× 外角 29×√2 ≈ 41 ≤ 54 ✓。
            非全屏（库原样 80px/inset 15）不动：那边浏览器自带边距，且收起态那三条 opacity/pointer-events
            规则与此无关 —— 本块只改尺寸与位置，不碰 position/border-radius（那个圆是库画的）。 */
         html.ls-viewer-fs .viewer-button {
-            width: 120px;
-            height: 120px;
-            right: -60px;
-            top: -60px;
+            width: 108px;
+            height: 108px;
+            right: -54px;
+            top: -54px;
         }
         html.ls-viewer-fs .viewer-button:before {
-            bottom: 27px;
-            left: 27px;
+            bottom: 23px;
+            left: 23px;
         }
-        /* × 随盘子等比放大（字形 16→20px；盒子 20→24、盒内偏移仍 2px ⇒ 盒与字形同心）。
+        /* × 随盘子等比放大（全屏这一档：字形 16→18px；盒子 20→22、盒内偏移仍 2px ⇒ 盒与字形同心）。
            ⚠ 必须挂上第二个类把特异性提到 (0,3,1)：下面那批共享图标规则
            `html .viewer-button[data-viewer-action="mix"]:before` 是 (0,2,1)，与
            `html.ls-viewer-fs .viewer-button:before` **相等**，而共享规则在文件里更靠后 ⇒
@@ -236,10 +237,10 @@
            盒子一放大，× 就会贴到视口角只剩 ~5px。 */
         html.ls-viewer-fs .viewer-button.viewer-close:before,
         html.ls-viewer-fs .viewer-button[data-viewer-action="mix"]:before {
-            width: 24px;
-            height: 24px;
+            width: 22px;
+            height: 22px;
             background-position: 2px 2px;
-            background-size: 20px 20px;
+            background-size: 18px 18px;
         }
 
         /* 非全屏（只是看图器开着）也把**整套 UI** 自动收起来 —— 与全屏同一套节奏（2.5s 无操作即隐、

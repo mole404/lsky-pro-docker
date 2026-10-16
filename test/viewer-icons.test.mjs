@@ -207,10 +207,10 @@ console.log('\n[4] 全屏右上角关闭键的几何（手机物理圆角不切 
         ! /(^|\n)\s*(html\s+)?\.viewer-button\s*\{\s*\n\s*(width|height|right|top):/m.test(blade));
     check('⑦ 图标盒的外角必须仍落在那圈黑底里（否则 × 会戳出黑圆、露在照片上）',
         boxNear * Math.SQRT2 <= R, `盒外角 ${(boxNear * Math.SQRT2).toFixed(1)} ≤ 圆半径 ${R}`);
-    check('⑧ × 只在全屏放大：共享规则仍是 20×20/16px，全屏覆盖 24×24/20px（窗口模式库原样不动）',
+    check('⑧ × 只在全屏放大：共享规则仍是 20×20/16px，全屏覆盖 22×22/18px（窗口模式库原样不动）',
         num(iconRule, 'width') === 20 && num(iconRule, 'height') === 20
         && num(iconRule, 'background-size') === 16 && num(iconRule, 'background-position') === 2
-        && boxFs === 24 && num(fsBigRule, 'height') === 24 && bgSize === 20 && bgPos === 2,
+        && boxFs === 22 && num(fsBigRule, 'height') === 22 && bgSize === 18 && bgPos === 2,
         `共享 ${num(iconRule, 'width')}×${num(iconRule, 'height')}/${num(iconRule, 'background-size')}px`
         + ` → 全屏 ${boxFs}×${num(fsBigRule, 'height')}/${bgSize}px`);
     // 权重必须**算**出来，不能靠文件顺序：共享图标规则的 (0,2,1) 与全屏那条 (0,2,1) 相等，
