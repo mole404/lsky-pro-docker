@@ -377,7 +377,7 @@
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.9 4.6L17.1 12L6.9 19.4Z'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.58 4.6L17.78 12L7.58 19.4Z'/%3E%3C/svg%3E");
             background-position: 2px 2px;
             background-repeat: no-repeat;
             background-size: 16px 16px;
