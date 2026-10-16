@@ -170,8 +170,8 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 # 改 src/ 里这三个文件后必须同步更新这里的 md5（故意做成"改了不更新就构建失败"），
 # 并重新生成 patches/ios-longpress.patch（tools/diff-vs-upstream.sh）。
 RUN printf '%s\n' \
-        '30f2feb6eaa5f6fa6de79b9f87bb70ef  ./public/js/context-js/context-js.js' \
-        '30f2feb6eaa5f6fa6de79b9f87bb70ef  ./resources/js/context-js.js' \
+        '5cf4921912df67a6de657dee02284e65  ./public/js/context-js/context-js.js' \
+        '5cf4921912df67a6de657dee02284e65  ./resources/js/context-js.js' \
         '7b3716a4f7d0e856f76600a3dd6c897d  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
@@ -225,7 +225,7 @@ RUN APP_SRC_MD5=$(find app config routes -type f -print0 2>/dev/null | sort -z |
     printf '%s\n' \
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
-        "context_js_md5=30f2feb6eaa5f6fa6de79b9f87bb70ef" \
+        "context_js_md5=5cf4921912df67a6de657dee02284e65" \
         "images_blade_md5=7b3716a4f7d0e856f76600a3dd6c897d" \
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \

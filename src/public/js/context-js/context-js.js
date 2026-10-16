@@ -59,7 +59,6 @@ window.context = window.context || (function () {
     // 该 media query 会返回 true，桌面会被误判成触摸设备。UA 判定稳得多。
     const UA_STR = navigator.userAgent || '';
     const isDesktopUA = ! /Mobile|Android|iPhone|iPad|iPod/i.test(UA_STR);
-    const LEAF_FADE_WINDOW = 900;   // 上面这条的有效期：叶子项点击后多久内关闭才算"刚点过"
     const LEAF_PRESSED_CLASS = 'context-pressed';
     const MENU_FADING_CLASS = 'context-fading';   // 关闭时的 CSS transition 淡出类（见 closeMenus）
     const DEBUG_BUFFER_SIZE = 240;  // 诊断环缓冲长度（context.debugDump() 用）
@@ -256,7 +255,6 @@ window.context = window.context || (function () {
     let debugBuffer = [];           // 诊断环缓冲
     let debugToConsole = false;     // context.debug = true 时实时打控制台
     let lastTouchAt = 0;            // 最近一次触摸开始时刻：用来区分"触摸补发的 click"和"真鼠标点击"
-    let lastLeafTapAt = 0;          // 最近一次点中菜单叶子项的时刻（closeMenus 据此决定要不要放慢淡出）
     let suppressClickUntil = 0;
     let submenuInplaceAt = 0;       // 二级菜单就地替换的时刻（诊断/短窗用）
     let touchGestureId = 0;         // 每一次「手指按下」算一个新手势
@@ -394,7 +392,6 @@ window.context = window.context || (function () {
         // 【2026-10-08】刚点过叶子项（如「复制链接 → Url」）⇒ 这次淡出慢一点，让眼睛跟得上
         // 「点中的是哪一项」。注意：逻辑关闭依然是立即的 —— menuClosingUntil 与 fadeOut 时长一起
         // 延长，menuOnScreen() 的 DOM 兜底也在，这段时间的点击照样被吞 ⇒ 不会把「点穿」放回来。
-        const leafClose = (Date.now() - lastLeafTapAt) < LEAF_FADE_WINDOW;
         // 一级/二级用不同时长（点菜单外、Esc 等仍走默认的 options.fadeSpeed）
         // 【终稿】一律不停住；只按设备给淡出时长（电脑 120 / 手机 320）。所有关闭路径统一 ——
         // 点菜单项、点菜单外、Esc 都一样，不再区分"是不是刚点过叶子项"。
@@ -403,12 +400,16 @@ window.context = window.context || (function () {
         // 停住 + 淡出期间元素都在屏幕上：这段时间的点击必须照样被吞
         menuClosingUntil = Date.now() + fade + MENU_FADE_GUARD;
 
-        if (! leafClose) {
-            exitSubmenuInplace(true);   // 常规路径：就地替换状态跟着菜单一起清掉（不重夹，元素正在淡出）
-        }
-        // 【2026-10-08】点中二级菜单里的叶子项时**不能**在这里即时收子菜单 ——
-        // 那会让用户看到"先返回一级菜单、再整个消失"（实测的观感）。改成延到淡出之后
-        // （见下面的 setTimeout）：淡出期间保持子菜单样貌 + 那一项的定格高亮，直接淡出。
+        // 【2026-10-16 定稿】这里**不许**还原二级菜单状态 —— 一律延到淡出结束之后（见下面的 setTimeout）。
+        // 同一个坑踩了两次，判据只有一条：**淡出期间元素还完整可见**（手机 320ms / 电脑 120ms），
+        // 这时只要动内容状态，用户就会看到跳变：
+        //   摘 `.submenu-inplace` → 面板整页退回一级（观感："菜单退回了上级"）；
+        //   摘 `.touch-open` 之后主题那条 `.dropdown-context .dropdown-submenu:hover>.dropdown-menu`
+        //   会顶上（手机上 :hover 粘在刚点过的父项上）→ 二级菜单按侧开位置 `left:100%` 又画在面板
+        //   旁边（观感："二级菜单跳到了一级菜单旁边"），然后才整块消失。
+        //   2026-10-08 只给「点二级菜单叶子项」那条路加了延后，「点菜单外 / Esc」当时留着立即还原
+        //   ⇒ 同一个现象换个触发条件又冒出来。现在统一：淡出期间面板一个字都不变，保持用户关它时
+        //   的样貌（二级页 + 定格高亮）整块淡出。
         // exitSubmenuInplace 本身幂等（没有 .submenu-inplace 类会立刻 return），重复调用无害。
 
         // 【2026-10-08 真机定位后的最终写法】淡出**不再用 jQuery 的 fadeOut**。
@@ -433,12 +434,12 @@ window.context = window.context || (function () {
         doFadeOut();
         // 兜底清理（不写在 fadeOut 回调里：动画被 stop 掉时回调不一定执行）。
         //   1) 定格高亮必须清干净 —— 菜单是复用的 DOM，残留会让下次打开那一项还亮着；
-        //   2) 叶子项关闭路径把「收子菜单」也放这里：此时元素已不可见，用户看不到那次状态还原。
+        //   2) 二级菜单状态的还原也放这里（所有关闭路径统一）：此时元素已不可见，用户看不到那次还原。
         menuCleanupTimers.push(setTimeout(function () {
             $('.dropdown-context .' + LEAF_PRESSED_CLASS).removeClass(LEAF_PRESSED_CLASS);
-            if (leafClose) {
-                exitSubmenuInplace(true);
-            }
+            // 二级菜单状态的**唯一**还原点。走到这里面板已在 fade+60 变 display:none，这次还原用户看不到。
+            // keepGuard=true：元素已不可见，不必重新夹视口（clampMenu 会在下次开菜单时重算）。
+            exitSubmenuInplace(true);
         }, fade + 150));
     }
 
@@ -1014,7 +1015,6 @@ window.context = window.context || (function () {
             if (! $a.length || ! $.trim($a.text())) {
                 return;
             }
-            lastLeafTapAt = Date.now();
             // 在子菜单容器（.dropdown-context-sub）里 ⇒ 二级菜单项；否则是一级菜单项。
             // 安卓两级都放长（一级 < 二级）；iOS 保持原样（二级 280、一级 = options.fadeSpeed）。
             $a.addClass(LEAF_PRESSED_CLASS);

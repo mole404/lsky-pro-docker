@@ -386,10 +386,22 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         ! /dbg-ctx|DBG_ON|dbgSid/.test(ctxJs) && ! /\?dbg=1/.test(ctxJs));
     // 2026-10-08 终稿：一级的**淡出时长与二级一致**（一级太长，和二级一致就好）；
     // 只有 hold（停顿）继续分层级。所以代码里不应再有 MAIN_FADE 这类"一级专属 fade"常量。
-    check('点二级项后不「先退回一级」：叶子项路径跳过即时 exitSubmenuInplace，改用延时收尾',
-        /const leafClose = \(Date\.now\(\) - lastLeafTapAt\) < LEAF_FADE_WINDOW;/.test(ctxJs)
-        && /if \(! leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs)
-        && /if \(leafClose\) \{\s*\n\s*exitSubmenuInplace\(true\);/.test(ctxJs));
+    // 2026-10-16 定稿：**所有**关闭路径都不许在淡出开始时就还原二级菜单状态。
+    // 判据：淡出期间元素还完整可见（手机 320 / 电脑 120ms），这时动内容状态用户就会看到跳变 ——
+    //   「退回上级」= 摘掉 .submenu-inplace；「二级跳到旁边」= 摘掉 .touch-open 之后主题那条
+    //   `.dropdown-context .dropdown-submenu:hover>.dropdown-menu` 顶上（手机 :hover 粘在刚点过的
+    //   父项上），子菜单按侧开位置 left:100% 又被画出来。所以还原点只允许有一处，且必须在淡出之后。
+    const closeBody = ctxJs.slice(ctxJs.indexOf('function closeMenus('),
+        ctxJs.indexOf('function isInsideMenu('));
+    check('关闭路径不许「先退回一级」：closeMenus 里没有即时 exitSubmenuInplace，叶子项分支已整体撤除',
+        closeBody.length > 400
+        && ! /if \(! leafClose\)/.test(closeBody)
+        && ! /leafClose|lastLeafTapAt|LEAF_FADE_WINDOW/.test(ctxJs));
+    check('二级菜单状态的还原点只有一处，且在「面板已 display:none」之后（fade+60 → fade+150）',
+        (closeBody.match(/exitSubmenuInplace\(/g) || []).length === 1
+        && closeBody.indexOf('exitSubmenuInplace(') > closeBody.indexOf('doFadeOut();')
+        && closeBody.indexOf('fade + 60') < closeBody.indexOf('fade + 150')
+        && /exitSubmenuInplace\(true\);\s*\n\s*\}, fade \+ 150\)\);/.test(closeBody));
     check('叶子项点击后定格高亮：有 .context-pressed 样式（用强调色变量，不写死）',
         /\.dropdown-context a\.context-pressed\{[^}]*var\(--lsky-accent\)/.test(ctxCss)
         && /\.dropdown-context a\.context-pressed\s*\{[\s\S]{0,120}var\(--lsky-accent\)/.test(ctxLess));
