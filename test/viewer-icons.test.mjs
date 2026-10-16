@@ -175,16 +175,21 @@ console.log('\n[4] 全屏右上角关闭键的几何（手机物理圆角不切 
         .map((m) => m[1]).find((b) => /width\s*:/.test(b)) || '';
     const fsIcon = ruleBody('html.ls-viewer-fs .viewer-button:before {');
     const iconRule = ruleBody('html .viewer-button[data-viewer-action="mix"]:before {');
+    // 全屏专用的「× 放大」覆盖：挂第二个类把权重提到 (0,3,1)（见下面 ⑧ 的算法断言）
+    const fsBigRule = ruleBody('html.ls-viewer-fs .viewer-button[data-viewer-action="mix"]:before {');
 
     const W = num(fsBtn, 'width'), H = num(fsBtn, 'height');
     const right = num(fsBtn, 'right'), top = num(fsBtn, 'top');
     const insetBottom = num(fsIcon, 'bottom'), insetLeft = num(fsIcon, 'left');
-    const bgPos = num(iconRule, 'background-position');
-    const bgSize = num(iconRule, 'background-size');
+    // 全屏态真正的盒子/字形 = 覆盖值优先（覆盖把 width/height/background-size 都写在全屏作用域里）
+    const boxFs = num(fsBigRule, 'width') || num(iconRule, 'width');
+    const bgPos = num(fsBigRule, 'background-position') || num(iconRule, 'background-position');
+    const bgSize = num(fsBigRule, 'background-size') || num(iconRule, 'background-size');
     const R = W / 2;                                   // 可见四分之一圆的半径
     const glyphNear = R - (insetLeft + bgPos + bgSize); // × 靠角那一侧：距右边/上边多少 px
     const glyphFar = R - (insetLeft + bgPos);           // × 外角那一侧
     const rimGap = R - glyphFar * Math.SQRT2;           // × 外角离那圈黑底边缘还有多少余量
+    const boxNear = R - (insetLeft + boxFs);             // 图标盒最靠角那条边距屏幕右/上边多少 px
 
     check('① 解析到全屏那两条规则与图标盒（未手抄）',
         W > 0 && H > 0 && insetLeft > 0 && bgPos > 0 && bgSize > 0,
@@ -200,9 +205,31 @@ console.log('\n[4] 全屏右上角关闭键的几何（手机物理圆角不切 
         ! /(position|border-radius|overflow)\s*:/.test(fsBtn));
     check('⑥ 非全屏不动：页面里对 .viewer-button 几何的覆盖全部只在 html.ls-viewer-fs 作用域内',
         ! /(^|\n)\s*(html\s+)?\.viewer-button\s*\{\s*\n\s*(width|height|right|top):/m.test(blade));
-    check('⑦ 图标仍是 16px 盒内字形、盒子 20×20（本次只挪位置，不放大小）',
-        num(iconRule, 'width') === 20 && num(iconRule, 'height') === 20 && bgSize === 16 && bgPos === 2,
-        `盒 ${num(iconRule, 'width')}×${num(iconRule, 'height')}，字形 ${bgSize}@${bgPos}`);
+    check('⑦ 图标盒的外角必须仍落在那圈黑底里（否则 × 会戳出黑圆、露在照片上）',
+        boxNear * Math.SQRT2 <= R, `盒外角 ${(boxNear * Math.SQRT2).toFixed(1)} ≤ 圆半径 ${R}`);
+    check('⑧ × 只在全屏放大：共享规则仍是 20×20/16px，全屏覆盖 24×24/20px（窗口模式库原样不动）',
+        num(iconRule, 'width') === 20 && num(iconRule, 'height') === 20
+        && num(iconRule, 'background-size') === 16 && num(iconRule, 'background-position') === 2
+        && boxFs === 24 && num(fsBigRule, 'height') === 24 && bgSize === 20 && bgPos === 2,
+        `共享 ${num(iconRule, 'width')}×${num(iconRule, 'height')}/${num(iconRule, 'background-size')}px`
+        + ` → 全屏 ${boxFs}×${num(fsBigRule, 'height')}/${bgSize}px`);
+    // 权重必须**算**出来，不能靠文件顺序：共享图标规则的 (0,2,1) 与全屏那条 (0,2,1) 相等，
+    // 而共享规则在文件里更靠后 ⇒ 不挂第二个类的话，靠顺序压不住（改错就红）。
+    const specOf = (sel) => {
+        const m = sel.replace(/:before/g, '');                       // 伪元素不记权重
+        const ids = (m.match(/#[\w-]+/g) || []).length;
+        const cls = (m.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) || []).length;
+        const el = (m.replace(/#[\w-]+|\.[\w-]+|\[[^\]]+\]|::?[\w-]+(?!\()/g, ' ')
+            .match(/\b[a-zA-Z][\w-]*\b/g) || []).length;
+        return ids * 10000 + cls * 100 + el;
+    };
+    const sharedSel = 'html .viewer-button[data-viewer-action="mix"]';
+    const fsSel = 'html.ls-viewer-fs .viewer-button[data-viewer-action="mix"]';
+    check('⑨ 「× 放大」那条的权重必须严格大于共享图标规则（挂第二个类 ⇒ 3 类 vs 2 类）',
+        specOf(fsSel) > specOf(sharedSel)
+        && blade.includes(fsSel + ':before {')
+        && blade.includes('html.ls-viewer-fs .viewer-button.viewer-close:before,'),
+        `全屏 ${specOf(fsSel)} > 共享 ${specOf(sharedSel)}（简化为 ids*10000+cls*100+el）`);
 }
 
 // ---------------------------------------------------------------- 汇总

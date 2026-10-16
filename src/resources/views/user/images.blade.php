@@ -208,24 +208,38 @@
         html.ls-viewer-fs:not(.ls-fs-ui) .viewer-button {
             pointer-events: none;
         }
-        /* 全屏里把右上角关闭键整体放大一圈 —— 手机屏幕的**物理圆角**（常见半径 20~30px）会啃掉那个
-           四分之一圆最靠角的一小块，而库那套几何里（80×80、圆心正好压在屏幕角上、图标 inset 15px）
-           × 的白色尖端离角只有 7px ⇒ 会被切到一点。可见区本来就只有 40×40，图标靠里最多挪 3px，
-           再挪 × 的外角就会戳出黑圆、露在照片上。所以全屏改成：按钮 100×100（圆心仍压在角上 ⇒
-           可见四分之一圆半径 40→50px）+ 图标 inset 20px ⇒ × 落在距右边/上边 12~30px、尖端离角 12px，
-           物理圆角再大也切不到（约束：图标外角要落在那圈黑底里，dx_max = 半径−(inset+2) = 28，
-           28√2 ≈ 39.6 ≤ 50 ✓；旧的 25√2 ≈ 35.4 ≤ 40 也安全，这就是「旧版只能挪 3px」的由来）。
-           非全屏（库原样）不动：那边浏览器自带边距，且收起态那三条 opacity/pointer-events 规则与此无关
-           —— 本块只改尺寸与位置，不碰 position/border-radius（那个圆是库画的）。 */
+        /* 全屏里把右上角关闭键整体放大 —— 手机屏幕的**物理圆角**（实测约 7 CSS px，对应 1080p@3x 上
+           二十来个物理 px）会啃掉那个四分之一圆最靠角的一小块。库那套几何（80×80、圆心正压在屏幕角上、
+           图标 inset 15px）里 × 的白色尖端离角只有 9.3px ⇒ 会被切到一点；而可见区只有 40×40，
+           图标靠里最多挪 3px，再挪 × 的外角就会戳出黑圆、露在照片上。
+           于是分两步：先（100×100 / inset 20）把尖端挪到 13.5px —— 切不到了，但"刚够用"；
+           现在再放大一档：按钮 120×120（圆心仍压在角上 ⇒ 可见四分之一圆半径 50→60px）+ 图标 inset 27px
+           + × 字形 16→20px（盒 20→24）⇒ × 落在距右边/上边 12.9~35px，物理圆角再大也切不到。
+           约束：图标盒外角必须落在那圈黑底里 —— 盒外角离角 9×√2 ≈ 12.7 ≤ 60 ✓。
+           非全屏（库原样 80px/inset 15）不动：那边浏览器自带边距，且收起态那三条 opacity/pointer-events
+           规则与此无关 —— 本块只改尺寸与位置，不碰 position/border-radius（那个圆是库画的）。 */
         html.ls-viewer-fs .viewer-button {
-            width: 100px;
-            height: 100px;
-            right: -50px;
-            top: -50px;
+            width: 120px;
+            height: 120px;
+            right: -60px;
+            top: -60px;
         }
         html.ls-viewer-fs .viewer-button:before {
-            bottom: 20px;
-            left: 20px;
+            bottom: 27px;
+            left: 27px;
+        }
+        /* × 随盘子等比放大（字形 16→20px；盒子 20→24、盒内偏移仍 2px ⇒ 盒与字形同心）。
+           ⚠ 必须挂上第二个类把特异性提到 (0,3,1)：下面那批共享图标规则
+           `html .viewer-button[data-viewer-action="mix"]:before` 是 (0,2,1)，与
+           `html.ls-viewer-fs .viewer-button:before` **相等**，而共享规则在文件里更靠后 ⇒
+           靠顺序压不住，必须靠特异性。只在全屏放大：非全屏（库原样 80px 盒 / inset 15px）里
+           盒子一放大，× 就会贴到视口角只剩 ~5px。 */
+        html.ls-viewer-fs .viewer-button.viewer-close:before,
+        html.ls-viewer-fs .viewer-button[data-viewer-action="mix"]:before {
+            width: 24px;
+            height: 24px;
+            background-position: 2px 2px;
+            background-size: 20px 20px;
         }
 
         /* 非全屏（只是看图器开着）也把**整套 UI** 自动收起来 —— 与全屏同一套节奏（2.5s 无操作即隐、
@@ -355,12 +369,15 @@
             background-size: 16px 16px;
         }
 
+        /* 播放三角：之前只做到「墨迹盒居中」(偏心 -0.07px)，但三角形指向右、**面积重心偏左 1.80 单位**
+           (=16px 实显 1.2px) ⇒ 眼睛看着偏左。按 Material Icons `play_arrow` 的口径（它的墨迹盒中心在
+           (13.5,12)、面积重心 (11.67,12) ≈ 正中）把重心摆正中：整组右移 1.8 单位。 */
         html .viewer-toolbar > ul > li.viewer-play:before {
             content: '';
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.8 4.6L17 12L6.8 19.4Z'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.6 4.6L18.8 12L8.6 19.4Z'/%3E%3C/svg%3E");
             background-position: 2px 2px;
             background-repeat: no-repeat;
             background-size: 16px 16px;
@@ -377,12 +394,15 @@
             background-size: 16px 16px;
         }
 
+        /* 左右旋转：220° 的弧墨迹盒中心本来偏右 1.25 单位（圆心虽在 (12,12)，但弧只占 220°、
+           缺口在左下），箭头又把墨迹往上顶 1.22 ⇒ 实测墨迹盒中心 (13.25, 10.78)，即偏右 0.83px、偏上 0.82px
+           (16px 实显)。整组平移 (-1.25, +1.22) 后墨迹盒中心精确落在 (12,12)；右旋转取其镜像。 */
         html .viewer-toolbar > ul > li.viewer-rotate-left:before {
             content: '';
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.5 17.36A7 7 0 1 0 12 5'/%3E%3Cpath d='M17 7.45L12 5L17 2.55'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.249 18.585A7 7 0 1 0 10.749 6.225'/%3E%3Cpath d='M15.749 8.675L10.749 6.225L15.749 3.775'/%3E%3C/svg%3E");
             background-position: 2px 2px;
             background-repeat: no-repeat;
             background-size: 16px 16px;
@@ -393,7 +413,7 @@
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16.5 17.36A7 7 0 1 1 12 5'/%3E%3Cpath d='M7 7.45L12 5L7 2.55'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.751 18.585A7 7 0 1 1 13.251 6.225'/%3E%3Cpath d='M8.251 8.675L13.251 6.225L8.251 3.775'/%3E%3C/svg%3E");
             background-position: 2px 2px;
             background-repeat: no-repeat;
             background-size: 16px 16px;
