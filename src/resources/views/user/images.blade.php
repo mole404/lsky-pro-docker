@@ -208,6 +208,19 @@
         html.ls-viewer-fs:not(.ls-fs-ui) .viewer-button {
             pointer-events: none;
         }
+        /* 非全屏（只是看图器开着）也让底部缩略图条自动隐藏 —— 与全屏同一套节奏（2.5s 无操作即隐、
+           一动鼠标/一触碰就现），只是门从「全屏中」换成「看图器开着」。工具栏不参与：非全屏时它常驻。
+           为什么用 opacity 而不是 display:none：盒子仍在布局里 ⇒ 画布尺寸不变 ⇒ 已经顶屏的
+           图不会因为「条隐藏了」而重算、也就不会抖一下（库的 initImage 会把 footer.offsetHeight 从可用高里扣掉）。
+           ★ 这里**故意不写** visibility/pointer-events（全屏那套才写）：条子虽然看不见，但还接指针 ⇒
+           落在它上面的第一下点击不会白吞（而且 pointerdown 那一刻就会把它淡出来，用户看到的是"点哪儿哪儿亮"）。
+           ★ 选择器里排除 .ls-viewer-fs：全屏那三条规则写在前面，这里不去碰它们（不然会抢成可见）。 */
+        html.ls-viewer-open:not(.ls-viewer-fs) .viewer-navbar {
+            transition: opacity .25s ease, visibility .25s ease;
+        }
+        html.ls-viewer-open.ls-ui-idle:not(.ls-viewer-fs) .viewer-navbar {
+            opacity: 0;
+        }
 
         /* 看图器工具栏的「裁剪」按钮图标。
            库的图标是一张 280px 宽的雪碧图，而且只给 14 个内置键分别写了规则
@@ -243,15 +256,15 @@
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v3a2 2 0 0 1-2 2H3'/%3E%3Cpath d='M21 8h-3a2 2 0 0 1-2-2V3'/%3E%3Cpath d='M3 16h3a2 2 0 0 1 2 2v3'/%3E%3Cpath d='M16 21v-3a2 2 0 0 1 2-2h3'/%3E%3C/svg%3E");
         }
 
-        /* 看图器工具栏的「顶屏」按钮图标。库里没有这个键（它只有 1:1），自定义键不在那张雪碧图枚举里
-           ⇒ 图标要自己补 content 与 20×20 盒子，做法与上面「裁剪」「全屏」一致。
-           图形取「从中心向外的四个箭头」：与「全屏」的四角括号、以及被替换掉的 1:1 字形都能一眼区分。 */
-        html .viewer-toolbar > ul > li.viewer-fit-edge:before {
+        /* 看图器工具栏的「下载原图」按钮图标。库里根本没有 download 这个键（源码里一次都没出现），
+           自定义键不在那张雪碧图枚举里 ⇒ 图标要自己补 content 与 20×20 盒子，做法与「裁剪」「全屏」一致。
+           图形取「向下箭头 + 底线」，与「全屏」的四角括号、裁剪的边框一眼能分开。 */
+        html .viewer-toolbar > ul > li.viewer-download:before {
             content: '';
             display: block;
             width: 20px;
             height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4.5v5'/%3E%3Cpath d='M9.5 7 12 4.5 14.5 7'/%3E%3Cpath d='M12 19.5v-5'/%3E%3Cpath d='M9.5 17 12 19.5 14.5 17'/%3E%3Cpath d='M4.5 12h5'/%3E%3Cpath d='M7 9.5 4.5 12 7 14.5'/%3E%3Cpath d='M19.5 12h-5'/%3E%3Cpath d='M17 9.5 19.5 12 17 14.5'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5v11'/%3E%3Cpath d='M7.5 10 12 14.5 16.5 10'/%3E%3Cpath d='M4.5 20.5h15'/%3E%3C/svg%3E");
             background-position: 3px 3px;
             background-repeat: no-repeat;
             background-size: 14px 14px;
@@ -837,7 +850,9 @@
                 // 所以这里把库里那 11 个内置按钮按原顺序照抄一遍（`true` 与原默认行为等价），
                 // 末尾追加「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
                 toolbar: {
-                    // 放最左（库按这里的键顺序渲染）。
+                    // 「下载原图」放最左（库按这里的键顺序渲染）：看图时最常用的动作，放最好按的位置。
+                    download: { show: true, click: () => downloadViewerImage() },
+                    // 其次「裁剪」（点击回调见 cropEditor；只有当前图是 jpg/jpeg/png 时才显示）。
                     crop: { show: true, click: () => cropEditor.openFromViewer() },
                     // 「全屏」：库里没有这个键，点击自己调库的 requestFullscreen()/exitFullscreen()。
                     // 按能力探测决定要不要渲染这个键：不支持元素全屏的浏览器（iPhone Safari）
@@ -845,8 +860,6 @@
                     ...(canViewerFullscreen()
                         ? { fullscreen: { show: true, click: () => toggleViewerFullscreen() } }
                         : {}),
-                    // 「顶屏」：替代库里那个 1:1（原始尺寸）。语义与实现见下方 fitEdge 那一段。
-                    'fit-edge': { show: true, click: () => fitEdgeNow() },
                     reset: true,
                     prev: true,
                     play: true,
@@ -906,14 +919,15 @@
                 };
             })();
 
-            /* ── 看图器「顶屏」（工具栏自定义键 fit-edge）──────────────────────────────
+            /* ── 看图器「顶屏」：**图片的初始状态**（全屏与非全屏统一）──────────────────
              * 语义：等比缩放到「先够得着的那一对边正好贴住画布」，另一对边留空 —— 不溢出、不裁切、不变形。
-             * 库自带的初始适配是 min(0.9 × 可用区, 原图)（见 viewer.min.js initImage）⇒ 四周留一圈白；
-             * 顶屏就是去掉那个 0.9、也不夹"不超过原始像素"，所以比默认大一圈（小图会被放大，糊是必然代价）。
+             * 库自带的初始适配是 min(0.9 × 可用区, 原图)（见 viewer.min.js initImage）⇒ 四周留一圈；
+             * 顶屏去掉那个 0.9、也不夹"不超过原始像素"（小图会被放大，糊是必然代价），而且它就是「重置」的落点：
+             * 库的 reset() 是把 imageData 整体换成 initialImageData 快照 ⇒ 顶屏几何要同时镜像进那份快照。
              *
              * 落地方式：不改库文件，在库里 renderImage() 真正渲染**之前**改写 imageData 里的尺寸与位置
              *   ⇒ 库自己那一次过渡（切图时新图从画布中心生长，起点由 load() 写成 0×0 + 居中）直接长到顶屏尺寸，
-             *     不会出现"先长到 90% 再补一下"的第二段。
+             *     不会出现"先长到 90% 再补一下"的第二段。首次打开、切图、窗口 resize、进出全屏都走这一条路。
              *
              * 位置口径：库用 marginLeft/marginTop 相对 .viewer-canvas 的内容盒摆放图片，所以 canvas.clientWidth/
              *   clientHeight 与 imageData 里的数值是同一坐标系 —— 比例与居中都能直接算，不需要量渲染矩形
@@ -921,7 +935,7 @@
              *
              * 旋转：imageData.width/height 是**未旋转**的盒子，视觉占位在 90°/270° 时宽高互换，算比例要按占位算。
              */
-            let fsFitMode = false;                  // 「看图器处于浏览器全屏」期间为 true
+            let fsFitMode = false;                  // 「看图器处于浏览器全屏」期间为 true（只给全屏那条兜底用）
             let fitRenderSeq = 0;                   // 库每次调 renderImage 自增，用于判断全屏后有没有发生过重排
             /* 把 imageData 改成顶屏尺寸；返回是否真的改了（已经顶屏 / 尺寸算不出来时返回 false） */
             const applyFitEdgeToImageData = () => {
@@ -931,48 +945,82 @@
                 const cw = canvas.clientWidth;
                 const ch = canvas.clientHeight;
                 if (! (cw > 0 && ch > 0)) { return false; }
-                const rotate = ((d.rotate || 0) % 180 + 180) % 180;
-                const footW = rotate === 90 ? d.naturalHeight : d.naturalWidth;    // 视觉占位宽
-                const footH = rotate === 90 ? d.naturalWidth : d.naturalHeight;    // 视觉占位高
-                let ratio = Math.min(cw / footW, ch / footH);
-                if (! isFinite(ratio) || ratio <= 0) { return false; }
-                ratio = Math.min(ratio, 100);                                      // 与库 maxZoomRatio 一致
-                const width = d.naturalWidth * ratio;
-                const height = d.naturalHeight * ratio;
-                if (Math.abs(width - d.width) < 0.5 && Math.abs(height - d.height) < 0.5) { return false; }
+                const vw = (viewer.viewerData && viewer.viewerData.width) || cw;
+                const vh = (viewer.viewerData && viewer.viewerData.height) || ch;
+                /* 算一份顶屏几何。rot90 决定"按旋转后的视觉占位算比例"还是"按未旋转的盒子算"：
+                 *   imageData 用前者（当前旋转下要顶住屏幕）；initialImageData 用后者 ——
+                 *   库的快照里 rotate 恒为 0（initImage 写死），重置后是按未旋转渲染的。 */
+                const fitFor = (rot90) => {
+                    const footW = rot90 ? d.naturalHeight : d.naturalWidth;    // 视觉占位宽
+                    const footH = rot90 ? d.naturalWidth : d.naturalHeight;    // 视觉占位高
+                    let r = Math.min(cw / footW, ch / footH);
+                    if (! isFinite(r) || r <= 0) { return null; }
+                    r = Math.min(r, 100);                                      // 与库 maxZoomRatio 一致
+                    /* ★ 上限夹紧（只乘一个系数 k，保住等比）：
+                     * 贴边那一维必须 <= viewerData 的对应值 —— 页面那句「完整装下」判据（isFit）与库的
+                     * isSwitchable 都是精确比较，而 natH*(ch/natH) 会算出 695.0000000000001 这种值
+                     * ⇒ 不夹的话那一类图会被判成"放大态"：滑动只回弹、切不了图。
+                     * 旋转 90°/270° 时「盒子宽」对应的是视觉高，上限要跟着换一维 —— 而且两维必须同乘 k：
+                     * 各自独立夹会把图非等比拉扁（实测过 390 画布 + 横图旋转，2.0 的宽高比被夹成 1.12）。 */
+                    const capW = rot90 ? Math.min(ch, vh) : Math.min(cw, vw);
+                    const capH = rot90 ? Math.min(cw, vw) : Math.min(ch, vh);
+                    const k = Math.min(1, capW / (d.naturalWidth * r), capH / (d.naturalHeight * r));
+                    const width = d.naturalWidth * r * k;
+                    const height = d.naturalHeight * r * k;
+                    return { width: width, height: height, ratio: width / d.naturalWidth,
+                             x: (cw - width) / 2, y: (ch - height) / 2 };      // 居中：与库同一套 margin 口径
+                };
+                const rotate = ((d.rotate || 0) % 180 + 180) % 180 === 90;
+                const fit = fitFor(rotate);
+                if (! fit) { return false; }
+                if (Math.abs(fit.width - d.width) < 0.5 && Math.abs(fit.height - d.height) < 0.5) { return false; }
                 d.oldRatio = d.ratio;
-                d.width = width;
-                d.height = height;
-                d.ratio = ratio;
-                d.x = (cw - width) / 2;                 // 居中：与库同一套 margin 口径
-                d.y = (ch - height) / 2;
-                d.left = d.x;
-                d.top = d.y;
+                d.width = fit.width;
+                d.height = fit.height;
+                d.ratio = fit.ratio;
+                d.x = fit.x;
+                d.y = fit.y;
+                d.left = fit.x;
+                d.top = fit.y;
+                /* ★ 同一份几何镜像进 initialImageData：库的 reset() 就是 `imageData = {...initialImageData}`，
+                 * 镜像之后「重置」天然落回顶屏（全屏、非全屏、手机松手时那一下回弹，走的都是同一个 reset()）。
+                 * 注意镜像是**未旋转口径**（fitFor(false)）：快照里的 rotate 由库写死为 0，若把"按旋转算出来的
+                 * 尺寸"写进去，旋转后按重置就会变成"按旋转算的盒子 + 未旋转渲染" —— 比例错、也不再顶屏。
+                 * 只覆盖几何字段：rotate/scaleX/scaleY 留给库（它在 initImage 里初始化那份快照）。 */
+                if (viewer.initialImageData && typeof viewer.initialImageData === 'object') {
+                    const ini0 = fitFor(false);
+                    if (ini0) {
+                        const ini = viewer.initialImageData;
+                        ini.width = ini0.width;
+                        ini.height = ini0.height;
+                        ini.ratio = ini0.ratio;
+                        ini.oldRatio = 1;
+                        ini.x = ini0.x;
+                        ini.y = ini0.y;
+                        ini.left = ini0.x;
+                        ini.top = ini0.y;
+                    }
+                }
                 return true;
-            };
-            /* 工具栏「顶屏」键：算一次、渲一次。这一步库里不带过渡动画（没有 viewing/zooming 那类标志）
-             * ⇒ 直接到位，不做"从当前尺寸滑过去"的慢动作。 */
-            const fitEdgeNow = () => {
-                if (! viewer.viewed || viewer.played) { return; }
-                if (applyFitEdgeToImageData()) { viewer.renderImage(); }
             };
             (function () {
                 if (typeof viewer.renderImage !== 'function') { return; }    // 产物变了就安静退出，不折腾
                 const rawRenderImage = viewer.renderImage.bind(viewer);
-                /* 全屏期间：凡是"库自己按新尺寸重排"的那类渲染（切图 viewing、进出全屏、重置等）一律在渲染前
-                 * 改成顶屏尺寸 ⇒ 一次到位；用户自己的滚轮缩放 / 拖动 / 旋转（库置了 zooming/moving/rotating/
-                 * scaling 标志）不动，保持当次操作的结果。 */
+                /* 不分全屏：凡是"库自己按新尺寸重排"的那类渲染（首次加载、切图、窗口 resize、进出全屏、
+                 * 重置等）一律在渲染前改成顶屏尺寸 ⇒ 一次到位，全屏与非全屏的行为因此统一。
+                 * 用户自己的滚轮缩放 / 拖动 / 旋转（库置了 zooming/moving/rotating/scaling 标志）不动，
+                 * 保持当次操作的结果 —— 想回到顶屏按「重置」即可。 */
                 viewer.renderImage = function () {
                     fitRenderSeq += 1;
-                    if (fsFitMode && ! viewer.played && ! viewer.zooming && ! viewer.moving
+                    if (! viewer.played && ! viewer.zooming && ! viewer.moving
                         && ! viewer.rotating && ! viewer.scaling) {
                         try { applyFitEdgeToImageData(); } catch (e) { /* 兜底：绝不因这一刀让看图界面挂掉 */ }
                     }
                     return rawRenderImage.apply(null, arguments);
                 };
             })();
-            /* 「重置」键不用改：全屏里 reset() 内部会走到上面这层包装 ⇒ 自动变成「归位 + 顶屏」；
-             * 非全屏时 fsFitMode 是 false ⇒ 仍是库默认的"回到完整显示"。 */
+            /* 「重置」键不用改：reset() 会把 imageData 换成 initialImageData，而那份快照已被上面改成顶屏几何
+             * ⇒ 全屏、非全屏都落回顶屏（手机松手时那一下回弹走的是同一个 reset()）。 */
 
             /* 图片裁剪（Cropper.js v1.6.3）—— 三个入口共用这一个模块：
              *   · 看图器工具栏的「裁剪」按钮（cropEditor.openFromViewer）
@@ -1023,9 +1071,9 @@
             document.addEventListener('webkitfullscreenchange', syncFullscreenIcon);
 
             /* 全屏进出与顶屏的联动（与上面的图标同步分开写，职责清楚）：
-             *   进 ⇒ 打开"渲染即顶屏"模式：库因视口变化重排那次渲染会被上面那层改成顶屏，一步到位；
-             *        再兜底 250ms —— 万一某个浏览器不改视口、压根没有那次重排，就自己渲一次。
-             *   出 ⇒ 关掉模式并按当前视口重算一次适配（回到库默认的完整显示）。
+             *   进 ⇒ 库会因视口变化重排（那次渲染已被改成顶屏，一步到位）；再兜底 250ms ——
+             *        万一某个浏览器不改视口、压根没有那次重排，就自己渲一次（渲染那层会把尺寸改成顶屏）。
+             *   出 ⇒ 按收回后的视口重算一次（重算完仍落回顶屏，因为"渲染即顶屏"是常态）。
              * 判据只看 document 的全屏元素，不依赖库的内部状态。 */
             const onViewerFullscreenResize = () => {
                 const d = document;
@@ -1036,7 +1084,7 @@
                     const seq = fitRenderSeq;
                     setTimeout(() => {
                         if (! fsFitMode || fitRenderSeq !== seq) { return; }   // 期间已经渲染过（那次已被改成顶屏）
-                        fitEdgeNow();
+                        if (viewer.viewed && ! viewer.played) { viewer.renderImage(); }
                     }, 250);
                 } else if (viewer.viewed && ! viewer.played && typeof viewer.initImage === 'function') {
                     requestAnimationFrame(() => {                              // 等视口真正收回去再重算
@@ -1048,10 +1096,14 @@
             document.addEventListener('fullscreenchange', onViewerFullscreenResize);
             document.addEventListener('webkitfullscreenchange', onViewerFullscreenResize);
 
-            /* 全屏里鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态） */
+            /* 鼠标动一下 / 轻触一下 ⇒ 临时把 UI 淡出来（只看，不改任何状态）。
+             * 两种模式共用这一套：全屏时管 toolbar/缩略图条/标题/关闭键四块；非全屏时只有缩略图条会自动隐
+             * （工具栏本来就常驻）。门分别是 html.ls-viewer-fs 与 html.ls-viewer-open（后者在看图器开关时挂/摘）。 */
+            const VIEWER_OPEN_CLASS = 'ls-viewer-open';   // 看图器开着（含全屏期间）
+            const UI_IDLE_CLASS = 'ls-ui-idle';           // 非全屏：UI 已收起
             const FS_UI_MS = 2500;
             let fsUiTimer = 0;
-            /* 全屏里"人还在 UI 上"就不收起 —— 第七轮要的：
+            /* "人还在 UI 上"就不收起 —— 第七轮要的：
              * "我正操作着呢 UI 自己没了，这多烦人"。原来的实现只做了"每次操作重新计时"，
              * 但鼠标停在 toolbar/缩略图条上不动时没有任何事件，计时照样走完 ⇒ UI 在手指底下消失
              * （而且此刻它们是 pointer-events:none，点下去还会穿透、甚至误关看图器）。
@@ -1059,40 +1111,68 @@
              * 所以量得到矩形；不能用 :hover —— pointer-events:none 时命中测试拿不到它们），
              * 就只"续期"不排收起；手指按住期间同理。移开/松手后从那一刻重新计时。 */
             const FS_UI_ZONES = ['.viewer-toolbar', '.viewer-navbar', '.viewer-title', '.viewer-button'];
-            const pointerOverViewerUI = (x, y) => FS_UI_ZONES.some((sel) => {
+            const WINDOWED_UI_ZONES = ['.viewer-navbar'];   // 非全屏只有缩略图条会自动隐，就只看它
+            const pointerOverZones = (zones, x, y) => zones.some((sel) => {
                 const el = document.querySelector(sel);
                 if (! el) { return false; }
                 const r = el.getBoundingClientRect();
                 return r.width > 0 && r.height > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
             });
-            const scheduleFsHide = () => {
+            const inFullscreenClass = () => document.documentElement.classList.contains('ls-viewer-fs');
+            const scheduleViewerUiHide = () => {
                 clearTimeout(fsUiTimer);
-                fsUiTimer = setTimeout(() => document.documentElement.classList.remove('ls-fs-ui'), FS_UI_MS);
+                fsUiTimer = setTimeout(() => {
+                    const html = document.documentElement;
+                    if (inFullscreenClass()) { html.classList.remove('ls-fs-ui'); return; }   // 全屏：收四块 UI
+                    if (html.classList.contains(VIEWER_OPEN_CLASS)) { html.classList.add(UI_IDLE_CLASS); }
+                }, FS_UI_MS);
             };
-            const flashFullscreenUI = (e) => {
-                if (! document.documentElement.classList.contains('ls-viewer-fs')) { return; }
-                document.documentElement.classList.add('ls-fs-ui');
+            const flashViewerUI = (e) => {
+                const html = document.documentElement;
+                const fs = inFullscreenClass();
+                if (! fs && ! html.classList.contains(VIEWER_OPEN_CLASS)) { return; }   // 看图器没开 ⇒ 什么都不做
+                if (fs) { html.classList.add('ls-fs-ui'); } else { html.classList.remove(UI_IDLE_CLASS); }
                 const type = (e && e.type) || '';
                 if (type.indexOf('touch') === 0) {
                     clearTimeout(fsUiTimer);            // 手指还按着 ⇒ 别收
                     return;
                 }
-                if (type !== 'keydown' && pointerOverViewerUI((e && e.clientX) || 0, (e && e.clientY) || 0)) {
-                    clearTimeout(fsUiTimer);            // 鼠标停在 UI 上 ⇒ 只续期
+                if (type !== 'keydown' && pointerOverZones(fs ? FS_UI_ZONES : WINDOWED_UI_ZONES,
+                        (e && e.clientX) || 0, (e && e.clientY) || 0)) {
+                    clearTimeout(fsUiTimer);            // 指针停在（该模式的）UI 上 ⇒ 只续期
                     return;
                 }
-                scheduleFsHide();
+                scheduleViewerUiHide();
             };
             document.addEventListener('touchend', () => {
-                if (document.documentElement.classList.contains('ls-fs-ui')) {
-                    scheduleFsHide();                   // 手指抬起才开始计时
+                const html = document.documentElement;
+                if (html.classList.contains('ls-fs-ui')
+                    || (! inFullscreenClass() && html.classList.contains(VIEWER_OPEN_CLASS))) {
+                    scheduleViewerUiHide();             // 手指抬起才开始计时
                 }
             }, {capture: true, passive: true});
             /* 这些操作都算"人还在"，一律刷新那 2.5s：
                移动鼠标 / 滚轮切图 / 点 toolbar 或缩略图条 / 触摸拖动 / 按键。
-               （全部 passive：我们只看不拦，不影响任何默认行为。） */
+               （全部 passive：我们只看不拦，不影响任何默认行为 —— 特别是这份名单里**没有 click**，
+                所以"非全屏点空白 = 退出看图器"和"全屏点空白 = 唤出 UI"两条原有特性都不受影响。） */
             ['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'].forEach((ev) => {
-                document.addEventListener(ev, flashFullscreenUI, {capture: true, passive: true});
+                document.addEventListener(ev, flashViewerUI, {capture: true, passive: true});
+            });
+            /* 看图器开关：开 ⇒ 挂 ls-viewer-open，缩略图条从这一刻起参与自动隐藏（先露 2.5s）；
+             * 关 ⇒ 两个类一起摘掉，别把"收起"状态留给下一次打开。 */
+            document.addEventListener('shown', () => {
+                document.documentElement.classList.add(VIEWER_OPEN_CLASS);
+                document.documentElement.classList.remove(UI_IDLE_CLASS);
+                scheduleViewerUiHide();
+            });
+            document.addEventListener('hidden', () => {
+                document.documentElement.classList.remove(VIEWER_OPEN_CLASS, UI_IDLE_CLASS);
+                clearTimeout(fsUiTimer);
+            });
+            /* 进出全屏时把非全屏那套"收起"状态清掉：进去时干净开始，出来时缩略图条立刻在
+             * （全屏自己的显隐走 ls-fs-ui，与这个类无关，互不干扰）。 */
+            ['fullscreenchange', 'webkitfullscreenchange'].forEach((ev) => {
+                document.addEventListener(ev, () => document.documentElement.classList.remove(UI_IDLE_CLASS));
             });
 
             /* 第八轮：① 非全屏"拖动后松手"不该被当成点击；② 全屏点空白不许关、改成显示 UI。
@@ -1140,7 +1220,7 @@
                     if (document.documentElement.classList.contains('ls-viewer-fs')) {
                         e.stopPropagation();        // ② 全屏：干掉"点空白关闭"
                         const src = (e.detail && e.detail.originalEvent) || e;
-                        flashFullscreenUI({type: 'click', clientX: src.clientX || 0, clientY: src.clientY || 0});
+                        flashViewerUI({type: 'click', clientX: src.clientX || 0, clientY: src.clientY || 0});
                     }
                 }, true);
             })();
@@ -1153,6 +1233,49 @@
                     if (exit) { exit.call(d); }
                 }
             });
+
+            /* 工具栏「下载原图」（最左那个键）：直链就是 canvas 里当前那张 <img> 的 src
+             * （页面用 url:'data-original' ⇒ 库里插进来的 img 的 src 即原图直链，与裁剪模块同一套取值），
+             * 文件名优先用卡片的 origin_name（反查方式与 openFromViewer 一致）。
+             * ★ 必须定义在这一层（与 viewer 同级）：工具栏的 click 回调在外层作用域里跑。 */
+            const downloadViewerImage = () => {
+                const url = cropEditor.viewerUrl();
+                if (! url) { toastr.warning('没有找到当前图片'); return; }
+                /* 反查卡片：用"逐个比对属性"而不是拼选择器 —— URL 里万一有反斜杠/换行，
+                 * 字符串拼接会静默匹配失败（甚至 querySelector 抛 SyntaxError、按钮点了没反应）。 */
+                const card = Array.prototype.find.call(
+                    document.querySelectorAll(IMAGES_ITEM + ' img[data-original]'),
+                    (el) => el.getAttribute('data-original') === url
+                );
+                const info = cropEditor.infoOf(card || { url: url });
+                /* download 属性只对同源 / blob / data 生效：存储策略在外部域名时浏览器会忽略它，
+                 * 于是变成"当前标签页导航过去"（图库页被顶掉）。跨域就换成新标签打开 + 提示。
+                 * blob:/data: 的 origin 是 "null"，会被 origin 比较误判成跨域，单独放行。 */
+                let sameOrigin = false;
+                try {
+                    const abs = new URL(url, location.href);
+                    sameOrigin = abs.origin === location.origin || /^(blob|data):$/.test(abs.protocol);
+                } catch (e) { sameOrigin = false; }
+                const a = document.createElement('a');
+                a.href = url;
+                if (sameOrigin) {
+                    a.download = info.name || '';
+                } else {
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                }
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                /* 两条提示互斥，避免叠成一串：跨域那条信息量更大，优先；
+                 * 同源 + iOS 才提醒"不一定直接落盘"（iOS 13+ 支持 download，所以措辞不断言失败）。 */
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                if (! sameOrigin) {
+                    toastr.info('原图在新标签页打开（存储不在本站时无法直接下载）');
+                } else if (isIOS) {
+                    toastr.info('已开始下载；若没保存，可长按图片选「存储到照片」');
+                }
+            };
 
             const cropEditor = (function () {
                 const SUPPORTED = ['jpg', 'jpeg', 'png'];
@@ -1276,7 +1399,12 @@
                 const openFromViewer = () => {
                     const url = viewerUrl();
                     if (! url) { toastr.warning('没有找到当前图片'); return; }
-                    const card = document.querySelector(IMAGES_ITEM + ' img[data-original="' + url.replace(/"/g, '\\"') + '"]');
+                    /* 反查卡片：逐个比对属性，不拼选择器 —— URL 里有换行/结尾反斜杠会让拼接串解析失败
+                     * （querySelector 直接抛异常 ⇒ 按钮点了没反应），中间反斜杠还会被 CSS 转义吞掉、静默失配。 */
+                    const card = Array.prototype.find.call(
+                        document.querySelectorAll(IMAGES_ITEM + ' img[data-original]'),
+                        (el) => el.getAttribute('data-original') === url
+                    );
                     open(card || { url: url });
                 };
 
@@ -1379,7 +1507,9 @@
                     });
                 }
 
-                return { open: open, openFromViewer: openFromViewer, supported: supported, close: close };
+                // viewerUrl / infoOf 一并对外（工具栏「下载原图」要用同一套"当前图"取值口径）
+                return { open: open, openFromViewer: openFromViewer, supported: supported, close: close,
+                         viewerUrl: viewerUrl, infoOf: infoOf };
             })();
 
             /* 底部缩略图条上的快捷切图（要求的功能）。
@@ -1463,17 +1593,38 @@
              * 拦 pointermove 在真机上可能整段失效（踩过）。这里只读 viewer.action 判定是否放权，
              * 一个字都不写库的内部状态 —— 捏合/双击/过渡因此完全不受影响。 */
             (function () {
-                const FAR_RATIO = 0.18;    // 够远：视口宽的这个比例
-                const FAR_MIN = 56;        // 或至少这么多 px
-                const FAST_SPEED = 0.5;    // 够快：px/ms
+                /* 灵敏度（手机端"压一点点"）：手机上真正生效的是 FAR_RATIO 那一档 ——
+                 * 视口宽 390 时 max(FAR_MIN 56, 0.18×390 ≈ 70) 取 70，FAR_MIN 等于不起作用；
+                 * 所以要压灵敏度动的是 FAR_RATIO 与"够快"那一档。 */
+                const FAR_RATIO = 0.21;    // 够远：视口宽的这个比例（原 0.18）
+                const FAR_MIN = 56;        // 或至少这么多 px（只在桌面窄窗口时轮到它）
+                const FAST_SPEED = 0.65;   // 够快：px/ms（原 0.5）
                 let g = null;
                 let guardClick = 0;   // 刚切过图的时刻：用来吞掉随后那发背景 click
                 const inCanvas = (el) => el instanceof Element && !!el.closest('.viewer-canvas');
                 const isFit = () => {
                     const d = viewer.imageData;
-                    const v = viewer.viewerData;
-                    if (!d || !v) return false;
-                    return d.x >= 0 && d.y >= 0 && d.width <= v.width && d.height <= v.height;
+                    const canvas = viewer.canvas;
+                    if (! d || ! canvas) return false;
+                    const bw = canvas.clientWidth;
+                    const bh = canvas.clientHeight;
+                    if (! (bw > 0 && bh > 0)) return false;
+                    /* 「图在视觉上完整装在画布里」——按**旋转后的视觉包围盒**判：
+                     * 90°/270° 宽高互换，而且旋转不改中心 ⇒ 用"中心 ± 占位/2"算 bbox，
+                     * 不能直接拿未旋转盒子的 d.x/d.y 当左上角 —— 旋转过的横图在竖屏下 x 本来就是负数
+                     * （实测 390 宽的画布、1000×500 的图，正确顶屏盒子的 x = -152.5），
+                     * 直接判会把顶屏态误判成"放大态"、滑动只回弹切不了图。
+                     * 边界用**画布**而不是 viewerData：顶屏几何是在画布上居中的（x=(cw-width)/2），
+                     * 拿 viewerData 当上限的话，一旦画布比 viewerData 宽（缩放补偿/异常窗口），
+                     * 正确的顶屏态同样会被判成"放大态"。画布才是用户看到的那块区域，口径也一致。
+                     * ±0.5 是给写回时的浮点/取整留的容差。 */
+                    const rot = ((d.rotate || 0) % 180 + 180) % 180 === 90;
+                    const w = rot ? d.height : d.width;
+                    const h = rot ? d.width : d.height;
+                    const cx = d.x + d.width / 2;                 // 旋转不改中心
+                    const cy = d.y + d.height / 2;
+                    return cx - w / 2 >= -0.5 && cy - h / 2 >= -0.5
+                        && cx + w / 2 <= bw + 0.5 && cy + h / 2 <= bh + 0.5;
                 };
                 document.addEventListener('pointerdown', (e) => {
                     if (!e.isPrimary) { if (g) g.multi = true; return; }   // 第二指 ⇒ 捏合，放权给库
@@ -1490,7 +1641,7 @@
                     const dy = e.clientY - s.y;
                     const dt = Math.max(1, e.timeStamp - s.t);
                     const far = Math.abs(dx) > Math.max(FAR_MIN, window.innerWidth * FAR_RATIO);
-                    const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 30;
+                    const fast = Math.abs(dx) / dt > FAST_SPEED && Math.abs(dx) > 38;   // 38 是"够快"那一档的位移下限（原 30）
                     if ((far || fast) && Math.abs(dx) > Math.abs(dy) * 1.5) {
                         if (dx < 0) viewer.next(false); else viewer.prev(false);
                         guardClick = Date.now();                          // 标记：刚刚切过图
