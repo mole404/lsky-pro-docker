@@ -104,7 +104,9 @@
                 ? min(100, round($storage['total'] / $capacityKb * 100, 1))
                 : 0;
         @endphp
-        <div id="capacity-progress" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10 ls-zoom-mt-0">
+        {{-- data-* 是给 utils.setCapacityProgress 的真值基准（上传/删图后它据此重算数字与分段宽度）；
+                少了它们，那个函数读不到基准就会把「已用」写成 NaN --}}
+        <div id="capacity-progress" data-used-kb="{{ $storage['total'] }}" data-capacity-kb="{{ $capacityKb }}" class="flex flex-col space-y-2 mb-16 px-2 w-full mt-10 ls-zoom-mt-0">
             <p class="text-ink-2 text-[13.5px]">存储用量</p>
             {{-- 只有进度条变了：按存储策略分段 + 悬浮看各策略占用；文字一行不动 --}}
             {{-- 粗细与仪表盘统一（ls-segbar--thick = 8px）：走组件默认档 h-1.5（6px）时实测偏细 --}}

@@ -25,23 +25,39 @@ window.utils = {
         return parseFloat((bytes / Math.pow(c, f)).toFixed(d)) + " " + e[f];
     },
     /**
-     * 更新进度条
-     * @param size 增加的字节(kb)
-     * @param total 总共有多少字节(kb)
+     * 更新「存储用量」那块的显示（侧栏底部）。size / total 单位都是 KB（历史约定）。
+     *
+     * 基准真值取模板给的 data-used-kb / data-capacity-kb：侧栏现在是「按策略分段」的条，
+     * 模板里已经没有 <progress> 元素了 —— 还按 <progress>.val() 取基准会得到 undefined，
+     * used 变 NaN，右侧「已用」就会显示成 "NaN undefined"（上传/删图之后当场可见）。
+     * 取不到 data-* 时才回退到老形状的 <progress>（兼容其它仍带它的页面）。
+     * 分段宽度按 data-share 重算：整条长度仍表示 已用/配额，每段 = 该策略占比。
      */
     setCapacityProgress(size, total) {
         let $progress = $('#capacity-progress');
-        if ($progress.length) {
-            let used = parseFloat($progress.find('progress').val()) + size;
-            $progress.find('progress').val(used);
-            $progress.find('span.used').text(utils.formatSize(used * 1024));
+        if (!$progress.length) return;
 
-            if (total !== undefined && typeof total === 'number') {
-                total = parseFloat($progress.find('progress').attr('max')) + total;
-                $progress.find('progress').attr('max', total);
-                $progress.find('span.total').text(utils.formatSize(total * 1024));
-            }
-        }
+        let used = parseFloat($progress.attr('data-used-kb'));
+        if (!isFinite(used)) used = parseFloat($progress.find('progress').val());
+        if (!isFinite(used)) used = 0;
+        used += size;
+
+        let capacity = parseFloat($progress.attr('data-capacity-kb'));
+        if (!isFinite(capacity)) capacity = parseFloat($progress.find('progress').attr('max'));
+        if (!isFinite(capacity)) capacity = 0;
+        if (total !== undefined && typeof total === 'number') capacity += total;
+
+        $progress.attr('data-used-kb', used).attr('data-capacity-kb', capacity);
+        $progress.find('progress').val(used).attr('max', capacity);
+
+        let percent = capacity > 0 ? Math.min(100, used / capacity * 100) : 0;
+        $progress.find('.ls-seg').each(function () {
+            let share = parseFloat($(this).attr('data-share'));
+            if (isFinite(share)) this.style.width = (percent * share / 100).toFixed(4) + '%';
+        });
+
+        $progress.find('span.used').text(utils.formatSize(used * 1024));
+        $progress.find('span.total').text(utils.formatSize(capacity * 1024));
     },
     guid() {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {

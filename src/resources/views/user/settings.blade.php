@@ -323,14 +323,16 @@
                 // 进度条：服务端每写一张图回报一次，这里把宽度推上去（不需要新接口）
                 const barHtml = (count, bytes) =>
                     '<p>正在打包 <b>' + count + '</b> 张图片（约 ' + formatSize(bytes) + '）。</p>'
-                    + '<div style="margin-top:.75rem;height:.5rem;border-radius:9999px;background:rgba(0,0,0,.12);overflow:hidden">'
-                    + '<div id="export-bar" style="height:100%;width:0%;border-radius:9999px;background:#3085d6;transition:width .4s ease"></div>'
+                    // 颜色全走主题令牌：进度槽原来的 rgba(0,0,0,.12) 压在暗色卡面上几乎看不见，
+                    // 蓝/红也写死了亮色主题的值（与页面其它弹窗不一致）
+                    + '<div style="margin-top:.75rem;height:.5rem;border-radius:9999px;background:var(--lsky-surface-3);overflow:hidden">'
+                    + '<div id="export-bar" style="height:100%;width:0%;border-radius:9999px;background:var(--lsky-accent);transition:width .4s ease"></div>'
                     + '</div>'
                     + '<p id="export-bar-text" style="margin-top:.375rem;font-size:.875rem;opacity:.75">'
                     + '已完成 0 / ' + count + ' 张（0%）</p>'
                     // 取消键自己做：swal 自带那个按钮一点就把弹窗关掉，进度条会跟着一起消失
                     + '<button type="button" id="export-cancel" class="swal2-styled swal2-cancel"'
-                    + ' style="margin-top:.9rem;background:#d33;color:#fff;cursor:pointer">取消导出</button>';
+                    + ' style="margin-top:.9rem;background:var(--lsky-danger);color:#fff;cursor:pointer">取消导出</button>';
 
                 const updateBar = (done, total, bytes) => {
                     const container = Swal.getHtmlContainer();

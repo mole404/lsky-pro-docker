@@ -55,7 +55,10 @@ progress::-webkit-progress-value {
 }
 
 .ls-seg {
-    min-width: 3px;
+    // 1px 而不是 3px：3px 会把「占比不足 3px」的窄段撑宽，整条长度不再等于 已用/配额
+    // （线上真值复算：2.9% 用量 + 216px 条时渲染总长被夸大约 1.85 倍，且占比相差一倍的
+    //  两段渲染成等宽）。1px 只保留「这一段存在」的最低可见度，失真压到约 1.2 倍。
+    min-width: 1px;
 
     &:first-child {
         border-top-left-radius: 9999px;

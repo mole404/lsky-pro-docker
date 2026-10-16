@@ -41,7 +41,8 @@
                 // 段宽 = 该策略占「已用量」的比例 × 整条填充比例 —— 整条长度仍表示 已用 / 配额
                 $width = $usedPercent * $segment['share'] / 100;
             @endphp
-            <div class="ls-seg" style="width: {{ round($width, 4) }}%; background: {{ $segment['color'] }}">
+            {{-- data-share：占比真值（JS 在上面那块按新用量重算宽度时用它；服务端渲染不读它） --}}
+            <div class="ls-seg" data-share="{{ round($segment['share'], 6) }}" style="width: {{ round($width, 4) }}%; background: {{ $segment['color'] }}">
                 {{-- 气泡一律在条上方（侧栏放下方会盖住「已用/总量」那行字）；左右由内联的 min() 夹在条内 --}}
                 {{-- 夹取：上限不超过「条宽 − 气泡宽」，并用 max(0px, …) 兜底 —— 条比气泡还窄时 min() 会算出负数把气泡推到条外 --}}
                 <span class="ls-seg__tip"
