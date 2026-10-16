@@ -63,6 +63,16 @@ console.log('\n[年月快选] 下拉箭头尺寸');
         `出现 ${(settings.match(/\\u25be/g) || []).length} 次`);
 }
 
+// ---------------------------------------------------------------- 导出进度弹窗的配色（暗色卡面上也要看得见）
+{
+    // 只看代码行：解释「原来是 rgba(0,0,0,.12)」的注释不该被判为违规
+    const codeLines = settings.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+    check('进度槽用主题令牌（原来的 rgba(0,0,0,.12) 压在暗色卡面上几乎看不见）',
+        !/rgba\(0,0,0,\.12\)/.test(codeLines), '应改用 var(--lsky-surface-3)');
+    check('进度条用强调色令牌', settings.includes('background:var(--lsky-accent)'));
+    check('取消导出按钮用危险色令牌', /background:var\(--lsky-danger\)/.test(settings));
+}
+
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => ! r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);

@@ -233,7 +233,9 @@ console.log('\n[详细信息] 字段顺序与一个都不能少');
             .every((l, i, arr) => i === 0 || at(arr[i - 1]) < at(l)));
 
     check('顶部有小缩略图（__thumb_url__，JS 里也做了替换）',
-        detailTpl.includes('src="__thumb_url__"') && blade.includes('.replace(/__thumb_url__/g, image.thumb_url)'));
+        detailTpl.includes('src="__thumb_url__"')
+        // 值本身现在先过 escapeHtml（缩略图 URL 也是字符串，统一口径）—— 认包了转义的写法，但不认"根本没替换"
+        && /\.replace\(\/__thumb_url__\/g, [^)]*image\.thumb_url/.test(blade));
     check('标签 13px / 值 14px，行高宽松（leading-6）',
         (detailTpl.match(/text-\[13px\] leading-6 text-ink-3/g) || []).length === 12
         && (detailTpl.match(/text-\[14px\] leading-6 text-ink/g) || []).length === 12);

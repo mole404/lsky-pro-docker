@@ -527,6 +527,18 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
     check('全仓不再出现旧词（含注释/README，回潮会被抓住）', offenders.length === 0, offenders.join(', '));
 }
 
+// ------------------------------------------------- 存储用量条（分段条 1px 下限 / 侧栏 8px）
+{
+    const less = read('resources', 'css', 'common.less');
+    const css = read('public', 'css', 'common.css');
+    check('分段条每段留 1px 下限（份额极小的策略也看得见，不会变成 0 宽凭空消失）',
+        /\.ls-seg \{[\s\S]*?min-width: 1px;/.test(less) && /ls-seg\{min-width:1px\}/.test(css),
+        'less 与编译产物都要有（只改 less 不重编 = 线上没生效）');
+    check('侧栏「粗」用量条 = 8px，且选择器压得住 h-1.5',
+        /&\.ls-segbar--thick \{\s*height: 8px;/.test(less) && /ls-segbar--thick\{height:8px\}/.test(css),
+        'less 与编译产物都要有');
+}
+
 // ---------------------------------------------------------------- 汇总
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);
