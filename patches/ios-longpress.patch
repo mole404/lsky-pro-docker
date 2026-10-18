@@ -60,7 +60,7 @@
 # 这几个文件当前的 md5（2026-10-17 复核；前三条与 Dockerfile「自证 2」的期望值一致）：
 #   5cf4921912df67a6de657dee02284e65  src/resources/js/context-js.js
 #   5cf4921912df67a6de657dee02284e65  src/public/js/context-js/context-js.js
-#   e558a18a73f66c77acff0508f6f6daf9  src/resources/views/user/images.blade.php
+#   d9ed6c354c93b6890ec6bd22c4f6c80a  src/resources/views/user/images.blade.php
 #   1e797bc8356bda1f192ca2d704f80623  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不在 Dockerfile「自证 2」那三条里，只在本档存档对照；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里。历史值（c1b339b1… / 5ddf0eed… / c0e51e96…）只作对照，一律以 Dockerfile「自证 2」为准）

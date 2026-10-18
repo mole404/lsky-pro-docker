@@ -75,6 +75,17 @@
             display: none;
         }
 
+        /* 空态文案（「还没有相册」/「没有匹配的相册」）要落在搜索框与「创建相册」之间那段
+           空白里正中，不是"差不多就行"：
+             上方 = 列表容器 mt-3(12) + 自身 p-3(12) + 空态块 pt-4(16)
+                    + 前一个 hidden 兄弟仍吃到的 space-y-2(8)  = 48px
+             下方 = 空态块 pb + 与按钮的 space-y-2(8)
+           所以 pb 必须补到 40px（2.5rem），否则下方只有 24px，文字整体偏下。
+           写成 ID 规则而不是换 Tailwind 类：pt-4 这类没进产物 app.css，加了也不生效。 */
+        #album-switch-empty {
+            padding-bottom: 2.5rem;
+        }
+
         @media (min-width: 768px) {
             #album-switch-modal [class*="md:max-w-2xl"] {
                 max-width: 520px;
