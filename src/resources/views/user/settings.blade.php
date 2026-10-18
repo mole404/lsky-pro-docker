@@ -286,7 +286,7 @@
                     const failed = parseInt(data.failed, 10) || 0;
                     const bytes = parseInt(data.bytes, 10) || 0;
                     if (data.aborted) {
-                        return '本次导出已中断（取消或网络断开），已完成 ' + ok + ' 张，需要重新导出。'
+                        return '本次导出已中断（取消或网络断开）。'
                             + '</p><p>如果保存位置留下了一个没导出完的文件，可以直接删除。';
                     }
                     if (failed > 0) {
