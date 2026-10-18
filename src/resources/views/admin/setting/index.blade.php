@@ -111,7 +111,6 @@
                     <div>
                         <label for="mail[from][name]" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>发件人名称</label>
                         <x-input type="text" name="mail[from][name]" id="mail[from][name]" value="{{ $configs['mail']['from']['name'] ?? '' }}" placeholder="请输入发件人名称" required/>
-                        <p class="mt-1.5 text-[13px] text-ink-3">必须与 SMTP 账号一致，多数邮箱服务商会拒信或改写；留空会导致发信失败</p>
                     </div>
 
                     <input type="hidden" name="mail[default]" value="smtp">

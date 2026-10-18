@@ -78,7 +78,13 @@ console.log('\n[年月快选] 下拉箭头尺寸');
         /#export-cancel\s*\{[^}]*background-color:\s*var\(--lsky-danger\)/.test(less)
         && /#export-cancel\{[^}]*background-color:var\(--lsky-danger\)/.test(css)
         && ! /id="export-cancel"[\s\S]{0,160}?background:/.test(settings));
-    check('取消导出按钮有可见的 hover 反馈', /#export-cancel:hover\s*\{[^}]*filter:\s*brightness/.test(less));
+    // 只许换颜色：filter / opacity / transform 都会作用在整层（含 swal2 那圈 3px 阴影），
+    // 暗色区域会溢到按钮轮廓之外，看起来「比按钮大一圈」。
+    check('取消导出按钮有可见的 hover 反馈（只换填充色，不用 filter）',
+        /#export-cancel:hover\s*\{[^}]*background-color:\s*var\(--lsky-danger-hover\)/.test(less)
+        && ! /#export-cancel:hover\s*\{[^}]*\bfilter\b/.test(less)
+        && ! /#export-cancel:hover\{[^}]*\bfilter\b/.test(css));
+    check('按钮显式清掉 swal2 的 3px 外环阴影', /#export-cancel\s*\{[^}]*box-shadow:\s*none/.test(less));
 }
 
 // ---------------------------------------------------------------- 汇总
