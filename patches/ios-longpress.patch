@@ -60,7 +60,7 @@
 # 这几个文件当前的 md5（2026-10-17 复核；前三条与 Dockerfile「自证 2」的期望值一致）：
 #   5cf4921912df67a6de657dee02284e65  src/resources/js/context-js.js
 #   5cf4921912df67a6de657dee02284e65  src/public/js/context-js/context-js.js
-#   4cd9752f52c7f11f1fccbd3a2b4aa547  src/resources/views/user/images.blade.php
+#   e558a18a73f66c77acff0508f6f6daf9  src/resources/views/user/images.blade.php
 #   1e797bc8356bda1f192ca2d704f80623  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不在 Dockerfile「自证 2」那三条里，只在本档存档对照；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里。历史值（c1b339b1… / 5ddf0eed… / c0e51e96…）只作对照，一律以 Dockerfile「自证 2」为准）
@@ -3770,11 +3770,11 @@
 +                <x-loading-spin />
 +                <div class="text-[13px] text-ink-3">加载中...</div>
 +            </div>
-+            {{-- fork：空状态——一个相册都没有时「还没有相册」+ 创建按钮；
-+                 有相册但被搜索过滤光了换成「没有匹配的相册」 --}}
-+            <div id="album-switch-empty" class="hidden flex w-full flex-col items-center justify-center gap-3 py-4">
++            {{-- fork：空状态——一个相册都没有时只留「还没有相册」文案；
++                 创建入口统一走下面那条常驻的 #album-switch-create（同一机制：切换 #album-add），
++                 这里不再重复放按钮。有相册但被搜索过滤光了换成「没有匹配的相册」 --}}
++            <div id="album-switch-empty" class="hidden flex w-full flex-col items-center justify-center py-4">
 +                <p id="album-switch-empty-text" class="text-[14px] text-ink-3">还没有相册</p>
-+                <button type="button" class="ls-btn h-11 px-4 sm:h-9" onclick="$('#album-add').toggleClass('hidden')">创建相册</button>
 +            </div>
 +            {{-- fork：创建相册入口（原抽屉标题上的 + 号，机制一字未改：切换 #album-add 的显示） --}}
 +            <button type="button" id="album-switch-create" class="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-left text-[14px] text-brand hover:bg-surface-3" onclick="$('#album-add').toggleClass('hidden')">

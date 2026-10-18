@@ -683,11 +683,11 @@
                 <x-loading-spin />
                 <div class="text-[13px] text-ink-3">加载中...</div>
             </div>
-            {{-- fork：空状态——一个相册都没有时「还没有相册」+ 创建按钮；
-                 有相册但被搜索过滤光了换成「没有匹配的相册」 --}}
-            <div id="album-switch-empty" class="hidden flex w-full flex-col items-center justify-center gap-3 py-4">
+            {{-- fork：空状态——一个相册都没有时只留「还没有相册」文案；
+                 创建入口统一走下面那条常驻的 #album-switch-create（同一机制：切换 #album-add），
+                 这里不再重复放按钮。有相册但被搜索过滤光了换成「没有匹配的相册」 --}}
+            <div id="album-switch-empty" class="hidden flex w-full flex-col items-center justify-center py-4">
                 <p id="album-switch-empty-text" class="text-[14px] text-ink-3">还没有相册</p>
-                <button type="button" class="ls-btn h-11 px-4 sm:h-9" onclick="$('#album-add').toggleClass('hidden')">创建相册</button>
             </div>
             {{-- fork：创建相册入口（原抽屉标题上的 + 号，机制一字未改：切换 #album-add 的显示） --}}
             <button type="button" id="album-switch-create" class="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-left text-[14px] text-brand hover:bg-surface-3" onclick="$('#album-add').toggleClass('hidden')">
