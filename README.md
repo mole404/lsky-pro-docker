@@ -193,14 +193,13 @@ docker run -d --name lsky-pro --restart unless-stopped \
 
 ### 图片编辑与存储桶 CORS
 
-当使用 AWS S3 或兼容存储（例如 Cloudflare R2）且访问地址为独立域名时，图片会以跨域方式加载。图片编辑需要读取像素，因此该域名必须返回 CORS 响应头，否则图片编辑功能可能无法正常使用。请在该存储桶的 CORS 策略中放行本站 origin：
+当使用 AWS S3 或兼容存储（例如 Cloudflare R2）且访问地址为独立域名时，图片会以跨域方式加载。图片编辑需要读取像素，因此该域名必须返回 CORS 响应头，否则图片编辑功能可能无法正常使用。请在该存储桶的 CORS 策略中放行本站 origin，例如：
 ```
 [
   {
-    "AllowedOrigins": ["https://your-lsky-domain"],
+    "AllowedOrigins": ["https://your-domain"],
     "AllowedMethods": ["GET", "HEAD"],
-    "AllowedHeaders": ["*"],
-    "MaxAgeSeconds": 3600
+    "AllowedHeaders": ["*"]
   }
 ]
 ```
