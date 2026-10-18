@@ -223,6 +223,22 @@
                 // 小包阈值：整包取回内存再让浏览器保存（blob 地址），下载管理器没有可回源的地址可截
                 const SMALL_LIMIT = 128 * 1024 * 1024;
 
+                // 大包优先「流式写盘」：要安全上下文（https / localhost）且浏览器给了文件系统访问 API。
+                // http、Safari、Firefox 都没有这两个条件 —— 一律回退到 iframe 导发（行为与今天一致）。
+                const canStreamToDisk = () => Boolean(window.isSecureContext)
+                    && typeof window.showSaveFilePicker === 'function';
+
+                // 统一造一个 AbortError：取消之后仍要走同一条 catch，不能只靠 error.name 猜
+                const abortError = () => {
+                    try {
+                        return new DOMException('Aborted', 'AbortError');
+                    } catch (e) {
+                        const error = new Error('Aborted');
+                        error.name = 'AbortError';
+                        return error;
+                    }
+                };
+
                 const $button = $('#export-submit');
 
                 // 本次导出的标识：服务端把它写进结果记录，前端只认自己这一个。于是页面
@@ -236,8 +252,11 @@
                 let exporting = false;   // 本次导出是否还在进行（决定取消按钮是否有意义）
                 let startedMs = 0;       // 发起时刻，用于判断这次任务有没有真的起来
                 let sawProgress = false; // 是否见过服务端上报的进度
-                let cancelRequested = false;  // 本次是否点过取消（blob 路径据此丢弃半截数据）
-                let abortController = null;   // blob 路径的 fetch 控制器：取消时直接掐断连接
+                // 点过取消的 run 集合（不是布尔单槽）：blob / 写盘的回调各自拿发起时的 run 比对。
+                // 用集合而不是「最后一次取消的 run」：新一笔开始时不必清空，上一笔迟到的响应
+                // 依然认得出自己是取消过的，不会在新一笔里再存一次半截包
+                const cancelRequestedRuns = new Set();
+                let abortController = null;   // 取回/写盘那条连接：取消时直接掐断
 
                 // 控件 name 即接口参数名；空值一律不传（= 该维度不限）
                 const collectSearch = () => {
@@ -403,6 +422,19 @@
                     }));
                 };
 
+                // 服务端说没有在跑的任务（active:false）：旗标落不到任何东西上，取消未必生效。
+                // 这不是 500 级错误，给一条能照着做的提示就够，别让「正在取消…」一直演下去。
+                const cancelFailedDialog = () => {
+                    Swal.fire(dialog({
+                        icon: 'warning',
+                        title: '未能通知到服务端',
+                        text: '本地下载已经停下，但服务端此刻没有在进行的导出：取消可能没生效，也可能这笔已经结束。请稍后重试。',
+                        confirmButtonColor: '#3085d6',
+                        confirmButtonText: '知道了',
+                        showCancelButton: false,
+                    }));
+                };
+
                 const resultDialog = (data) => {
                     const failed = parseInt(data.failed, 10) || 0;
                     const aborted = Boolean(data.aborted);
@@ -439,13 +471,39 @@
                     const button = document.querySelector('#export-cancel');
                     if (button) { button.disabled = true; button.textContent = '正在取消…'; }
 
-                    cancelRequested = true;
+                    // 按 run 记，不按布尔：这一笔的点取消只影响这一笔
+                    const cancelRun = run;
+                    cancelRequestedRuns.add(cancelRun);
 
                     if (abortController) {
                         try { abortController.abort(); } catch (e) { /* 已经结束了就算了 */ }
                     }
 
-                    axios.post(EXPORT_CANCEL_URL, {_token: CSRF_TOKEN}).then(() => {
+                    axios.post(EXPORT_CANCEL_URL, {_token: CSRF_TOKEN, run: cancelRun}).then(response => {
+                        const data = response.data || {};
+
+                        // active 只说明「此刻有没有在跑」；armed 才是「取消有没有记下来」。
+                        // 导出请求还没被 worker 认领时 active=false 而 armed=true —— 那正是
+                        // 「刚点开始就取消」要救的场景，不能当失败处理。
+                        // 只有确实没记下（armed=false）才提示重试，否则继续等「已中断」记录。
+                        if (data.armed === false) {
+                            axios.get(EXPORT_RESULT_URL).then(res => {
+                                const result = res.data || {};
+                                if (hasRecord(result.record) && result.record.run === cancelRun) {
+                                    settle(result.record);
+                                    return;
+                                }
+                                exporting = false;
+                                stopPolling();
+                                cancelFailedDialog();
+                            }).catch(() => {
+                                exporting = false;
+                                stopPolling();
+                                cancelFailedDialog();
+                            });
+                            return;
+                        }
+
                         // 转去等那条「已中断」的结果记录
                         pollCount = 0;
                         pollInterval = CANCEL_POLL_INTERVAL;
@@ -483,7 +541,7 @@
                 // 小包：页面自己把整包取回内存，再用 blob 地址交给浏览器保存。
                 // 下载管理器截的是「浏览器的下载事件 + 可回源重发的服务端地址」——blob 两条都不成立：
                 // 没有服务端地址可重发，它们既截不走，也不会再用自己的引擎慢慢爬。
-                const startBlobDownload = (query) => {
+                const startBlobDownload = (query, runId) => {
                     abortController = new AbortController();
                     const url = EXPORT_URL + (query === '' ? '' : '?' + query);
 
@@ -494,8 +552,9 @@
                             return response.blob().then(blob => ({blob: blob, name: name}));
                         })
                         .then(result => {
-                            // 取消过就别存了：此刻拿到的只是半截数据
-                            if (cancelRequested) { return; }
+                            // 这笔自己点过取消就别存了：此刻拿到的只是半截数据。
+                            // 只认本笔的 run —— 上一笔迟到的响应不会被新一笔的取消误伤
+                            if (cancelRequestedRuns.has(runId)) { return; }
                             const link = document.createElement('a');
                             link.href = URL.createObjectURL(result.blob);
                             link.download = result.name;
@@ -504,7 +563,7 @@
                             window.setTimeout(() => { URL.revokeObjectURL(link.href); link.remove(); }, 4000);
                         })
                         .catch(error => {
-                            if (cancelRequested || (error && error.name === 'AbortError')) { return; }
+                            if (cancelRequestedRuns.has(runId) || (error && error.name === 'AbortError')) { return; }
                             exporting = false;
                             stopPolling();
                             stallDialog();
@@ -521,6 +580,99 @@
                         document.body.appendChild(frame);
                     }
                     frame.src = url;
+                };
+
+                // 三条路径共用的「开跑」收尾：按钮禁用期、进度弹窗、结果轮询
+                const beginProgress = (count, bytes) => {
+                    exporting = true;
+                    sawProgress = false;
+                    startedMs = Date.now();
+                    pollCount = 0;
+                    pollInterval = POLL_INTERVAL;
+                    pollMax = POLL_MAX;
+                    progressDialog(count, bytes);
+                    schedulePoll(POLL_FIRST_MS);
+                };
+
+                // 大包 + 浏览器支持文件系统访问 API：边读边写。调用时「另存为」已经弹过并拿到句柄，
+                // 这里只负责搬字节与收尾 —— 弹框那一步留在 beginStreamExport（用户手势）。
+                const startStreamDownload = async (query, handle, runId, count, bytes) => {
+                    abortController = new AbortController();
+                    const signal = abortController.signal;
+                    const url = EXPORT_URL + (query === '' ? '' : '?' + query);
+                    let writer = null;       // createWritable() 之后才有
+                    let committed = false;   // close() 是否已提交：提交后的文件是完整的，不能再删
+                    let existed = true;      // 用户是不是选了个已有的文件；拿不准就当「有」，绝不删旧数据
+
+                    // 异常/中断的收尾：abort() 丢掉尚未提交的 swap 文件（半截 zip 不会落盘）；
+                    // 选的是新文件名时再 remove() 兜一次，确保磁盘上干干净净。
+                    // 若覆盖的是已存在的文件，abort 已经把它还原 —— 这时 remove 等于删用户的旧数据。
+                    const discard = () => {
+                        const aborting = (writer && ! committed)
+                            ? Promise.resolve().then(() => writer.abort()).catch(() => { /* 已经结束 */ })
+                            : Promise.resolve();
+                        return aborting.then(() => {
+                            if (committed || existed || typeof handle.remove !== 'function') { return null; }
+                            return Promise.resolve(handle.remove()).catch(() => { /* 删不掉就留着 */ });
+                        }).catch(() => { /* 收尾失败不改变结论 */ });
+                    };
+
+                    beginProgress(count, bytes);
+
+                    try {
+                        const response = await window.fetch(url, {credentials: 'same-origin', signal: signal});
+                        if (! response.ok || ! response.body) { throw new Error('HTTP ' + response.status); }
+                        // 先看这个文件原来在不在：getFile() 抛 NotFound 就是新名字（收尾时可以 remove）
+                        try { await handle.getFile(); } catch (e) { existed = ! (e && e.name === 'NotFoundError'); }
+                        writer = await handle.createWritable();
+                        const reader = response.body.getReader();
+                        for (;;) {
+                            const step = await reader.read();
+                            if (step.done) { break; }
+                            await writer.write(step.value);
+                        }
+                        // 取消之后服务端可能只是「停下不写了」，流会正常 end：这时绝不能 close，
+                        // 否则半截 zip 会被当成成品提交
+                        if (cancelRequestedRuns.has(runId)) { throw abortError(); }
+                        await writer.close();
+                        committed = true;
+                    } catch (error) {
+                        await discard();
+                        // 主动取消：本地已停、文件已清，结果记录由轮询那边的「已中断」来说
+                        if (cancelRequestedRuns.has(runId) || (error && error.name === 'AbortError')) { return; }
+                        exporting = false;
+                        stopPolling();
+                        stallDialog();
+                    }
+                };
+
+                // 点完二次确认后的第一步：先在用户手势里弹出系统「另存为」，拿到句柄再发请求。
+                // 顺序不能反 —— 等 fetch 回来再调 picker，浏览器会以「需要用户手势」直接拒绝。
+                const beginStreamExport = (query, runId, count, bytes) => {
+                    let picker;
+                    try {
+                        picker = window.showSaveFilePicker({suggestedName: fallbackFilename()});
+                    } catch (error) {
+                        // 被策略/环境拦掉：退回 iframe 流式下载，与今天一致
+                        startDownload(EXPORT_URL + (query === '' ? '' : '?' + query));
+                        beginProgress(count, bytes);
+                        return;
+                    }
+
+                    Promise.resolve(picker).then(handle => {
+                        startStreamDownload(query, handle, runId, count, bytes);
+                    }).catch(error => {
+                        if (error && error.name === 'AbortError') {
+                            // 用户在「另存为」里点了取消：当作根本没开始导出 —— 不发请求、
+                            // 不建任何下载、不弹进度框，按钮立刻恢复可用。
+                            $button.prop('disabled', false);
+                            return;
+                        }
+                        // 其余失败（没有手势、被策略拦掉、磁盘没权限）：退回 iframe 导发，
+                        // 行为与今天一致，别让用户点了导出却什么都没发生
+                        startDownload(EXPORT_URL + (query === '' ? '' : '?' + query));
+                        beginProgress(count, bytes);
+                    });
                 };
 
                 $button.on('click', () => {
@@ -562,24 +714,19 @@
                             // 按钮保持禁用一段时间，避免连点重复发起
                             window.setTimeout(() => $button.prop('disabled', false), BUTTON_DISABLE_MS);
 
-                            cancelRequested = false;
-
                             if (bytes <= SMALL_LIMIT) {
                                 // 小包：页面取回内存后由浏览器保存（blob 地址，第三方下载器截不到）
-                                startBlobDownload(query);
+                                startBlobDownload(query, run);
+                                beginProgress(count, bytes);
+                            } else if (canStreamToDisk()) {
+                                // 大包 + 支持写盘：先弹「另存为」，拿到句柄再流式写；
+                                // 后续的进度/轮询由 beginStreamExport 里那一步接手
+                                beginStreamExport(query, run, count, bytes);
                             } else {
-                                // 大包：浏览器原生流式下载，不占内存
+                                // 大包、浏览器不支持：浏览器原生流式下载，不占内存（与今天一致）
                                 startDownload(EXPORT_URL + (query === '' ? '' : '?' + query));
+                                beginProgress(count, bytes);
                             }
-
-                            exporting = true;
-                            sawProgress = false;
-                            startedMs = Date.now();
-                            pollCount = 0;
-                            pollInterval = POLL_INTERVAL;
-                            pollMax = POLL_MAX;
-                            progressDialog(count, bytes);
-                            schedulePoll(POLL_FIRST_MS);
                         });
                     }).catch(() => {
                         toastr.warning('导出预检失败，请稍后再试');
