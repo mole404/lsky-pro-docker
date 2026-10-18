@@ -203,7 +203,7 @@ docker run -d --name lsky-pro --restart unless-stopped \
   }
 ]
 ```
-只需允许 GET（HEAD 可选）；图片由服务器写入桶，无需开放 PUT/POST。若桶前有 CDN 缓存，修改策略后需清除缓存。
+只需允许 GET（HEAD 可选）。图片由服务器写入桶，无需开放 PUT/POST。若桶前有 CDN 缓存，修改策略后需清除缓存。
 
 ## 关于这个仓库
 
