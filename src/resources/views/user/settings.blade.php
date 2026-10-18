@@ -14,7 +14,7 @@
                         </div>
 
                         <div class="col-span-6 sm:col-span-3">
-                            <label for="name" class="block text-sm font-medium text-ink">昵称</label>
+                            <label for="name" class="block text-sm font-medium text-ink">名称</label>
                             <x-input type="text" name="name" id="name" autocomplete="name" value="{{ Auth::user()->name }}"/>
                         </div>
 
@@ -54,6 +54,11 @@
                         <div class="col-span-6">
                             <label for="password" class="block text-sm font-medium text-ink">密码</label>
                             <x-input type="password" name="password" id="password" placeholder="不修改请留空" autocomplete="new-password" />
+                        </div>
+
+                        <div class="col-span-6">
+                            <label for="password_confirmation" class="block text-sm font-medium text-ink">确认密码</label>
+                            <x-input type="password" name="password_confirmation" id="password_confirmation" placeholder="再次输入新密码" autocomplete="new-password" />
                         </div>
 
                         <div class="col-span-6">
@@ -174,6 +179,22 @@
         <script>
             $('form').submit(function (e) {
                 e.preventDefault();
+
+                // 密码是可选的（留空＝不修改），所以不加 required：只在新密码真的填了的时候做配对校验，
+                // 否则光改昵称/策略也会被浏览器拦下来。
+                const password = $('#password').val() || '';
+                const passwordConfirmation = $('#password_confirmation').val() || '';
+
+                if (password !== '' && passwordConfirmation === '') {
+                    toastr.warning('请再输入一次密码');
+                    return;
+                }
+
+                if (password !== '' && password !== passwordConfirmation) {
+                    toastr.warning('两次输入的密码不一致');
+                    return;
+                }
+
                 axios.put(this.action, $(this).serialize()).then(response => {
                     toastr[response.data.status ? 'success' : 'warning'](response.data.message);
                 });
@@ -332,7 +353,7 @@
                     + '已完成 0 / ' + count + ' 张（0%）</p>'
                     // 取消键自己做：swal 自带那个按钮一点就把弹窗关掉，进度条会跟着一起消失
                     + '<button type="button" id="export-cancel" class="swal2-styled swal2-cancel"'
-                    + ' style="margin-top:.9rem;background:var(--lsky-danger);color:#fff;cursor:pointer">取消导出</button>';
+                    + ' style="margin-top:.9rem">取消导出</button>';
 
                 const updateBar = (done, total, bytes) => {
                     const container = Swal.getHtmlContainer();

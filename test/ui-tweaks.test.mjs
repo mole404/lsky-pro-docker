@@ -322,8 +322,11 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         nav.includes('justify-center') && strat.includes('justify-center'));
 
     const less = read('resources', 'css', 'common.less');
-    check('640~1080px：两个胶囊的文字收起后强制 40×40 + 无内边距（都保持正圆，不再被撑成椭圆）',
-        /html \.ls-app-header #user-menu-button,\s*\n\s*html \.ls-app-header #strategy-menu-button \{\s*width: 2\.5rem;\s*padding: 0;/.test(less)
+    // 本区间里三个胶囊（用户 / 策略 / 公告）都要收成正圆：公告按钮原来只收文字不收宽度，
+    // 会在 640~1080 之间留成一个「图标 + 空内边距」的椭圆。
+    check('640~1080px：三个胶囊（用户 / 策略 / 公告）的文字收起后强制 40×40 + 无内边距（都保持正圆）',
+        /html \.ls-app-header #user-menu-button,[\s\S]{0,240}width: 2\.5rem;\s*padding: 0;/.test(less)
+        && /html \.ls-app-header #open-notice/.test(less)
         && read('resources', 'views', 'layouts', 'strategies.blade.php').includes('id="strategy-menu-button"'));
     check('竖屏箭头固定「朝右」（ls-sidebar-arrow-right），桌面展开态仍是「朝左」',
         less.includes('html .ls-sidebar-arrow-right {') && less.includes('html.sidebar-collapsed .ls-sidebar-arrow-left {'));

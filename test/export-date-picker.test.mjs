@@ -70,7 +70,15 @@ console.log('\n[年月快选] 下拉箭头尺寸');
     check('进度槽用主题令牌（原来的 rgba(0,0,0,.12) 压在暗色卡面上几乎看不见）',
         !/rgba\(0,0,0,\.12\)/.test(codeLines), '应改用 var(--lsky-surface-3)');
     check('进度条用强调色令牌', settings.includes('background:var(--lsky-accent)'));
-    check('取消导出按钮用危险色令牌', /background:var\(--lsky-danger\)/.test(settings));
+    // 红底与 hover 现在由样式表提供（内联 style 只剩 margin-top）：
+    // 内联 background 会压死主题里所有 :hover 规则，所以这张卡片的配色必须落在 CSS 里。
+    const less = fs.readFileSync(path.join(SRC, 'resources', 'css', 'common.less'), 'utf8');
+    const css = fs.readFileSync(path.join(SRC, 'public', 'css', 'common.css'), 'utf8');
+    check('取消导出按钮用危险色令牌（由样式表提供，不在内联 style 里）',
+        /#export-cancel\s*\{[^}]*background-color:\s*var\(--lsky-danger\)/.test(less)
+        && /#export-cancel\{[^}]*background-color:var\(--lsky-danger\)/.test(css)
+        && ! /id="export-cancel"[\s\S]{0,160}?background:/.test(settings));
+    check('取消导出按钮有可见的 hover 反馈', /#export-cancel:hover\s*\{[^}]*filter:\s*brightness/.test(less));
 }
 
 // ---------------------------------------------------------------- 汇总

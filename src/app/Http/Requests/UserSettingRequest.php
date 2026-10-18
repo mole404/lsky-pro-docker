@@ -14,7 +14,8 @@ class UserSettingRequest extends FormRequest
         return [
             'name' => 'required|between:2,20',
             'url' => 'nullable|url',
-            'password' => 'nullable|between:6,32',
+            'password' => 'nullable|between:8,32|confirmed',
+            'password_confirmation' => 'nullable|required_with:password',
             'configs' => 'array',
             'configs.default_album' => 'required|numeric',
             'configs.default_strategy' => 'required|numeric',
@@ -31,10 +32,12 @@ class UserSettingRequest extends FormRequest
     public function messages()
     {
         return [
-            'name.required' => '昵称不能为空',
-            'name.between' => '昵称必须在 2-20 个字符之间',
+            'name.required' => '名称不能为空',
+            'name.between' => '名称必须在 2-20 个字符之间',
             'url.url' => '个人主页地址格式不正确',
-            'password.between' => '密码必须在 6-32 个字符之间',
+            'password.between' => '密码必须为 8-32 个字符',
+            'password.confirmed' => '两次输入的密码不一致',
+            'password_confirmation.required_with' => '请再输入一次密码',
             'configs.array' => '配置值不正确',
             'configs.default_album.required' => '默认相册选择错误',
             'configs.default_album.numeric' => '默认相册选择错误',

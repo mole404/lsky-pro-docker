@@ -668,11 +668,17 @@ console.log('\n[B6] 非全屏收起四块：选择器 / 声明 + 与全屏那三
     check('进出全屏时额外摘一次 ls-ui-idle（与全屏那套 ls-fs-ui 互不干扰）',
         /\['fullscreenchange', 'webkitfullscreenchange'\]\.forEach\([\s\S]{0,200}classList\.remove\(UI_IDLE_CLASS\)/.test(src));
     const iRec = src.indexOf('let windowedUiHiddenAtDown = false;');
-    const iFlash = src.indexOf("['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'].forEach");
+    // 锚点不要写成整份事件名单：名单会随修复增删事件（本次补了 pointerup/pointercancel），
+    // 用「把 flashViewerUI 绑上去的那行」定位，语义不变且不随名单内容变脆。
+    const iFlash = src.indexOf('document.addEventListener(ev, flashViewerUI');
     const iGuard = src.indexOf('if (hiddenAtDown) {');
     const iCanvas = src.indexOf('if (! isCanvas(e.target)) { return; }');
     check('★ 「按下那一刻收着」的标记在刷新 UI 的监听名单之前注册（否则被自己摘掉，看不出刚才在收）',
         iRec > 0 && iFlash > iRec, `rec@${iRec} flash@${iFlash}`);
+    check('刷新 UI 的事件名单含 pointerup / pointercancel（滑切图后不再只靠 touchend）',
+        /\[[^\]]*'pointerup'[^\]]*'pointercancel'[^\]]*\]\.forEach/.test(src));
+    check("挂 viewer 的 view 事件重新排收起计时（滑切图 / 键盘 / 工具栏换图都覆盖）",
+        /addEventListener\('view',[\s\S]{0,240}scheduleViewerUiHide\(\)/.test(src));
     check('★ 第一下点击的守卫写在 click 捕获处理的最前面（在 .viewer-canvas 判定之前）',
         iGuard > 0 && iCanvas > iGuard, `guard@${iGuard} isCanvas@${iCanvas}`);
     check('守卫内容：矩形命中（四块）⇒ stopPropagation + 唤出 UI + return', (() => {

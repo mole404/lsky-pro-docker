@@ -60,7 +60,7 @@
 # 这几个文件当前的 md5（2026-10-17 复核；前三条与 Dockerfile「自证 2」的期望值一致）：
 #   5cf4921912df67a6de657dee02284e65  src/resources/js/context-js.js
 #   5cf4921912df67a6de657dee02284e65  src/public/js/context-js/context-js.js
-#   6b0a5f43d5d7ddbe97fc685495f9c421  src/resources/views/user/images.blade.php
+#   4cd9752f52c7f11f1fccbd3a2b4aa547  src/resources/views/user/images.blade.php
 #   1e797bc8356bda1f192ca2d704f80623  src/resources/views/components/auth-card.blade.php
 #   （auth-card 不在 Dockerfile「自证 2」那三条里，只在本档存档对照；它登记在 tools/diff-vs-upstream.sh
 #     的已知偏离清单里。历史值（c1b339b1… / 5ddf0eed… / c0e51e96…）只作对照，一律以 Dockerfile「自证 2」为准）
@@ -4093,7 +4093,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +956,1027 @@
+@@ -217,44 +956,1040 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -4514,6 +4514,19 @@
 +                    scheduleViewerUiHide();             // 手指抬起才开始计时
 +                }
 +            }, {capture: true, passive: true});
++            /* 上面那条 touchend 有个洞：手机左右滑切图走 pointerup ⇒ viewer.next()/prev() ⇒ 库在 view()
++             * 开头就把 canvas 清空重建，等 touchend 发出时目标已脱离文档、document 根本收不到 ⇒ 计时器
++             * 没排上，UI 就一直挂着不收起（手指离开后也没有别的 mousemove 来救）。
++             * 'view' 是库自己在 view() 里派发的（new CustomEvent 带 bubbles:!0，从 .viewer-container 冒到
++             * document；那个容器不会被清掉），左右滑切图 / 缩略图点选 / 键盘方向键 / 工具栏上下张全都经过它
++             * ⇒ 在这里补排一次，覆盖所有换图入口。播放中不排：库按 interval 自动切图，别跟它的节奏打架。 */
++            document.addEventListener('view', () => {
++                if (viewer.played) { return; }
++                const html = document.documentElement;
++                if (html.classList.contains(VIEWER_OPEN_CLASS) || inFullscreenClass()) {
++                    scheduleViewerUiHide();
++                }
++            }, {passive: true});
 +            /* 「收起状态下落在 UI 上的第一下点击要吞掉」用的标记：必须在**别的 pointerdown 监听之前**
 +             * 记下来 —— 下面那份名单里的 pointerdown 一跑就会把 ls-ui-idle 摘掉（UI 立刻淡回来），
 +             * 等 click 到达时就再也看不出"刚才还收着"，那一下就穿到画布上变成退出看图器了。 */
@@ -4532,7 +4545,7 @@
 +               移动鼠标 / 滚轮切图 / 点 toolbar 或缩略图条 / 触摸拖动 / 按键。
 +               （全部 passive：我们只看不拦，不影响任何默认行为 —— 特别是这份名单里**没有 click**，
 +                所以"非全屏点空白 = 退出看图器"和"全屏点空白 = 唤出 UI"两条原有特性都不受影响。） */
-+            ['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'].forEach((ev) => {
++            ['mousemove', 'wheel', 'pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'keydown'].forEach((ev) => {
 +                document.addEventListener(ev, flashViewerUI, {capture: true, passive: true});
 +            });
 +            /* 看图器开关：开 ⇒ 挂 ls-viewer-open，缩略图条从这一刻起参与自动隐藏（先露 2.5s）；
@@ -5143,7 +5156,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -269,14 +1991,22 @@
+@@ -269,14 +2004,22 @@
                      for (const i in images) {
                          html += $('#images-item-tpl').html()
                              .replace(/__id__/g, images[i].id)
@@ -5170,7 +5183,7 @@
                      }
  
                      $photos.append(html);
-@@ -300,22 +2030,73 @@
+@@ -300,22 +2043,73 @@
                  }
              });
  
@@ -5248,7 +5261,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +2109,43 @@
+@@ -328,29 +2122,43 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -5305,7 +5318,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +2153,13 @@
+@@ -358,12 +2166,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -5321,7 +5334,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +2168,18 @@
+@@ -372,13 +2181,18 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -5343,7 +5356,7 @@
                              );
                          }
                      });
-@@ -386,6 +2187,12 @@
+@@ -386,6 +2200,12 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -5356,7 +5369,7 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +2202,14 @@
+@@ -395,12 +2215,14 @@
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -5373,7 +5386,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +2241,18 @@
+@@ -432,15 +2254,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -5395,7 +5408,7 @@
                  });
              }
  
-@@ -449,9 +2261,366 @@
+@@ -449,9 +2274,366 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -5765,7 +5778,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +2637,288 @@
+@@ -468,11 +2650,288 @@
              });
          </script>
          <script>
@@ -6054,7 +6067,7 @@
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +2932,14 @@
+@@ -486,10 +2945,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -6071,7 +6084,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -497,22 +2947,112 @@
+@@ -497,22 +2960,112 @@
                  $(operates.map(item => `[data-operate=${item}]`).toString()).css('display', 'block');
              };
  
@@ -6188,7 +6201,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +3073,250 @@
+@@ -533,27 +3086,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -6456,7 +6469,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +3327,9 @@
+@@ -564,7 +3340,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -6467,7 +6480,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +3337,19 @@
+@@ -572,47 +3350,19 @@
                          }
                      });
                  },
@@ -6524,7 +6537,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +3386,10 @@
+@@ -649,6 +3399,10 @@
                  },
                  delete() {
                      Swal.fire({
@@ -6535,7 +6548,7 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +3403,23 @@
+@@ -662,13 +3416,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -6561,7 +6574,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,21 +3434,30 @@
+@@ -683,21 +3447,30 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -6598,7 +6611,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +3479,11 @@
+@@ -719,6 +3492,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -6610,7 +6623,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +3548,9 @@
+@@ -783,9 +3561,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -6623,7 +6636,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +3568,10 @@
+@@ -803,9 +3581,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -6635,7 +6648,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -827,7 +3593,9 @@
+@@ -827,7 +3606,9 @@
                  let operate = $(this).data('operate');
                  let selected = ds.getSelection();
  
@@ -6646,7 +6659,7 @@
                      return false;
                  }
  
-@@ -844,17 +3612,138 @@
+@@ -844,17 +3625,138 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;

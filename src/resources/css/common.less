@@ -398,6 +398,28 @@ html:root {
         color: var(--lsky-danger);
     }
 
+    // 导出弹窗里的「取消导出」是页面自己插进 swal 的 html 容器的按钮（#export-cancel），
+    // 长相沿用上面的通用取消键（同带 swal2-styled swal2-cancel 两个类），但语义是「中断导出」
+    // 这种危险动作 ⇒ 红底白字。必须用 id 限定：写成 .swal2-cancel 会把全站确认框的灰色取消键
+    // 一起染红。hover 用 filter 压暗而不用 background-color：swal 在 hover/active 上还叠了一层
+    // color-mix 的底色，改底色会跟它打架，整块压暗最稳。
+    #export-cancel {
+        background-color: var(--lsky-danger);
+        border-color: var(--lsky-danger);
+        color: #fff;
+        cursor: pointer;
+    }
+
+    #export-cancel:hover {
+        filter: brightness(.9);
+    }
+
+    // 导出进行中会 disable 它：光标别继续显示可点，颜色也退一档表示「暂时不能用」。
+    #export-cancel:disabled {
+        cursor: default;
+        opacity: .6;
+    }
+
     // sweetalert2 默认在 hover/active 时叠一层黑渐变，会盖掉上面的悬停色。
     // 权重 (0,4,1) > 它那条 `.swal2-actions:not(...) .swal2-styled:hover` 的 (0,4,0)。
     .swal2-popup .swal2-actions .swal2-styled:hover,
@@ -829,15 +851,19 @@ html.dark {
  */
 @media (min-width: 640px) and (max-width: 1079.98px) {
     html .ls-app-header #strategy-selected,
-    html .ls-app-header .ls-user-name {
+    html .ls-app-header .ls-user-name,
+    html .ls-app-header .ls-notice-label {
         display: none;
     }
 
-    /* 两个胶囊里的文字收起来之后，它们必须回到「正圆」：40×40 + 无内边距。
+    /* 胶囊里的文字收起来之后，它们必须回到「正圆」：40×40 + 无内边距。
        否则会保持 sm:w-auto + 左右内边距、只剩图标却被撑成椭圆（实测用户按钮「不圆了」）。
+       公告按钮（#open-notice）同理：它的文字带 sm:block，在本区间本来是要显示的，
+       收掉文字后若还把 sm:w-auto / sm:px-3 留着，就会变成一个「图标 + 空内边距」的椭圆。
        权重：html + .ls-app-header + #id 压过 app.css 的 sm:w-auto / sm:px-3 / sm:pl-3 / sm:pr-3。 */
     html .ls-app-header #user-menu-button,
-    html .ls-app-header #strategy-menu-button {
+    html .ls-app-header #strategy-menu-button,
+    html .ls-app-header #open-notice {
         width: 2.5rem;
         padding: 0;
     }

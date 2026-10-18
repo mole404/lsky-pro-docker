@@ -297,9 +297,10 @@ src/app/Http/Controllers/Admin/ImageController.php
 src/app/Services/UserService.php
 src/app/Http/Controllers/Admin/UserController.php
 
-# [11 文案（2026-10-09 UI 迭代）：注册页「姓名」标签改成「昵称」]
+# [11 文案：全站「名称／昵称」统一为「名称」]
 #   src/lang/zh_CN.json（__('Name') 全站只有注册页 auth/register.blade.php 用这一处，改它不影响别处；
-#     个人资料页那行「姓名」是硬编码，改在 src/resources/views/user/dashboard.blade.php 里 —— 该文件本就在 [5] 段内）
+#     个人资料页那行「姓名」是硬编码，改在 src/resources/views/user/dashboard.blade.php 里 —— 该文件本就在 [5] 段内；
+#     用户设置页标签与错误文案、后台编辑用户页标签见 [14]）
 src/lang/zh_CN.json
 
 # [12 文案：全仓「储存」用词统一为「存储」（纯文案，无行为变化；commit 59efc62）]
@@ -325,6 +326,14 @@ src/resources/views/admin/group/tips.blade.php
 #      StorageUsage 本身是 fork 新增文件 ⇒ 属于「只在 src 存在」，不进本清单）]
 #   src/app/Http/Controllers/User/UserController.php
 src/app/Http/Controllers/User/UserController.php
+
+# [14 改密安全：用户设置页与后台编辑用户页都加「确认密码」必填 + 两次一致，密码长度统一 8-32
+#     （UserSettingRequest 与 Admin/UserRequest 的 password 规则都改为 nullable|between:8,32|confirmed
+#      并新增 password_confirmation => nullable|required_with:password；后者原本不在清单里，
+#      它是「后台改密也要配对校验」这处故意偏离上游的落点。安装向导的 6 位下限同步改成 8 位，
+#      落在 src/app/Http/Controllers/Controller.php —— 该文件本就在 [3] 段内。）]
+#   src/app/Http/Requests/Admin/UserRequest.php
+src/app/Http/Requests/Admin/UserRequest.php
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单

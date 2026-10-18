@@ -1353,6 +1353,19 @@
                     scheduleViewerUiHide();             // 手指抬起才开始计时
                 }
             }, {capture: true, passive: true});
+            /* 上面那条 touchend 有个洞：手机左右滑切图走 pointerup ⇒ viewer.next()/prev() ⇒ 库在 view()
+             * 开头就把 canvas 清空重建，等 touchend 发出时目标已脱离文档、document 根本收不到 ⇒ 计时器
+             * 没排上，UI 就一直挂着不收起（手指离开后也没有别的 mousemove 来救）。
+             * 'view' 是库自己在 view() 里派发的（new CustomEvent 带 bubbles:!0，从 .viewer-container 冒到
+             * document；那个容器不会被清掉），左右滑切图 / 缩略图点选 / 键盘方向键 / 工具栏上下张全都经过它
+             * ⇒ 在这里补排一次，覆盖所有换图入口。播放中不排：库按 interval 自动切图，别跟它的节奏打架。 */
+            document.addEventListener('view', () => {
+                if (viewer.played) { return; }
+                const html = document.documentElement;
+                if (html.classList.contains(VIEWER_OPEN_CLASS) || inFullscreenClass()) {
+                    scheduleViewerUiHide();
+                }
+            }, {passive: true});
             /* 「收起状态下落在 UI 上的第一下点击要吞掉」用的标记：必须在**别的 pointerdown 监听之前**
              * 记下来 —— 下面那份名单里的 pointerdown 一跑就会把 ls-ui-idle 摘掉（UI 立刻淡回来），
              * 等 click 到达时就再也看不出"刚才还收着"，那一下就穿到画布上变成退出看图器了。 */
@@ -1371,7 +1384,7 @@
                移动鼠标 / 滚轮切图 / 点 toolbar 或缩略图条 / 触摸拖动 / 按键。
                （全部 passive：我们只看不拦，不影响任何默认行为 —— 特别是这份名单里**没有 click**，
                 所以"非全屏点空白 = 退出看图器"和"全屏点空白 = 唤出 UI"两条原有特性都不受影响。） */
-            ['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'].forEach((ev) => {
+            ['mousemove', 'wheel', 'pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'keydown'].forEach((ev) => {
                 document.addEventListener(ev, flashViewerUI, {capture: true, passive: true});
             });
             /* 看图器开关：开 ⇒ 挂 ls-viewer-open，缩略图条从这一刻起参与自动隐藏（先露 2.5s）；

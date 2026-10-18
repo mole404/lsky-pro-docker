@@ -23,8 +23,8 @@
                                 <x-input type="email" id="email" value="{{ $user->email }}" disabled />
                             </div>
                             <div class="col-span-6">
-                                <label for="name" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>用户名</label>
-                                <x-input type="text" id="name" name="name" value="{{ $user->name }}" placeholder="请输入用户名" />
+                                <label for="name" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>名称</label>
+                                <x-input type="text" id="name" name="name" value="{{ $user->name }}" placeholder="请输入名称" />
                             </div>
                             <div class="col-span-6">
                                 <label for="capacity" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>总容量(KB)</label>
@@ -34,6 +34,10 @@
                             <div class="col-span-6">
                                 <label for="password" class="block text-sm font-medium text-ink">新密码</label>
                                 <x-input type="password" id="password" name="password" value="" placeholder="不修改请留空" />
+                            </div>
+                            <div class="col-span-6">
+                                <label for="password_confirmation" class="block text-sm font-medium text-ink">确认密码</label>
+                                <x-input type="password" id="password_confirmation" name="password_confirmation" value="" placeholder="再次输入新密码" />
                             </div>
                             @if($user->id != Auth::user()->id)
                             <div class="col-span-6">
@@ -58,6 +62,20 @@
         <script>
             $('form').submit(function (e) {
                 e.preventDefault();
+
+                const password = $('#password').val();
+                const passwordConfirmation = $('#password_confirmation').val();
+
+                if (password && !passwordConfirmation) {
+                    toastr.warning('请再输入一次密码');
+                    return;
+                }
+
+                if (password !== passwordConfirmation) {
+                    toastr.warning('两次输入的密码不一致');
+                    return;
+                }
+
                 axios.put(this.action, $(this).serialize()).then(response => {
                     if (response.data.status) {
                         toastr.success(response.data.message);

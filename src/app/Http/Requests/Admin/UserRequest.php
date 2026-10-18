@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Admin;
 
 use App\Http\Requests\FormRequest;
-use Illuminate\Validation\Rules;
 
 class UserRequest extends FormRequest
 {
@@ -18,7 +17,10 @@ class UserRequest extends FormRequest
             'group_id' => 'required',
             'name' => 'required|between:2,30',
             'capacity' => 'required|numeric',
-            'password' => ['nullable', Rules\Password::defaults()],
+            // 确认密码排在密码之前：它为 implicit 规则，先校验才能让空确认框
+            // 命中 required_with 的提示，而不是先报 password.confirmed。
+            'password_confirmation' => ['nullable', 'required_with:password'],
+            'password' => ['nullable', 'between:8,32', 'confirmed'],
             'status' => 'in:1,0'
         ];
     }
@@ -27,10 +29,20 @@ class UserRequest extends FormRequest
     {
         return [
             'group_id' => '角色组',
-            'name' => '昵称',
+            'name' => '名称',
             'capacity' => '总容量',
             'password' => '密码',
+            'password_confirmation' => '确认密码',
             'status' => '状态',
+        ];
+    }
+
+    public function messages()
+    {
+        return [
+            'password.confirmed' => '两次输入的密码不一致',
+            'password_confirmation.required_with' => '请再输入一次密码',
+            'password.between' => '密码必须为 8-32 个字符',
         ];
     }
 }
