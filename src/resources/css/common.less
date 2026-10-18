@@ -377,6 +377,14 @@ html:root {
         box-shadow: 0 0 0 3px var(--lsky-accent-soft);
     }
 
+    /* 焦点环只给键盘：swal 打开时会自动 focus 确认键（focusConfirm 默认 true），只写 :focus
+       的话鼠标用户一开弹窗就常驻一圈淡环。:focus-visible 才是「这个焦点值得提示」的语义。
+       写成 :focus:not(:focus-visible) 而不是直接换成 :focus-visible —— 老浏览器（Safari 15.4 之前）
+       不认识该伪类，整条选择器会失效、退回上面那条 :focus，环照旧显示，不会让键盘用户彻底失去焦点提示。 */
+    .swal2-styled.swal2-confirm:focus:not(:focus-visible) {
+        box-shadow: none;
+    }
+
     // 取消 = .ls-btn（底 surface、边 line-2、字 ink，hover surface-2）
     .swal2-styled.swal2-cancel {
         border-color: var(--lsky-border-2);
@@ -392,6 +400,11 @@ html:root {
         box-shadow: 0 0 0 3px var(--lsky-accent-soft);
     }
 
+    // 同上：鼠标聚焦不出环，键盘 Tab 到才出。
+    .swal2-styled.swal2-cancel:focus:not(:focus-visible) {
+        box-shadow: none;
+    }
+
     // 危险按钮 = .ls-btn-danger（当前三个确认框没用到，一并统一）
     .swal2-styled.swal2-deny {
         background-color: var(--lsky-danger-soft);
@@ -401,8 +414,7 @@ html:root {
     // 导出弹窗里的「取消导出」是页面自己插进 swal 的 html 容器的按钮（#export-cancel），
     // 长相沿用上面的通用取消键（同带 swal2-styled swal2-cancel 两个类），但语义是「中断导出」
     // 这种危险动作 ⇒ 红底白字。必须用 id 限定：写成 .swal2-cancel 会把全站确认框的灰色取消键
-    // 一起染红。hover 用 filter 压暗而不用 background-color：swal 在 hover/active 上还叠了一层
-    // color-mix 的底色，改底色会跟它打架，整块压暗最稳。
+    // 一起染红。hover 只换填充色/边框色，见下面那段注释。
     #export-cancel {
         background-color: var(--lsky-danger);
         border-color: var(--lsky-danger);
@@ -424,6 +436,18 @@ html:root {
     #export-cancel:disabled {
         cursor: default;
         opacity: .6;
+    }
+
+    /* 焦点环与上面 .swal2-confirm / .swal2-cancel 同一套路（鼠标聚焦不出、键盘 Tab 才出），
+       环色用 accent-soft 而不是 danger-soft：焦点环回答的是「焦点在哪」，不是按钮的危险语义，
+       跟全站 15 处 swal 按钮保持一套；暗色卡面 #161a20 上 accent-soft(#16233b) 也比
+       danger-soft(#2a1618) 的通道差更大、更容易看见。 */
+    #export-cancel:focus {
+        box-shadow: 0 0 0 3px var(--lsky-accent-soft);
+    }
+
+    #export-cancel:focus:not(:focus-visible) {
+        box-shadow: none;
     }
 
     // sweetalert2 默认在 hover/active 时叠一层黑渐变，会盖掉上面的悬停色。
