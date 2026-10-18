@@ -392,7 +392,6 @@
                     Swal.fire(dialog({
                         title: '导出进行中',
                         html: barHtml(count, bytes),
-                        showLoading: true,
                         allowOutsideClick: false,
                         allowEscapeKey: false,
                         showConfirmButton: false,
@@ -601,7 +600,7 @@
                     const url = EXPORT_URL + (query === '' ? '' : '?' + query);
                     let writer = null;       // createWritable() 之后才有
                     let committed = false;   // close() 是否已提交：提交后的文件是完整的，不能再删
-                    let existed = true;      // 用户是不是选了个已有的文件；拿不准就当「有」，绝不删旧数据
+                    let existed = false;     // 用户是不是选了个已有的文件；只有 getFile() 成功才算「有」
 
                     // 异常/中断的收尾：abort() 丢掉尚未提交的 swap 文件（半截 zip 不会落盘）；
                     // 选的是新文件名时再 remove() 兜一次，确保磁盘上干干净净。
@@ -611,11 +610,17 @@
                             try { await writer.abort(); } catch (e) { /* 已经结束 */ }
                         }
                         if (committed || existed || typeof handle.remove !== 'function') { return; }
+                        // 兜底：abort() 之后还能读到有内容的文件，说明它是用户原有的文件被还原了 —— 不能删。
+                        try { const current = await handle.getFile(); if (current && current.size > 0) { return; } } catch (e) { /* 读不到就按新建处理 */ }
                         // abort() 返回不代表文件句柄已经释放：紧接着 remove() 常常抛错，
                         // 于是一次失败就放弃、磁盘上留一个打不开的半截 zip（实测踩到）。
                         // 这里退避重试几次；NotFound 说明文件本就不在了，也算清干净。
                         for (let i = 0; i < 5; i++) {
-                            try { await handle.remove(); return; } catch (e) {
+                            try {
+                                await handle.remove();
+                                if (window.console && console.info) { console.info('[export] 已删除未完成的导出文件'); }
+                                return;
+                            } catch (e) {
                                 if (e && e.name === 'NotFoundError') { return; } // 本来就没落盘，算清干净
                             }
                             await new Promise((resolve) => window.setTimeout(resolve, 120 * (i + 1)));
@@ -629,8 +634,10 @@
                     try {
                         const response = await window.fetch(url, {credentials: 'same-origin', signal: signal});
                         if (! response.ok || ! response.body) { throw new Error('HTTP ' + response.status); }
-                        // 先看这个文件原来在不在：getFile() 抛 NotFound 就是新名字（收尾时可以 remove）
-                        try { await handle.getFile(); } catch (e) { existed = ! (e && e.name === 'NotFoundError'); }
+                        // 先看这个文件原来在不在：**只有 getFile() 成功才算存在**。
+                        // 以前把「非 NotFoundError 的失败」也当成存在，于是取消时永远跳过 remove，
+                        // 磁盘上就留一个打不开的半截 zip（实测踩到）。
+                        try { await handle.getFile(); existed = true; } catch (e) { existed = false; }
                         writer = await handle.createWritable();
                         const reader = response.body.getReader();
                         for (;;) {
