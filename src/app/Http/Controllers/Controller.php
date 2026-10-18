@@ -85,7 +85,7 @@ class Controller extends BaseController
             try {
                 $request->validate([
                     'account.email' => 'required|email',
-                    'account.password' => 'required|between:6,32'
+                    'account.password' => 'required|between:8,32'
                 ], [], [
                     'account.email' => '管理员账号邮箱',
                     'account.password' => '管理员账号密码'

@@ -196,10 +196,12 @@ console.log('\n[相册弹窗] 标题/搜索/行内分区（44px 切换区 + 常�
     check('无限加载容器换成 #album-switch-scroll（每页 40 的接口调用没变：同一个 route）',
         blade.includes("albumsInfinite = utils.infiniteScroll('#album-switch-scroll', {")
         && blade.includes("url: '{{ route('user.albums') }}'"));
-    check('空状态：默认隐藏 + 「还没有相册」+ 创建按钮',
+    // 只看空态块内部（块后面紧跟着常驻的 #album-switch-create，不能把那个按钮算进来）
+    const emptyBlock = (/<div id="album-switch-empty"[\s\S]*?<\/div>/.exec(containerTpl) || [''])[0];
+    check('空状态：默认隐藏 + 只有「还没有相册」文案（创建入口统一走底部那条）',
         /id="album-switch-empty" class="hidden /.test(containerTpl)
-        && containerTpl.includes('还没有相册')
-        && /id="album-switch-empty"[\s\S]*?<button[^>]*>创建相册<\/button>/.test(containerTpl));
+        && emptyBlock.includes('还没有相册') && ! /<button/.test(emptyBlock)
+        && containerTpl.includes('id="album-switch-create"'));
     check('加载中：转圈（x-loading-spin）+ 文案，加载完收起',
         containerTpl.includes('<x-loading-spin />') && containerTpl.includes('加载中...')
         && blade.includes("$('#album-switch-loading').addClass('hidden');"));

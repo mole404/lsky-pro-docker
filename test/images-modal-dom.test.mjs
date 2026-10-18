@@ -383,9 +383,9 @@ console.log('\n[相册弹窗] 空状态、创建相册（同一表单/接口/报
     });
     albumScroll.options.complete.call({ finished: false });
 
-    check('一个相册都没有：显示「还没有相册」+ 创建按钮，且「加载中...」已收起',
+    check('一个相册都没有：只显示「还没有相册」文案，空态里不再有重复的创建按钮',
         ! $('#album-switch-empty').hasClass('hidden') && $('#album-switch-empty-text').text() === '还没有相册'
-        && $('#album-switch-empty button').length === 1 && $('#album-switch-loading').hasClass('hidden'));
+        && $('#album-switch-empty button').length === 0 && $('#album-switch-loading').hasClass('hidden'));
     check('列表里也有「创建相册」入口（同一个机制：切换 #album-add）',
         $('#album-switch-create').length === 1 && String($('#album-switch-create').attr('onclick')).includes('#album-add'),
         String($('#album-switch-create').attr('onclick')));

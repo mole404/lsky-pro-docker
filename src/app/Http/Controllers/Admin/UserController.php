@@ -57,6 +57,7 @@ class UserController extends Controller
         }
 
         unset($validated['password']);
+        unset($validated['password_confirmation']);
         $user->fill($validated);
         $user->group_id = $validated['group_id'];
 

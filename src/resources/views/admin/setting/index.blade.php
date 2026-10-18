@@ -105,12 +105,12 @@
                         <x-input type="number" name="mail[mailers][smtp][timeout]" id="mail[mailers][smtp][timeout]" value="{{ $configs['mail']['mailers']['smtp']['timeout'] ?? 10 }}" placeholder="请输入连接超时时间(秒)"/>
                     </div>
                     <div>
-                        <label for="mail[mailers][smtp][from_address]" class="block text-sm font-medium text-ink">发件人地址</label>
-                        <x-input type="email" name="mail[from][address]" id="mail[from][address]" value="{{ $configs['mail']['from']['address'] ?? '' }}" placeholder="请输入发件人邮箱地址"/>
+                        <label for="mail[from][address]" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>发件人地址</label>
+                        <x-input type="email" name="mail[from][address]" id="mail[from][address]" value="{{ $configs['mail']['from']['address'] ?? '' }}" placeholder="请输入发件人邮箱地址" required/>
                     </div>
                     <div>
-                        <label for="mail[mailers][smtp][from_name]" class="block text-sm font-medium text-ink">发件人名称</label>
-                        <x-input type="text" name="mail[from][name]" id="mail[from][name]" value="{{ $configs['mail']['from']['name'] ?? '' }}" placeholder="请输入发件人名称"/>
+                        <label for="mail[from][name]" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>发件人名称</label>
+                        <x-input type="text" name="mail[from][name]" id="mail[from][name]" value="{{ $configs['mail']['from']['name'] ?? '' }}" placeholder="请输入发件人名称" required/>
                     </div>
 
                     <input type="hidden" name="mail[default]" value="smtp">

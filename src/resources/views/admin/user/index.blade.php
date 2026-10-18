@@ -13,7 +13,7 @@
             </div>
         </form>
 
-        <x-table :columns="['ID', '用户名', '邮箱', '角色组', '总容量', '剩余容量', '图片数量', '相册数量', '状态', '操作']">
+        <x-table :columns="['ID', '名称', '邮箱', '角色组', '总容量', '剩余容量', '图片数量', '相册数量', '状态', '操作']">
             @foreach($users as $user)
             <tr data-id="{{ $user->id }}" data-json='{{ $user->toJson() }}'>
                 <td class="px-6 py-4 whitespace-nowrap">{{ $user->id }}</td>
@@ -59,7 +59,7 @@
         <div class="relative rounded-md bg-surface mb-8 overflow-hidden">
             <dl>
                 <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">用户名</dt>
+                    <dt class="text-sm font-medium text-ink-2">名称</dt>
                     <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__name__</dd>
                 </div>
             </dl>

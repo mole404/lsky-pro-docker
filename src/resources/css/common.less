@@ -377,6 +377,14 @@ html:root {
         box-shadow: 0 0 0 3px var(--lsky-accent-soft);
     }
 
+    /* 焦点环只给键盘：swal 打开时会自动 focus 确认键（focusConfirm 默认 true），只写 :focus
+       的话鼠标用户一开弹窗就常驻一圈淡环。:focus-visible 才是「这个焦点值得提示」的语义。
+       写成 :focus:not(:focus-visible) 而不是直接换成 :focus-visible —— 老浏览器（Safari 15.4 之前）
+       不认识该伪类，整条选择器会失效、退回上面那条 :focus，环照旧显示，不会让键盘用户彻底失去焦点提示。 */
+    .swal2-styled.swal2-confirm:focus:not(:focus-visible) {
+        box-shadow: none;
+    }
+
     // 取消 = .ls-btn（底 surface、边 line-2、字 ink，hover surface-2）
     .swal2-styled.swal2-cancel {
         border-color: var(--lsky-border-2);
@@ -392,10 +400,56 @@ html:root {
         box-shadow: 0 0 0 3px var(--lsky-accent-soft);
     }
 
+    // 同上：鼠标聚焦不出环，键盘 Tab 到才出。
+    .swal2-styled.swal2-cancel:focus:not(:focus-visible) {
+        box-shadow: none;
+    }
+
     // 危险按钮 = .ls-btn-danger（当前三个确认框没用到，一并统一）
     .swal2-styled.swal2-deny {
         background-color: var(--lsky-danger-soft);
         color: var(--lsky-danger);
+    }
+
+    // 导出弹窗里的「取消导出」是页面自己插进 swal 的 html 容器的按钮（#export-cancel），
+    // 长相沿用上面的通用取消键（同带 swal2-styled swal2-cancel 两个类），但语义是「中断导出」
+    // 这种危险动作 ⇒ 红底白字。必须用 id 限定：写成 .swal2-cancel 会把全站确认框的灰色取消键
+    // 一起染红。hover 只换填充色/边框色，见下面那段注释。
+    #export-cancel {
+        background-color: var(--lsky-danger-btn);
+        border-color: var(--lsky-danger-btn);
+        color: #fff;
+        cursor: pointer;
+        /* swal2 给每个 .swal2-styled 带一条 `box-shadow: 0 0 0 3px rgba(0,0,0,0)`（3px 外环）。
+           这条必须显式清掉：任何作用在整层的效果都会把它一起带出来，视觉上就是「按钮外多一圈」。 */
+        box-shadow: none;
+    }
+
+    /* hover 只换填充色 / 边框色，绝不用 filter / opacity / transform ——
+       那些都会作用于整个渲染层（含上面那圈 3px 阴影），暗色区域会溢到按钮轮廓之外。 */
+    /* 悬停方向跟随主题惯例（见 app.css 里 accent 那一对：亮色压暗、暗色提亮）。
+       别直接套 --lsky-danger：它在暗色是红 400，当底色就等于「一直亮着」，悬停再压到红 500 看着像反了。 */
+    #export-cancel:hover:not(:disabled) {
+        background-color: var(--lsky-danger-btn-hover);
+        border-color: var(--lsky-danger-btn-hover);
+    }
+
+    // 导出进行中会 disable 它：光标别继续显示可点，颜色也退一档表示「暂时不能用」。
+    #export-cancel:disabled {
+        cursor: default;
+        opacity: .6;
+    }
+
+    /* 焦点环与上面 .swal2-confirm / .swal2-cancel 同一套路（鼠标聚焦不出、键盘 Tab 才出），
+       环色用 accent-soft 而不是 danger-soft：焦点环回答的是「焦点在哪」，不是按钮的危险语义，
+       跟全站 15 处 swal 按钮保持一套；暗色卡面 #161a20 上 accent-soft(#16233b) 也比
+       danger-soft(#2a1618) 的通道差更大、更容易看见。 */
+    #export-cancel:focus {
+        box-shadow: 0 0 0 3px var(--lsky-accent-soft);
+    }
+
+    #export-cancel:focus:not(:focus-visible) {
+        box-shadow: none;
     }
 
     // sweetalert2 默认在 hover/active 时叠一层黑渐变，会盖掉上面的悬停色。
@@ -829,15 +883,19 @@ html.dark {
  */
 @media (min-width: 640px) and (max-width: 1079.98px) {
     html .ls-app-header #strategy-selected,
-    html .ls-app-header .ls-user-name {
+    html .ls-app-header .ls-user-name,
+    html .ls-app-header .ls-notice-label {
         display: none;
     }
 
-    /* 两个胶囊里的文字收起来之后，它们必须回到「正圆」：40×40 + 无内边距。
+    /* 胶囊里的文字收起来之后，它们必须回到「正圆」：40×40 + 无内边距。
        否则会保持 sm:w-auto + 左右内边距、只剩图标却被撑成椭圆（实测用户按钮「不圆了」）。
+       公告按钮（#open-notice）同理：它的文字带 sm:block，在本区间本来是要显示的，
+       收掉文字后若还把 sm:w-auto / sm:px-3 留着，就会变成一个「图标 + 空内边距」的椭圆。
        权重：html + .ls-app-header + #id 压过 app.css 的 sm:w-auto / sm:px-3 / sm:pl-3 / sm:pr-3。 */
     html .ls-app-header #user-menu-button,
-    html .ls-app-header #strategy-menu-button {
+    html .ls-app-header #strategy-menu-button,
+    html .ls-app-header #open-notice {
         width: 2.5rem;
         padding: 0;
     }

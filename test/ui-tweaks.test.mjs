@@ -322,14 +322,46 @@ console.log('\n[第十批] 两个胶囊同一节奏 / 用户名收起时按钮�
         nav.includes('justify-center') && strat.includes('justify-center'));
 
     const less = read('resources', 'css', 'common.less');
-    check('640~1080px：两个胶囊的文字收起后强制 40×40 + 无内边距（都保持正圆，不再被撑成椭圆）',
-        /html \.ls-app-header #user-menu-button,\s*\n\s*html \.ls-app-header #strategy-menu-button \{\s*width: 2\.5rem;\s*padding: 0;/.test(less)
+    // 本区间里三个胶囊（用户 / 策略 / 公告）都要收成正圆：公告按钮原来只收文字不收宽度，
+    // 会在 640~1080 之间留成一个「图标 + 空内边距」的椭圆。
+    check('640~1080px：三个胶囊（用户 / 策略 / 公告）的文字收起后强制 40×40 + 无内边距（都保持正圆）',
+        /html \.ls-app-header #user-menu-button,[\s\S]{0,240}width: 2\.5rem;\s*padding: 0;/.test(less)
+        && /html \.ls-app-header #open-notice/.test(less)
         && read('resources', 'views', 'layouts', 'strategies.blade.php').includes('id="strategy-menu-button"'));
     check('竖屏箭头固定「朝右」（ls-sidebar-arrow-right），桌面展开态仍是「朝左」',
         less.includes('html .ls-sidebar-arrow-right {') && less.includes('html.sidebar-collapsed .ls-sidebar-arrow-left {'));
     const commonCss = fs.readFileSync(path.join(SRC, 'public', 'css', 'common.css'), 'utf8');
     check('重建后的 common.css 含正圆规则 + 两个方向的箭头类',
         commonCss.includes('#user-menu-button') && commonCss.includes('.ls-sidebar-arrow-left') && commonCss.includes('.ls-sidebar-arrow-right'));
+
+    // 同一条规则（见文件末尾 536~543 行）：less 写了还得真的编进 common.css，只改 less 不重编 = 线上没生效。
+    // 定位方式是先取 640~1079.98px 这个媒体块、再按选择器取整段声明 —— 不用「字符数窗口」，
+    // 块里以后增删别的规则也不会把这两条带偏。
+    const media640 = (() => {
+        const m = /@media\s*\(min-width:\s*640px\)\s*and\s*\(max-width:\s*1079\.98px\)\s*\{/.exec(commonCss);
+        if (! m) return '';
+        let depth = 0;
+        for (let i = m.index + m[0].length - 1; i < commonCss.length; i++) {
+            if (commonCss[i] === '{') depth++;
+            else if (commonCss[i] === '}' && --depth === 0) return commonCss.slice(m.index + m[0].length, i);
+        }
+        return '';
+    })();
+    // 压缩产物会把同一组选择器并成一条、声明顺序也会重排（less 是 width 在前、css 里 padding 在前），
+    // 所以按选择器取出声明体，再分别看每一条属性在不在。
+    const declOf = (block, selector) => {
+        const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const m = new RegExp(`(?:^|[{};,])\\s*[^{}]*?${esc}[^{}]*\\{([^{}]*)\\}`).exec(block);
+        return m ? m[1] : '';
+    };
+    const noticeDecl = declOf(media640, '#open-notice');
+    const noticeLabelDecl = declOf(media640, '.ls-notice-label');
+    check('common.css 的 640~1080 媒体块里 #open-notice 也收成正圆（2.5rem + 无内边距），不只是 less',
+        /width:\s*2\.5rem/.test(noticeDecl) && /(?:^|;)\s*padding:\s*0(?:;|$)/.test(noticeDecl),
+        noticeDecl || '媒体块里没有 #open-notice 规则');
+    check('.ls-notice-label 在这个区间里 display:none（less 与 common.css 都要有；少了它文字会把按钮撑成椭圆）',
+        /\.ls-notice-label\s*\{\s*display:\s*none/.test(less) && /display:\s*none/.test(noticeLabelDecl),
+        noticeLabelDecl || '媒体块里没有 .ls-notice-label 规则');
 
     for (const [f, label] of [['group', '角色组'], ['user', '用户管理'], ['strategy', '存储策略']]) {
         check(`后台「${label}」页：搜索框那一行加了 gap-4（与左侧元素留出 16px，不再紧贴）`,

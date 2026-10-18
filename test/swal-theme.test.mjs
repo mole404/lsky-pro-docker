@@ -282,6 +282,18 @@ console.log('\n[③ 层叠] 复刻运行时注入顺序（common.css 在前、sw
     check('确认按钮圆角 8px', val('.swal2-styled.swal2-confirm', 'border-radius') === '8px', val('.swal2-styled.swal2-confirm', 'border-radius'));
     expect('取消按钮高 36px、圆角 8px', '.swal2-styled.swal2-cancel', 'height', '36px');
     check('取消按钮圆角 8px', val('.swal2-styled.swal2-cancel', 'border-radius') === '8px', val('.swal2-styled.swal2-cancel', 'border-radius'));
+    // 焦点环：swal 打开会自动 focus 确认键（focusConfirm 默认 true），只写 :focus 会让鼠标用户
+    // 一开弹窗就常驻一圈淡环。三处都必须带 :focus:not(:focus-visible) 的关环规则；
+    // 同时原 :focus 那条要还在（老浏览器不认识 :focus-visible 时靠它兜底，键盘提示不能丢）。
+    check('鼠标聚焦不出环：确认键 / 取消键 / 取消导出 三处都显式关掉',
+        /\.swal2-styled\.swal2-confirm:focus:not\(:focus-visible\)\s*\{\s*box-shadow:\s*none/.test(less)
+        && /\.swal2-styled\.swal2-cancel:focus:not\(:focus-visible\)\s*\{\s*box-shadow:\s*none/.test(less)
+        && /#export-cancel:focus:not\(:focus-visible\)\s*\{\s*box-shadow:\s*none/.test(less));
+    check('键盘聚焦仍有 3px 焦点环（:focus 那条没被删，环色是 accent-soft）',
+        /\.swal2-styled\.swal2-confirm:focus\s*\{\s*box-shadow:\s*0 0 0 3px var\(--lsky-accent-soft\)/.test(less)
+        && /\.swal2-styled\.swal2-cancel:focus\s*\{\s*box-shadow:\s*0 0 0 3px var\(--lsky-accent-soft\)/.test(less)
+        && /#export-cancel:focus\s*\{\s*box-shadow:\s*0 0 0 3px var\(--lsky-accent-soft\)/.test(less));
+
     expect('输入框高 38px（= ls-input 的 h-9 一档）', '.swal2-input', 'height', '38px');
     expect('输入框圆角 8px', '.swal2-input', 'border-radius', '8px');
     expect('校验提示 13px', '.swal2-validation-message', 'font-size', '13px');

@@ -75,6 +75,22 @@
             display: none;
         }
 
+        /* 列表区只有一行内容的两个状态（加载中 / 空态）要落在「搜索框 → 创建入口」那段空白正中，
+           不是"差不多就行"。两块都是 py-4（上下各 16），但上方另有两段固定间距：
+             上方 = 列表容器 mt-3(12) + 自身 p-3(12) + pt-4(16)   = 40px
+             下方 = pb + 与创建按钮的 space-y-2(8)
+           所以要补 pb 让下方也到 40px。空态多一条：它前面那个 hidden 的加载块仍会吃到
+           space-y-2 的 8px（Tailwind 的 space-y 只排除 [hidden] 属性，不排除 .hidden 类）
+           ⇒ 空态上方是 48px，pb 要给 40（2.5rem）；加载中是列表第一个子元素，pb 给 32（2rem）。
+           写成 ID 规则而不是换 Tailwind 类：pt-4/pb-8 这些没进产物 app.css，加了也不生效。 */
+        #album-switch-loading {
+            padding-bottom: 2rem;
+        }
+
+        #album-switch-empty {
+            padding-bottom: 2.5rem;
+        }
+
         @media (min-width: 768px) {
             #album-switch-modal [class*="md:max-w-2xl"] {
                 max-width: 520px;
@@ -683,11 +699,11 @@
                 <x-loading-spin />
                 <div class="text-[13px] text-ink-3">加载中...</div>
             </div>
-            {{-- fork：空状态——一个相册都没有时「还没有相册」+ 创建按钮；
-                 有相册但被搜索过滤光了换成「没有匹配的相册」 --}}
-            <div id="album-switch-empty" class="hidden flex w-full flex-col items-center justify-center gap-3 py-4">
+            {{-- fork：空状态——一个相册都没有时只留「还没有相册」文案；
+                 创建入口统一走下面那条常驻的 #album-switch-create（同一机制：切换 #album-add），
+                 这里不再重复放按钮。有相册但被搜索过滤光了换成「没有匹配的相册」 --}}
+            <div id="album-switch-empty" class="hidden flex w-full flex-col items-center justify-center py-4">
                 <p id="album-switch-empty-text" class="text-[14px] text-ink-3">还没有相册</p>
-                <button type="button" class="ls-btn h-11 px-4 sm:h-9" onclick="$('#album-add').toggleClass('hidden')">创建相册</button>
             </div>
             {{-- fork：创建相册入口（原抽屉标题上的 + 号，机制一字未改：切换 #album-add 的显示） --}}
             <button type="button" id="album-switch-create" class="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-left text-[14px] text-brand hover:bg-surface-3" onclick="$('#album-add').toggleClass('hidden')">
@@ -1329,11 +1345,25 @@
                     if (e && e.pointerType && e.pointerType !== 'mouse') { lastRealTouchAt = Date.now(); }
                 }, {capture: true, passive: true});
             });
+            /* 「指针最后停在哪儿」：'view'（换图）那个事件只带 image/options、不带坐标，可它必须走
+             * 下面同一套"指针停在 UI 上就只续期"的判断 —— 否则桌面点完缩略图 / 工具栏上下张、光标还
+             * 压在按钮上，UI 照样按时淡出（窗口模式更糟：收起之后下一次点击会被"第一下只唤回 UI"的守卫吞掉）。
+             * 每来一发带坐标的指针事件就更新一次，'view' 时拿它当坐标用。
+             * 触摸也照记：那一份坐标落在刚点过的 UI 上，由 touchedRecently() 那道闸门挡住，不会因此不收。 */
+            let lastPointerX = 0;
+            let lastPointerY = 0;
+            let hasLastPointer = false;
             const flashViewerUI = (e) => {
                 const html = document.documentElement;
                 const fs = inFullscreenClass();
                 if (! fs && ! html.classList.contains(VIEWER_OPEN_CLASS)) { return; }   // 看图器没开 ⇒ 什么都不做
                 if (fs) { html.classList.add('ls-fs-ui'); } else { html.classList.remove(UI_IDLE_CLASS); }
+                if (e && (e.type === 'mousemove' || e.type === 'pointerdown' || e.type === 'pointerup')
+                    && typeof e.clientX === 'number' && typeof e.clientY === 'number') {
+                    lastPointerX = e.clientX;           // 记住指针最后停在哪儿（'view' 靠它判断"是否停在 UI 上"）
+                    lastPointerY = e.clientY;
+                    hasLastPointer = true;
+                }
                 const type = (e && e.type) || '';
                 if (type.indexOf('touch') === 0) {
                     clearTimeout(fsUiTimer);            // 手指还按着 ⇒ 别收
@@ -1353,6 +1383,24 @@
                     scheduleViewerUiHide();             // 手指抬起才开始计时
                 }
             }, {capture: true, passive: true});
+            /* 上面那条 touchend 有个洞：手机左右滑切图走 pointerup ⇒ viewer.next()/prev() ⇒ 库在 view()
+             * 开头就把 canvas 清空重建，等 touchend 发出时目标已脱离文档、document 根本收不到 ⇒ 计时器
+             * 没排上，UI 就一直挂着不收起（手指离开后也没有别的 mousemove 来救）。
+             * 'view' 是库自己在 view() 里派发的（new CustomEvent 带 bubbles:!0，从 .viewer-container 冒到
+             * document；那个容器不会被清掉），左右滑切图 / 缩略图点选 / 键盘方向键 / 工具栏上下张全都经过它
+             * ⇒ 在这里补排，覆盖所有换图入口。
+             * 注意它**不能**无条件 scheduleViewerUiHide()：那会绕过上面"指针停在 UI 上就续期"的规则 ——
+             * 点缩略图换图时光标正好压在缩略图条上，等于把刚续的期又取消了。这个事件本身不带坐标，
+             * 所以把最后一次指针位置喂回 flashViewerUI，走完全同一套判断：指针在四块 UI 里 ⇒ 只续期，
+             * 否则照常排收起。触摸换图不受影响：touchedRecently() 会挡住那一发坐标、照常排收起。
+             * 播放中不会走到这里 —— 库里 view() 开头就 `if (this.hiding || this.played || …) return`，
+             * played 状态根本不派发 view，不需要再判一次。 */
+            document.addEventListener('view', () => {
+                const html = document.documentElement;
+                if (! html.classList.contains(VIEWER_OPEN_CLASS) && ! inFullscreenClass()) { return; }
+                if (! hasLastPointer) { scheduleViewerUiHide(); return; }    // 指针位置还没记到 ⇒ 旧口径
+                flashViewerUI({type: 'view', clientX: lastPointerX, clientY: lastPointerY});
+            }, {passive: true});
             /* 「收起状态下落在 UI 上的第一下点击要吞掉」用的标记：必须在**别的 pointerdown 监听之前**
              * 记下来 —— 下面那份名单里的 pointerdown 一跑就会把 ls-ui-idle 摘掉（UI 立刻淡回来），
              * 等 click 到达时就再也看不出"刚才还收着"，那一下就穿到画布上变成退出看图器了。 */
@@ -1371,7 +1419,7 @@
                移动鼠标 / 滚轮切图 / 点 toolbar 或缩略图条 / 触摸拖动 / 按键。
                （全部 passive：我们只看不拦，不影响任何默认行为 —— 特别是这份名单里**没有 click**，
                 所以"非全屏点空白 = 退出看图器"和"全屏点空白 = 唤出 UI"两条原有特性都不受影响。） */
-            ['mousemove', 'wheel', 'pointerdown', 'touchstart', 'touchmove', 'keydown'].forEach((ev) => {
+            ['mousemove', 'wheel', 'pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'keydown'].forEach((ev) => {
                 document.addEventListener(ev, flashViewerUI, {capture: true, passive: true});
             });
             /* 看图器开关：开 ⇒ 挂 ls-viewer-open，缩略图条从这一刻起参与自动隐藏（先露 2.5s）；
@@ -1384,6 +1432,7 @@
             document.addEventListener('hidden', () => {
                 document.documentElement.classList.remove(VIEWER_OPEN_CLASS, UI_IDLE_CLASS);
                 clearTimeout(fsUiTimer);
+                hasLastPointer = false;             // 看图器关了 ⇒ 记下的指针位置作废，别带到下一次打开
             });
             /* 进出全屏时把非全屏那套"收起"状态清掉：进去时干净开始，出来时缩略图条立刻在
              * （全屏自己的显隐走 ls-fs-ui，与这个类无关，互不干扰）。 */
@@ -2073,6 +2122,11 @@
 
                     // 空状态：一行都没有 → 「还没有相册」；有相册但被搜索过滤光了 → 「没有匹配的相册」
                     const updateEmpty = () => {
+                        // 首屏还没回来时不要抢答：否则「加载中…」会和「还没有相册」同屏，文案还是错的。
+                        if (!$('#album-switch-loading').hasClass('hidden')) {
+                            $('#album-switch-empty').addClass('hidden');
+                            return;
+                        }
                         let total = $albums.find('> ' + ALBUM_ROW).length;
                         let visible = $albums.find('> ' + ALBUM_ROW + ':not(.hidden)').length;
                         $('#album-switch-empty').toggleClass('hidden', visible > 0);

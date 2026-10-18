@@ -170,7 +170,7 @@
         <div class="relative rounded-md bg-surface mb-8 overflow-hidden">
             <dl>
                 <div class="bg-surface px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-ink-2">用户名</dt>
+                    <dt class="text-sm font-medium text-ink-2">名称</dt>
                     <dd class="mt-1 text-sm text-ink sm:mt-0 sm:col-span-2 truncate">__name__</dd>
                 </div>
             </dl>
@@ -226,7 +226,7 @@
     </script>
 
     <script type="text/html" id="search-grammar-tpl">
-        <p class="text-ink-2">默认输入关键字搜索会根据图片的别名、原始名称进行匹配，你也可以使用下面的搜索语法进行高级搜索，并可以以任意组合使用这些搜索限定符来缩小结果范围。例如查找用户名为张三，邮箱为 a@qq.com 且图片拓展名为 jpg 的所有图片：</p>
+        <p class="text-ink-2">默认输入关键字搜索会根据图片的别名、原始名称进行匹配，你也可以使用下面的搜索语法进行高级搜索，并可以以任意组合使用这些搜索限定符来缩小结果范围。例如查找名称为张三，邮箱为 a@qq.com 且图片拓展名为 jpg 的所有图片：</p>
         <p class="text-ink-2 mb-2"><b>name:张三 email:a@qq.com extension:jpg</b></p>
         <table class="min-w-full divide-y divide-line">
             <thead class="bg-surface-2">
@@ -242,7 +242,7 @@
             <tbody class="bg-surface divide-y divide-line">
             <tr>
                 <td class="px-3 py-2 text-ink-2 text-sm">name:<span class="italic">USERNAME</span></td>
-                <td class="px-3 py-2 text-sm">匹配用户名为 USERNAME 的图片</td>
+                <td class="px-3 py-2 text-sm">匹配名称为 USERNAME 的图片</td>
             </tr>
             <tr>
                 <td class="px-3 py-2 text-ink-2 text-sm">album:<span class="italic">ALBUM_NAME</span></td>

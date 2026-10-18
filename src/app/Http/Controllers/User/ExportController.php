@@ -118,8 +118,9 @@ class ExportController extends Controller
         // 占位是在「流真正开始写」之前拿的，而释放只发生在流回调里 —— 所以这一段里要是出了岔子
         // （异常、致命错误、类型错误……），流回调永远不会跑，占位就没人还，用户被自己那笔占位
         // 挡在门外直到心跳过期。这里用 shutdown 兜底：没开流就还占位。
-        // 新一次导出开始：清掉可能残留的取消旗标（否则上一轮的取消会立刻掐掉这一轮）
-        ExportCancel::clear($userId);
+        // 新一次导出开始：只清「不属于本次 run」的取消残留（否则上一轮的取消会立刻掐掉这一轮）。
+        // 属于本次 run 的旗标必须留着 —— 用户可能抢在 acquire 之前就点了取消，那面旗还得生效。
+        ExportCancel::clearStale($userId, $run);
 
         $streamStarted = false;
         register_shutdown_function(static function () use (&$streamStarted, $userId) {
@@ -183,7 +184,8 @@ class ExportController extends Controller
                 $finished = true;
 
                 ExportConcurrency::release($userId);
-                ExportCancel::clear($userId);
+                // 只清自己这一笔的旗标：收尾瞬间刚落下来的、属于另一笔导出的取消不能被吃掉
+                ExportCancel::clearRun($userId, $run);
 
                 $this->storeResult($userId, [
                     'started_at'  => $started->toIso8601String(),
@@ -231,7 +233,7 @@ class ExportController extends Controller
 
                             // 用户点了「取消导出」：在图片边界上停 —— 不掐在一张图写到一半的地方，
                             // 免得包内多出一条半截条目。走的是同一条中断收尾。
-                            if (ExportCancel::requested($userId)) {
+                            if (ExportCancel::requested($userId, $run)) {
                                 throw new ClientAbortedException();
                             }
 
@@ -289,19 +291,35 @@ class ExportController extends Controller
      * 客户端点「取消导出」走这里：置一个旗标，流式循环在下一张图的边界上自己停下，
      * 然后照常走「中断」收尾（释放占位 + 结果记为已中断），连接随之断开。
      * 没有导出在进行时不报错（幂等）。
+     *
+     * 关键：**不以 isActive() 为前提**。从「浏览器发起下载」到「worker 认领这笔请求」之间
+     * 有一段空窗，那时占位还没建、isActive() 为 false —— 旧代码把旗标丢在这段空窗里，
+     * 于是「刚开始就点取消」永远无效、导出照常跑完。只要请求带了 run 就记下来（按 run 匹配），
+     * 没带 run 才退回旧语义（确实有导出在跑时才置位，任何一笔都认）。
+     * 返回值仍带 active，前端照旧可以据此判断要不要等进度。
      */
-    public function cancel(): JsonResponse
+    public function cancel(Request $request): JsonResponse
     {
         /** @var User $user */
         $user = Auth::user();
 
         $active = ExportConcurrency::isActive($user->id);
+        $run = $this->inputRun($request);
 
-        if ($active) {
-            ExportCancel::request($user->id);
+        if ($run === null && $active) {
+            // 调用方没传 run：认领当前这一笔的 run，让旗标更精确；拿不到就用「任何一笔都认」的旧语义
+            $run = ExportConcurrency::progress($user->id)['run'] ?? null;
         }
 
-        return response()->json(['ok' => true, 'active' => $active]);
+        $armed = ($run !== null || $active);
+
+        if ($armed) {
+            ExportCancel::request($user->id, $run);
+        }
+
+        // armed 与 active 是两件事：导出请求还没被 worker 认领时 active=false，但取消照样能记下来
+        // （那正是「刚点开始就取消」要救的场景），所以前端要按 armed 判断「通知到了没有」。
+        return response()->json(['ok' => true, 'active' => $active, 'armed' => $armed]);
     }
 
     /**
@@ -595,7 +613,29 @@ class ExportController extends Controller
      */
     private function runToken(Request $request): ?string
     {
-        $run = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $request->query('run', ''));
+        return $this->normalizeRun($request->query('run'));
+    }
+
+    /**
+     * 取消请求里的 run：POST 的参数走 body（表单 / JSON 都认），也接受 query 上的 run。
+     * 归一化规则必须和 runToken() 完全一致，否则同一笔导出的两个 run 对不上、旗标永远认领不到。
+     */
+    private function inputRun(Request $request): ?string
+    {
+        return $this->normalizeRun($request->input('run'));
+    }
+
+    /**
+     * run 的唯一归一化入口：只留 [A-Za-z0-9_-]，截到 32 字节，空串即视为没传。
+     * 非标量（数组之类）一律当没传 —— 不猜调用方的意图。
+     */
+    private function normalizeRun($value): ?string
+    {
+        if (! is_string($value) && ! is_numeric($value)) {
+            return null;
+        }
+
+        $run = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $value);
 
         return $run === '' ? null : substr($run, 0, 32);
     }
