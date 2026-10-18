@@ -163,7 +163,7 @@ docker run -d --name lsky-pro --restart unless-stopped \
 4. 根据旧版容器数据挂载路径，编辑新容器挂载卷路径，新版与上游旧版读取路径完全相同，**务必确保挂载卷与旧版容器一致，挂载错误进去会报 500（数据不会丢，只是读取失败）**
 5. 容器挂载卷路径设置正确后，拉取本仓库镜像部署即可完成升级
 
-## 常见配置
+## 常见配置及注意事项
 
 ### 端口
 
@@ -190,6 +190,21 @@ docker run -d --name lsky-pro --restart unless-stopped \
 
 如果您不知道这些参数起什么作用，请不要随意修改，否则有爆内存风险。  
 面向个人自用以上参数保持默认值即可，多用户场景下可增大。
+
+### 图片编辑与存储桶 CORS
+
+当使用 AWS S3 或兼容存储（例如 Cloudflare R2）且访问地址为独立域名时，图片会以跨域方式加载。图片编辑需要读取像素，因此该域名必须返回 CORS 响应头，否则图片编辑功能可能无法正常使用。请在该存储桶的 CORS 策略中放行本站 origin：
+```
+[
+  {
+    "AllowedOrigins": ["https://your-lsky-domain"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+只需允许 GET（HEAD 可选）；图片由服务器写入桶，无需开放 PUT/POST。若桶前有 CDN 缓存，修改策略后需清除缓存。
 
 ## 关于这个仓库
 
