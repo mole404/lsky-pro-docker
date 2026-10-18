@@ -429,7 +429,7 @@ html:root {
        那些都会作用于整个渲染层（含上面那圈 3px 阴影），暗色区域会溢到按钮轮廓之外。 */
     /* 悬停方向跟随主题惯例（见 app.css 里 accent 那一对：亮色压暗、暗色提亮）。
        别直接套 --lsky-danger：它在暗色是红 400，当底色就等于「一直亮着」，悬停再压到红 500 看着像反了。 */
-    #export-cancel:hover {
+    #export-cancel:hover:not(:disabled) {
         background-color: var(--lsky-danger-btn-hover);
         border-color: var(--lsky-danger-btn-hover);
     }

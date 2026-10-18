@@ -1345,11 +1345,25 @@
                     if (e && e.pointerType && e.pointerType !== 'mouse') { lastRealTouchAt = Date.now(); }
                 }, {capture: true, passive: true});
             });
+            /* 「指针最后停在哪儿」：'view'（换图）那个事件只带 image/options、不带坐标，可它必须走
+             * 下面同一套"指针停在 UI 上就只续期"的判断 —— 否则桌面点完缩略图 / 工具栏上下张、光标还
+             * 压在按钮上，UI 照样按时淡出（窗口模式更糟：收起之后下一次点击会被"第一下只唤回 UI"的守卫吞掉）。
+             * 每来一发带坐标的指针事件就更新一次，'view' 时拿它当坐标用。
+             * 触摸也照记：那一份坐标落在刚点过的 UI 上，由 touchedRecently() 那道闸门挡住，不会因此不收。 */
+            let lastPointerX = 0;
+            let lastPointerY = 0;
+            let hasLastPointer = false;
             const flashViewerUI = (e) => {
                 const html = document.documentElement;
                 const fs = inFullscreenClass();
                 if (! fs && ! html.classList.contains(VIEWER_OPEN_CLASS)) { return; }   // 看图器没开 ⇒ 什么都不做
                 if (fs) { html.classList.add('ls-fs-ui'); } else { html.classList.remove(UI_IDLE_CLASS); }
+                if (e && (e.type === 'mousemove' || e.type === 'pointerdown' || e.type === 'pointerup')
+                    && typeof e.clientX === 'number' && typeof e.clientY === 'number') {
+                    lastPointerX = e.clientX;           // 记住指针最后停在哪儿（'view' 靠它判断"是否停在 UI 上"）
+                    lastPointerY = e.clientY;
+                    hasLastPointer = true;
+                }
                 const type = (e && e.type) || '';
                 if (type.indexOf('touch') === 0) {
                     clearTimeout(fsUiTimer);            // 手指还按着 ⇒ 别收
@@ -1374,13 +1388,18 @@
              * 没排上，UI 就一直挂着不收起（手指离开后也没有别的 mousemove 来救）。
              * 'view' 是库自己在 view() 里派发的（new CustomEvent 带 bubbles:!0，从 .viewer-container 冒到
              * document；那个容器不会被清掉），左右滑切图 / 缩略图点选 / 键盘方向键 / 工具栏上下张全都经过它
-             * ⇒ 在这里补排一次，覆盖所有换图入口。播放中不排：库按 interval 自动切图，别跟它的节奏打架。 */
+             * ⇒ 在这里补排，覆盖所有换图入口。
+             * 注意它**不能**无条件 scheduleViewerUiHide()：那会绕过上面"指针停在 UI 上就续期"的规则 ——
+             * 点缩略图换图时光标正好压在缩略图条上，等于把刚续的期又取消了。这个事件本身不带坐标，
+             * 所以把最后一次指针位置喂回 flashViewerUI，走完全同一套判断：指针在四块 UI 里 ⇒ 只续期，
+             * 否则照常排收起。触摸换图不受影响：touchedRecently() 会挡住那一发坐标、照常排收起。
+             * 播放中不会走到这里 —— 库里 view() 开头就 `if (this.hiding || this.played || …) return`，
+             * played 状态根本不派发 view，不需要再判一次。 */
             document.addEventListener('view', () => {
-                if (viewer.played) { return; }
                 const html = document.documentElement;
-                if (html.classList.contains(VIEWER_OPEN_CLASS) || inFullscreenClass()) {
-                    scheduleViewerUiHide();
-                }
+                if (! html.classList.contains(VIEWER_OPEN_CLASS) && ! inFullscreenClass()) { return; }
+                if (! hasLastPointer) { scheduleViewerUiHide(); return; }    // 指针位置还没记到 ⇒ 旧口径
+                flashViewerUI({type: 'view', clientX: lastPointerX, clientY: lastPointerY});
             }, {passive: true});
             /* 「收起状态下落在 UI 上的第一下点击要吞掉」用的标记：必须在**别的 pointerdown 监听之前**
              * 记下来 —— 下面那份名单里的 pointerdown 一跑就会把 ls-ui-idle 摘掉（UI 立刻淡回来），
@@ -1413,6 +1432,7 @@
             document.addEventListener('hidden', () => {
                 document.documentElement.classList.remove(VIEWER_OPEN_CLASS, UI_IDLE_CLASS);
                 clearTimeout(fsUiTimer);
+                hasLastPointer = false;             // 看图器关了 ⇒ 记下的指针位置作废，别带到下一次打开
             });
             /* 进出全屏时把非全屏那套"收起"状态清掉：进去时干净开始，出来时缩略图条立刻在
              * （全屏自己的显隐走 ls-fs-ui，与这个类无关，互不干扰）。 */
@@ -2102,6 +2122,11 @@
 
                     // 空状态：一行都没有 → 「还没有相册」；有相册但被搜索过滤光了 → 「没有匹配的相册」
                     const updateEmpty = () => {
+                        // 首屏还没回来时不要抢答：否则「加载中…」会和「还没有相册」同屏，文案还是错的。
+                        if (!$('#album-switch-loading').hasClass('hidden')) {
+                            $('#album-switch-empty').addClass('hidden');
+                            return;
+                        }
                         let total = $albums.find('> ' + ALBUM_ROW).length;
                         let visible = $albums.find('> ' + ALBUM_ROW + ':not(.hidden)').length;
                         $('#album-switch-empty').toggleClass('hidden', visible > 0);

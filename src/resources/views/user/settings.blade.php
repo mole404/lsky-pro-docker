@@ -181,7 +181,7 @@
                 e.preventDefault();
 
                 // 密码是可选的（留空＝不修改），所以不加 required：只在新密码真的填了的时候做配对校验，
-                // 否则光改昵称/策略也会被浏览器拦下来。
+                // 否则光改名称/策略也会被浏览器拦下来。
                 const password = $('#password').val() || '';
                 const passwordConfirmation = $('#password_confirmation').val() || '';
 

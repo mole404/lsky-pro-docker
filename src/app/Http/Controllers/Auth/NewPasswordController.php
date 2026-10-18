@@ -8,7 +8,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rules;
 
 class NewPasswordController extends Controller
 {
@@ -36,7 +35,10 @@ class NewPasswordController extends Controller
         $request->validate([
             'token' => ['required'],
             'email' => ['required', 'email'],
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            'password' => ['required', 'string', 'between:8,32', 'confirmed'],
+        ], [
+            'password.between' => '密码必须为 8-32 个字符',
+            'password.confirmed' => '两次输入的密码不一致',
         ]);
 
         // Here we will attempt to reset the user's password. If it is successful we

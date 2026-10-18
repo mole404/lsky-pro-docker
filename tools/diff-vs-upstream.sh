@@ -334,6 +334,21 @@ src/app/Http/Controllers/User/UserController.php
 #      落在 src/app/Http/Controllers/Controller.php —— 该文件本就在 [3] 段内。）]
 #   src/app/Http/Requests/Admin/UserRequest.php
 src/app/Http/Requests/Admin/UserRequest.php
+
+# [15 密码长度与校验文案：注册 / 重置密码的密码规则改成 8-32，并让校验消息用中文字段名]
+#     （RegisteredUserController / NewPasswordController 原来是 Password::defaults()（只有 8 位下限、
+#      没有上限），现与用户设置页、后台编辑用户页统一为 between:8,32；两处 validate() 另加 messages
+#      覆盖 between / confirmed 的措辞。zh_CN 语言包里补 attributes 段 —— 上游把这份映射单独放在
+#      validation-attributes.php 却没有任何地方加载它，导致报错直接露出 password / email 等字段名；
+#      validation.php 里改成引用同一份，不另抄副本。zh_CN.json 是那份死副本里「姓名」一处的措辞对齐。）
+#   src/app/Http/Controllers/Auth/RegisteredUserController.php
+src/app/Http/Controllers/Auth/RegisteredUserController.php
+#   src/app/Http/Controllers/Auth/NewPasswordController.php
+src/app/Http/Controllers/Auth/NewPasswordController.php
+#   src/lang/zh_CN/validation.php
+src/lang/zh_CN/validation.php
+#   src/lang/zh_CN/zh_CN.json
+src/lang/zh_CN/zh_CN.json
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单

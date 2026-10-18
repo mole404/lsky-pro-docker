@@ -270,7 +270,7 @@
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap pl-6">name</td>
                             <td class="px-3 py-2 whitespace-nowrap">String</td>
-                            <td class="px-3 py-2 whitespace-nowrap">用户名</td>
+                            <td class="px-3 py-2 whitespace-nowrap">名称</td>
                         </tr>
                         <tr>
                             <td class="px-3 py-2 whitespace-nowrap pl-6">avatar</td>

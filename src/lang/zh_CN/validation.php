@@ -132,4 +132,7 @@ return [
             'rule-name' => 'custom-message',
         ],
     ],
+    // 字段名→中文名。上游把这份映射单独放在 validation-attributes.php 里，却没有任何地方加载它，
+    // 于是消息里会直接露出 password / email 这类英文字段名。这里引用同一份，不另抄副本。
+    'attributes'           => (require __DIR__.'/validation-attributes.php')['attributes'],
 ];
