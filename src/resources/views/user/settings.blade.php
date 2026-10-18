@@ -165,7 +165,7 @@
                         <p>· 原图导出，系统自动打包为 zip 压缩包。</p>
                         <p>· 导出采用流式传输，导出期间请不要关闭或刷新页面，确保网络稳定。中途中断或网络波动需要重新导出，不支持断点续传。</p>
                         <p>· 同一账号同时只能有一个导出任务在进行。</p>
-                        <p>· 图片较多时下载比较久，大批量导出请预留充足时间。中断后浏览器可能残留未完成的临时下载文件，请自行清理。</p>
+                        <p>· 图片较多时下载比较久，大批量导出请预留充足时间。导出时的下载行为可能因文件大小和浏览器不同而略有差异。</p>
                     </div>
                 </div>
                 <div class="px-4 py-3 text-right sm:px-6">
@@ -286,7 +286,7 @@
                     const failed = parseInt(data.failed, 10) || 0;
                     const bytes = parseInt(data.bytes, 10) || 0;
                     if (data.aborted) {
-                        return '本次导出已中断（取消或网络断开），已完成 ' + ok + ' 张。需要重新导出。';
+                        return '本次导出已中断（取消或网络断开），已完成 ' + ok + ' 张，需要重新导出。';
                     }
                     if (failed > 0) {
                         return '本次导出已完成：' + ok + ' 张成功，' + failed + ' 张失败 —— 详见包内 _export_failures.txt';
@@ -441,8 +441,7 @@
                     Swal.fire(dialog({
                         icon: aborted ? 'info' : (failed > 0 ? 'warning' : 'success'),
                         title: aborted ? '导出已中断' : (failed > 0 ? '导出完成，有图片未成功' : '导出完成'),
-                        html: '<p>' + resultText(data) + '</p>'
-                            + (aborted ? '' : '<p style="margin-top:.5rem;font-size:.875rem;opacity:.75">文件即将开始下载。</p>'),
+                        html: '<p>' + resultText(data) + '</p>',
                         confirmButtonColor: '#3085d6',
                         confirmButtonText: '知道了',
                         showCancelButton: false,
@@ -607,14 +606,22 @@
                     // 异常/中断的收尾：abort() 丢掉尚未提交的 swap 文件（半截 zip 不会落盘）；
                     // 选的是新文件名时再 remove() 兜一次，确保磁盘上干干净净。
                     // 若覆盖的是已存在的文件，abort 已经把它还原 —— 这时 remove 等于删用户的旧数据。
-                    const discard = () => {
-                        const aborting = (writer && ! committed)
-                            ? Promise.resolve().then(() => writer.abort()).catch(() => { /* 已经结束 */ })
-                            : Promise.resolve();
-                        return aborting.then(() => {
-                            if (committed || existed || typeof handle.remove !== 'function') { return null; }
-                            return Promise.resolve(handle.remove()).catch(() => { /* 删不掉就留着 */ });
-                        }).catch(() => { /* 收尾失败不改变结论 */ });
+                    const discard = async () => {
+                        if (writer && ! committed) {
+                            try { await writer.abort(); } catch (e) { /* 已经结束 */ }
+                        }
+                        if (committed || existed || typeof handle.remove !== 'function') { return; }
+                        // abort() 返回不代表文件句柄已经释放：紧接着 remove() 常常抛错，
+                        // 于是一次失败就放弃、磁盘上留一个打不开的半截 zip（实测踩到）。
+                        // 这里退避重试几次；NotFound 说明文件本就不在了，也算清干净。
+                        for (let i = 0; i < 5; i++) {
+                            try { await handle.remove(); return; } catch (e) {
+                                if (e && e.name === 'NotFoundError') { return; } // 本来就没落盘，算清干净
+                            }
+                            await new Promise((resolve) => window.setTimeout(resolve, 120 * (i + 1)));
+                        }
+                        // 仍删不掉就直说，别让用户以为是浏览器的锅
+                        window.console && console.warn && console.warn('[export] 未能删除未完成的导出文件，请手动清理：' + (handle.name || ''));
                     };
 
                     beginProgress(count, bytes);
