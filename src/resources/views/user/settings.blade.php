@@ -151,8 +151,14 @@
                             <button type="button" class="cursor-pointer text-sm text-ink-2 ml-2" data-quick="clear">清除日期</button>
                         </div>
                         {{-- 起始/结束两行常驻显示（原来是点「自定义日期」展开的） --}}
-                        <input type="date" id="export-date-from" name="date_from" class="ls-input mt-1">
-                        <input type="date" id="export-date-to" name="date_to" class="ls-input mt-1">
+                        <div class="flex items-center gap-2 mt-1">
+                            <label for="export-date-from" class="text-sm text-ink-2 shrink-0">从</label>
+                            <input type="date" id="export-date-from" name="date_from" class="ls-input flex-1">
+                        </div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <label for="export-date-to" class="text-sm text-ink-2 shrink-0">至</label>
+                            <input type="date" id="export-date-to" name="date_to" class="ls-input flex-1">
+                        </div>
                         <p id="export-date-summary" class="mt-1 text-sm text-ink-2"></p>
                     </div>
 
