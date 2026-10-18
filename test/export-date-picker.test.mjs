@@ -75,13 +75,13 @@ console.log('\n[年月快选] 下拉箭头尺寸');
     const less = fs.readFileSync(path.join(SRC, 'resources', 'css', 'common.less'), 'utf8');
     const css = fs.readFileSync(path.join(SRC, 'public', 'css', 'common.css'), 'utf8');
     check('取消导出按钮用危险色令牌（由样式表提供，不在内联 style 里）',
-        /#export-cancel\s*\{[^}]*background-color:\s*var\(--lsky-danger\)/.test(less)
-        && /#export-cancel\{[^}]*background-color:var\(--lsky-danger\)/.test(css)
+        /#export-cancel\s*\{[^}]*background-color:\s*var\(--lsky-danger-btn\)/.test(less)
+        && /#export-cancel\{[^}]*background-color:var\(--lsky-danger-btn\)/.test(css)
         && ! /id="export-cancel"[\s\S]{0,160}?background:/.test(settings));
     // 只许换颜色：filter / opacity / transform 都会作用在整层（含 swal2 那圈 3px 阴影），
     // 暗色区域会溢到按钮轮廓之外，看起来「比按钮大一圈」。
     check('取消导出按钮有可见的 hover 反馈（只换填充色，不用 filter）',
-        /#export-cancel:hover\s*\{[^}]*background-color:\s*var\(--lsky-danger-hover\)/.test(less)
+        /#export-cancel:hover\s*\{[^}]*background-color:\s*var\(--lsky-danger-btn-hover\)/.test(less)
         && ! /#export-cancel:hover\s*\{[^}]*\bfilter\b/.test(less)
         && ! /#export-cancel:hover\{[^}]*\bfilter\b/.test(css));
     check('按钮显式清掉 swal2 的 3px 外环阴影', /#export-cancel\s*\{[^}]*box-shadow:\s*none/.test(less));

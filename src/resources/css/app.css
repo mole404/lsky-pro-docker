@@ -27,7 +27,10 @@
         --lsky-accent-hover: #1d4ed8;
         --lsky-accent-soft: #eef4ff;
         --lsky-danger: #dc2626;
-        --lsky-danger-hover: #b91c1c;
+        /* 危险按钮的底色/悬停（与 --lsky-danger 分开：那个还要当文字/图标色用，暗色下必须够亮才读得清；
+           当按钮底色就过亮，暗色下会像常驻高亮）。 */
+        --lsky-danger-btn: #dc2626;
+        --lsky-danger-btn-hover: #b91c1c;
         --lsky-danger-soft: #fef2f2;
         --lsky-shadow-card: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .05);
         --lsky-shadow-pop: 0 6px 18px rgba(16, 24, 40, .08), 0 2px 6px rgba(16, 24, 40, .04);
@@ -63,7 +66,10 @@
         --lsky-accent-hover: #60a5fa;
         --lsky-accent-soft: #16233b;
         --lsky-danger: #f87171;
-        --lsky-danger-hover: #ef4444;
+        /* 暗色的悬停方向与 accent 一致：往上提一档（红 500 → 红 400），不是压暗。
+           静止态用红 500 而不是 --lsky-danger 的红 400 —— 后者在深色卡面上像已被高亮。 */
+        --lsky-danger-btn: #ef4444;
+        --lsky-danger-btn-hover: #f87171;
         --lsky-danger-soft: #2a1618;
         --lsky-shadow-card: 0 1px 2px rgba(0, 0, 0, .35), 0 1px 3px rgba(0, 0, 0, .3);
         --lsky-shadow-pop: 0 8px 22px rgba(0, 0, 0, .45);

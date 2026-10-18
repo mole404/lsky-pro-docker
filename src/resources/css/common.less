@@ -416,8 +416,8 @@ html:root {
     // 这种危险动作 ⇒ 红底白字。必须用 id 限定：写成 .swal2-cancel 会把全站确认框的灰色取消键
     // 一起染红。hover 只换填充色/边框色，见下面那段注释。
     #export-cancel {
-        background-color: var(--lsky-danger);
-        border-color: var(--lsky-danger);
+        background-color: var(--lsky-danger-btn);
+        border-color: var(--lsky-danger-btn);
         color: #fff;
         cursor: pointer;
         /* swal2 给每个 .swal2-styled 带一条 `box-shadow: 0 0 0 3px rgba(0,0,0,0)`（3px 外环）。
@@ -427,9 +427,11 @@ html:root {
 
     /* hover 只换填充色 / 边框色，绝不用 filter / opacity / transform ——
        那些都会作用于整个渲染层（含上面那圈 3px 阴影），暗色区域会溢到按钮轮廓之外。 */
+    /* 悬停方向跟随主题惯例（见 app.css 里 accent 那一对：亮色压暗、暗色提亮）。
+       别直接套 --lsky-danger：它在暗色是红 400，当底色就等于「一直亮着」，悬停再压到红 500 看着像反了。 */
     #export-cancel:hover {
-        background-color: var(--lsky-danger-hover);
-        border-color: var(--lsky-danger-hover);
+        background-color: var(--lsky-danger-btn-hover);
+        border-color: var(--lsky-danger-btn-hover);
     }
 
     // 导出进行中会 disable 它：光标别继续显示可点，颜色也退一档表示「暂时不能用」。
