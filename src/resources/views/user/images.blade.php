@@ -75,13 +75,18 @@
             display: none;
         }
 
-        /* 空态文案（「还没有相册」/「没有匹配的相册」）要落在搜索框与「创建相册」之间那段
-           空白里正中，不是"差不多就行"：
-             上方 = 列表容器 mt-3(12) + 自身 p-3(12) + 空态块 pt-4(16)
-                    + 前一个 hidden 兄弟仍吃到的 space-y-2(8)  = 48px
-             下方 = 空态块 pb + 与按钮的 space-y-2(8)
-           所以 pb 必须补到 40px（2.5rem），否则下方只有 24px，文字整体偏下。
-           写成 ID 规则而不是换 Tailwind 类：pt-4 这类没进产物 app.css，加了也不生效。 */
+        /* 列表区只有一行内容的两个状态（加载中 / 空态）要落在「搜索框 → 创建入口」那段空白正中，
+           不是"差不多就行"。两块都是 py-4（上下各 16），但上方另有两段固定间距：
+             上方 = 列表容器 mt-3(12) + 自身 p-3(12) + pt-4(16)   = 40px
+             下方 = pb + 与创建按钮的 space-y-2(8)
+           所以要补 pb 让下方也到 40px。空态多一条：它前面那个 hidden 的加载块仍会吃到
+           space-y-2 的 8px（Tailwind 的 space-y 只排除 [hidden] 属性，不排除 .hidden 类）
+           ⇒ 空态上方是 48px，pb 要给 40（2.5rem）；加载中是列表第一个子元素，pb 给 32（2rem）。
+           写成 ID 规则而不是换 Tailwind 类：pt-4/pb-8 这些没进产物 app.css，加了也不生效。 */
+        #album-switch-loading {
+            padding-bottom: 2rem;
+        }
+
         #album-switch-empty {
             padding-bottom: 2.5rem;
         }
