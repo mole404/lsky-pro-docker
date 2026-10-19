@@ -9,7 +9,14 @@
 ---
 
 **本仓库镜像地址：`ghcr.io/mole404/lsky-pro-docker:latest`**  
-**最新版 `3.7.0`**  
+**最新版 `3.7.1`**  
+
+<details>
+<summary>📢 <b>3.7.1 修复更新 (2026-10-19)</b></summary>
+  
+### 更新内容：
+**细节优化**：优化多项细节，修复多项问题。
+</details>
 
 <details>
 <summary>📢 <b>3.7.0 重要功能更新 (2026-10-17)</b></summary>
@@ -52,14 +59,6 @@
 **电脑端图库框选**：修复边缘位置框选触发失效问题。  
 
 **架构支持**：`3.6.0`版本起**同时支持 amd64 与 arm64**，部署时自动识别系统架构。
-</details>
-
-<details>
-<summary>📢 <b>3.5.4 修复更新 (2026-10-05)</b></summary>
-  
-### 更新内容：
-规范部分文案，部分设置项增加注释，进一步优化 UI，修复排版问题，优化体验。  
-内置 POST 请求体限制和最大上传限制从 100 MB 放宽到 512 MB。
 </details>
 
 ### 更新指南：
@@ -187,6 +186,7 @@ docker run -d --name lsky-pro --restart unless-stopped \
 | `APACHE_MAX_REQUEST_WORKERS` | `5` | 并发请求上限（内存占用的主要来源） |
 | `APACHE_MAX_CONNECTIONS_PER_CHILD` | `5` | 单个子进程处理多少个请求后回收（`0` = 永不回收） |
 | `APACHE_KEEP_ALIVE` | `Off` | 只接受 `On` / `Off`；`Off` 最省内存 |
+| `PHP_MEMORY_LIMIT` | `64M` | 单次请求 PHP 最多能用的内存，一般无需提高 |
 
 如果您不知道这些参数起什么作用，请不要随意修改，否则有爆内存风险。  
 面向个人自用以上参数保持默认值即可，多用户场景下可增大。
