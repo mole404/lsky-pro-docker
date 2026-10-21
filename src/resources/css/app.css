@@ -269,3 +269,14 @@
         }
     }
 }
+
+/* ---------- 上传拖拽区：屏蔽安卓 Chrome 的原生按压高亮（tap highlight）---------- */
+/* 安卓 Chrome 会把按压高亮画到「最近的带 click 处理器的祖先元素」上，#picker-dnd 正是这个祖先
+   （整块虚线框的 onclick 负责触发 #picker），于是点内层的「选择文件」「上传全部」时，外框会连
+   同内层一起闪一层高亮。下面只在该区块内关掉原生高亮；没有动 pointer-events / cursor / display，
+   点击冒泡、拖拽上传、按钮可用性都不受影响。 */
+#picker-dnd,
+#picker-dnd #upload-container,
+#picker-dnd #upload-container * {
+    -webkit-tap-highlight-color: transparent;
+}
