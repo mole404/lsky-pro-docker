@@ -357,12 +357,12 @@ RUN set -eu; \
     attempt=0; \
     until install-php-extensions imagick bcmath pdo_mysql pdo_pgsql redis ftp; do \
         attempt=$((attempt + 1)); \
-        if [ "$attempt" -ge 3 ]; then \
+        if [ "$attempt" -ge 5 ]; then \
             echo "扩展安装连续失败 $attempt 次（多为 PECL 侧网络/网关问题），放弃"; \
             exit 1; \
         fi; \
-        echo "扩展安装失败（第 $attempt 次），15 秒后重试"; \
-        sleep 15; \
+        echo "扩展安装失败（第 $attempt 次），$((attempt * 15)) 秒后重试"; \
+        sleep $((attempt * 15)); \
     done; \
     for ext in imagick bcmath pdo_mysql pdo_pgsql redis ftp; do \
         php -m | grep -qix "$ext" || { echo "扩展缺失：$ext（install-php-extensions 静默失败）"; exit 1; }; \
