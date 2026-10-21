@@ -316,13 +316,13 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm -v "$PWD:/w" -w /w \
-            php:8.3-cli-bookworm@sha256:4687aec76c4a895b68b91bcd5e48f1ba7a3dea120f6de50bba7e1a93af5372dd \
+            php:8.3-cli-bookworm@sha256:35eafb4bd92db9f7776cb842b8498a3be418a0bd4843cda993fb38e488e1b732 \
             bash -c 'set -euo pipefail; { cat src/app/Support/StreamedZipWriter.php; tail -n +2 test/php/zip-writer.test.php; } | php /dev/stdin'
           # 并发占位表（同一账号互斥 / 全局上限 / 心跳过期自愈 / 缓存坏掉时降级）——
           # 这个类原先完全没有自动覆盖，而它管着「同账号两笔导出并行」这种用户可见行为。
           # 桩必须排在类源码之前（类里用的是 Illuminate\Support\Facades\Cache 那套门面）。
           docker run --rm -v "$PWD:/w" -w /w \
-            php:8.3-cli-bookworm@sha256:4687aec76c4a895b68b91bcd5e48f1ba7a3dea120f6de50bba7e1a93af5372dd \
+            php:8.3-cli-bookworm@sha256:35eafb4bd92db9f7776cb842b8498a3be418a0bd4843cda993fb38e488e1b732 \
             bash -c 'set -euo pipefail; { cat test/php/export-concurrency.stubs.php; tail -n +2 src/app/Support/ExportConcurrency.php; tail -n +2 test/php/export-concurrency.test.php; } | php /dev/stdin'
 
       # 说明（本次「Node 20 弃用」清扫的覆盖面）：下面 docker/* 系列与上面的 actions/checkout
