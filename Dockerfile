@@ -349,11 +349,24 @@ RUN printf '%s\n' \
 #     控制台/系统设置里「POST 数据最大限制」显示的就是它；**恒定由 upload 派生**，
 #     不提供单独调 post 的开关 —— 想要更大的表单体就抬 PHP_UPLOAD_MAX_FILESIZE）
 #   · max_execution_time 维持原来的 **600S 不动**（2026-10-05 定：不要改成 300；CLI 下 ini_get 恒为 0，只有 Web 侧吃这个值）
-RUN apt-get update && \
-    apt-get install -y gettext && \
-    apt-get clean && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/*  && \
-    a2enmod rewrite && chmod +x /usr/local/bin/install-php-extensions && \
-    install-php-extensions imagick bcmath pdo_mysql pdo_pgsql redis ftp && \
+RUN set -eu; \
+    apt-get update; \
+    apt-get install -y gettext; \
+    apt-get clean; rm -rf /var/cache/apt/* /var/lib/apt/lists/* /tmp/*; \
+    a2enmod rewrite; chmod +x /usr/local/bin/install-php-extensions; \
+    attempt=0; \
+    until install-php-extensions imagick bcmath pdo_mysql pdo_pgsql redis ftp; do \
+        attempt=$((attempt + 1)); \
+        if [ "$attempt" -ge 3 ]; then \
+            echo "扩展安装连续失败 $attempt 次（多为 PECL 侧网络/网关问题），放弃"; \
+            exit 1; \
+        fi; \
+        echo "扩展安装失败（第 $attempt 次），15 秒后重试"; \
+        sleep 15; \
+    done; \
+    for ext in imagick bcmath pdo_mysql pdo_pgsql redis ftp; do \
+        php -m | grep -qix "$ext" || { echo "扩展缺失：$ext（install-php-extensions 静默失败）"; exit 1; }; \
+    done; \
     \
     { \
     echo 'post_max_size = 68M;';\
