@@ -2,8 +2,18 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Username;
+
 class UserSettingRequest extends FormRequest
 {
+    /**
+     * 校验前先裁掉名称两端的空白（含全角空格、NBSP 等多字节空白）。
+     */
+    protected function prepareForValidation()
+    {
+        $this->merge(['name' => Username::normalize($this->input('name'))]);
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -12,7 +22,7 @@ class UserSettingRequest extends FormRequest
     public function rules()
     {
         return [
-            'name' => 'required|between:2,20',
+            'name' => ['required', 'string', 'between:1,20', 'not_regex:' . Username::BLANK_PATTERN],
             'url' => 'nullable|url',
             'password' => 'nullable|between:8,32|confirmed',
             'password_confirmation' => 'nullable|required_with:password',
@@ -33,7 +43,8 @@ class UserSettingRequest extends FormRequest
     {
         return [
             'name.required' => '名称不能为空',
-            'name.between' => '名称必须在 2-20 个字符之间',
+            'name.between' => '名称必须在 1-20 个字符之间',
+            'name.not_regex' => '名称不能为空白字符',
             'url.url' => '个人主页地址格式不正确',
             'password.between' => '密码必须为 8-32 个字符',
             'password.confirmed' => '两次输入的密码不一致',

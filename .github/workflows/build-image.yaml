@@ -316,13 +316,13 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm -v "$PWD:/w" -w /w \
-            php:8.3-cli-bookworm@sha256:4687aec76c4a895b68b91bcd5e48f1ba7a3dea120f6de50bba7e1a93af5372dd \
+            php:8.3-cli-bookworm@sha256:35eafb4bd92db9f7776cb842b8498a3be418a0bd4843cda993fb38e488e1b732 \
             bash -c 'set -euo pipefail; { cat src/app/Support/StreamedZipWriter.php; tail -n +2 test/php/zip-writer.test.php; } | php /dev/stdin'
           # 并发占位表（同一账号互斥 / 全局上限 / 心跳过期自愈 / 缓存坏掉时降级）——
           # 这个类原先完全没有自动覆盖，而它管着「同账号两笔导出并行」这种用户可见行为。
           # 桩必须排在类源码之前（类里用的是 Illuminate\Support\Facades\Cache 那套门面）。
           docker run --rm -v "$PWD:/w" -w /w \
-            php:8.3-cli-bookworm@sha256:4687aec76c4a895b68b91bcd5e48f1ba7a3dea120f6de50bba7e1a93af5372dd \
+            php:8.3-cli-bookworm@sha256:35eafb4bd92db9f7776cb842b8498a3be418a0bd4843cda993fb38e488e1b732 \
             bash -c 'set -euo pipefail; { cat test/php/export-concurrency.stubs.php; tail -n +2 src/app/Support/ExportConcurrency.php; tail -n +2 test/php/export-concurrency.test.php; } | php /dev/stdin'
 
       # 说明（本次「Node 20 弃用」清扫的覆盖面）：下面 docker/* 系列与上面的 actions/checkout
@@ -593,19 +593,49 @@ jobs:
             echo "::error::PHP memory_limit 不是 64M（读到：$(cat /tmp/php-memlimit.txt 2>/dev/null)）—— 检查 zz-lsky-hardening.ini 与 entrypoint 的 PHP_MEMORY_LIMIT 渲染"
             exit 1
           fi
-          # ② post_max_size 与 upload_max_filesize 必须都是 512M（2026-10-05 指定）
-          docker exec lsky-smoke sh -c 'php -r "echo ini_get(\"post_max_size\");"' > /tmp/php-postmax.txt 2>&1 || true
-          echo "容器里 post_max_size 生效值：$(cat /tmp/php-postmax.txt 2>/dev/null)"
-          if [ "$(cat /tmp/php-postmax.txt 2>/dev/null)" != "512M" ]; then
-            echo "::error::PHP post_max_size 不是 512M（读到：$(cat /tmp/php-postmax.txt 2>/dev/null)）—— 检查 docker-php-upload.ini"
-            exit 1
-          fi
+          # ② 上传上限：构建期兜底 upload_max_filesize=64M、post_max_size=68M（= upload + 4M）。
+          #   运行期由 entrypoint 用 PHP_UPLOAD_MAX_FILESIZE（默认 64M）渲染到 zz-lsky-upload.ini，
+          #   post 恒为 upload + 4M、没有单独调 post 的开关 —— 所以这里既要验默认值，
+          #   也要另起一个带 env 的容器验派生逻辑（见 ③）。
           docker exec lsky-smoke sh -c 'php -r "echo ini_get(\"upload_max_filesize\");"' > /tmp/php-uploadmax.txt 2>&1 || true
           echo "容器里 upload_max_filesize 生效值：$(cat /tmp/php-uploadmax.txt 2>/dev/null)"
-          if [ "$(cat /tmp/php-uploadmax.txt 2>/dev/null)" != "512M" ]; then
-            echo "::error::PHP upload_max_filesize 不是 512M（读到：$(cat /tmp/php-uploadmax.txt 2>/dev/null)）—— 检查 docker-php-upload.ini"
+          if [ "$(cat /tmp/php-uploadmax.txt 2>/dev/null)" != "64M" ]; then
+            echo "::error::PHP upload_max_filesize 不是 64M（读到：$(cat /tmp/php-uploadmax.txt 2>/dev/null)）—— 检查 docker-php-upload.ini 与 entrypoint 的 PHP_UPLOAD_MAX_FILESIZE 渲染"
             exit 1
           fi
+          docker exec lsky-smoke sh -c 'php -r "echo ini_get(\"post_max_size\");"' > /tmp/php-postmax.txt 2>&1 || true
+          echo "容器里 post_max_size 生效值：$(cat /tmp/php-postmax.txt 2>/dev/null)"
+          if [ "$(cat /tmp/php-postmax.txt 2>/dev/null)" != "68M" ]; then
+            echo "::error::PHP post_max_size 不是 68M（读到：$(cat /tmp/php-postmax.txt 2>/dev/null)）—— 它必须恒为 upload_max_filesize + 4M，检查 docker-php-upload.ini"
+            exit 1
+          fi
+
+          # ③ 派生逻辑自证（唯一能真正验证「post 恒为 upload + 4M」的检查）：
+          #   构建期那两份 ini 只是兜底值，entrypoint 的渲染只有在真容器里带 env 才走得到。
+          #   给 PHP_UPLOAD_MAX_FILESIZE=100M → 期望 upload=100M、post=100M + 4M = 104M。
+          #   仍按本仓规矩「先落文件再比较」，不用 `… | grep -q`（pipefail 下命中即退会被误判成失败）。
+          docker rm -f lsky-smoke-upload > /dev/null 2>&1 || true
+          docker run -d --name lsky-smoke-upload -p 18090:8089 -e WEB_PORT=8089 \
+            -e PHP_UPLOAD_MAX_FILESIZE=100M "$IMAGE_REF"
+          CODE_UP=000
+          for i in $(seq 1 30); do
+            CODE_UP=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18090/install || true)
+            [ "$CODE_UP" = "200" ] && break
+            sleep 2
+          done
+          echo "覆盖容器（PHP_UPLOAD_MAX_FILESIZE=100M）安装页 HTTP 状态：$CODE_UP"
+          docker exec lsky-smoke-upload sh -c 'php -r "echo ini_get(\"upload_max_filesize\");"' > /tmp/php-upload-override.txt 2>&1 || true
+          docker exec lsky-smoke-upload sh -c 'php -r "echo ini_get(\"post_max_size\");"' > /tmp/php-postmax-override.txt 2>&1 || true
+          echo "覆盖容器里 upload_max_filesize=$(cat /tmp/php-upload-override.txt 2>/dev/null) post_max_size=$(cat /tmp/php-postmax-override.txt 2>/dev/null)"
+          if [ "$(cat /tmp/php-upload-override.txt 2>/dev/null)" != "100M" ] \
+             || [ "$(cat /tmp/php-postmax-override.txt 2>/dev/null)" != "104M" ]; then
+            docker logs lsky-smoke-upload || true
+            echo "::error::PHP_UPLOAD_MAX_FILESIZE=100M 时读到 upload=$(cat /tmp/php-upload-override.txt 2>/dev/null) post=$(cat /tmp/php-postmax-override.txt 2>/dev/null)（期望 100M / 104M）—— 检查 entrypoint 渲染的 zz-lsky-upload.ini 与「post = upload + 4M」派生"
+            docker rm -f lsky-smoke-upload || true
+            exit 1
+          fi
+          echo "上传上限派生自证通过：PHP_UPLOAD_MAX_FILESIZE=100M → upload_max_filesize=100M、post_max_size=104M（恒 +4M）"
+          docker rm -f lsky-smoke-upload
           docker exec lsky-smoke cat /etc/apache2/conf-enabled/mpm.conf > /tmp/smoke-mpm.txt 2>&1 || true
           echo "== 容器里渲染出的 mpm.conf =="
           cat /tmp/smoke-mpm.txt 2>/dev/null || true

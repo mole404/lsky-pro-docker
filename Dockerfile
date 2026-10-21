@@ -59,11 +59,11 @@ ARG PHP_EXT_INSTALLER_VERSION=2.12.0
 # 带 `@digest` 时 **digest 优先、tag 只作装饰**，只换 PHP_VERSION 不换 digest 会静默构建出旧版本。
 # CI 已自动化：build-image.yaml 的 Resolve 步骤会按请求的 PHP 版本解析出对应 digest 并覆盖这两个 ARG
 # （也可在 workflow_dispatch 里手工传 php_cli_digest / php_apache_digest）。上面这套手工方法仅用于本地/离线场景。
-# 实测（2026-09-30，Docker Hub Registry API 原始响应头，见提交说明/报告）：
-#   php:8.3-cli-bookworm    -> sha256:4687aec76c4a895b68b91bcd5e48f1ba7a3dea120f6de50bba7e1a93af5372dd
-#   php:8.3-apache-bookworm -> sha256:06df07e2e1d72581dde4fd97bc98d2d0b78686fc13d6a041c520da9a6ce73055
-ARG PHP_CLI_IMAGE_DIGEST=sha256:4687aec76c4a895b68b91bcd5e48f1ba7a3dea120f6de50bba7e1a93af5372dd
-ARG PHP_APACHE_IMAGE_DIGEST=sha256:06df07e2e1d72581dde4fd97bc98d2d0b78686fc13d6a041c520da9a6ce73055
+# 实测（2026-10-21 复核，PHP 8.3.36；Docker Hub Registry API 原始响应头）：
+#   php:8.3-cli-bookworm    -> sha256:35eafb4bd92db9f7776cb842b8498a3be418a0bd4843cda993fb38e488e1b732
+#   php:8.3-apache-bookworm -> sha256:f4d54b83d7d3a18013ae40b08bd0af4207ff684ad60cad60837e024b08b9ef9b
+ARG PHP_CLI_IMAGE_DIGEST=sha256:35eafb4bd92db9f7776cb842b8498a3be418a0bd4843cda993fb38e488e1b732
+ARG PHP_APACHE_IMAGE_DIGEST=sha256:f4d54b83d7d3a18013ae40b08bd0af4207ff684ad60cad60837e024b08b9ef9b
 
 FROM php:${PHP_VERSION}-cli-${DEBIAN_RELEASE}@${PHP_CLI_IMAGE_DIGEST} AS build
 
@@ -343,19 +343,34 @@ RUN printf '%s\n' \
 #   带 mtime 校验的请求就会重新编译；关掉它换镜像后要重启容器才生效。
 # 上传/表单上限（2026-10-05 调整）—— ⚠ 这段注释必须写在 RUN 之前：
 #   `RUN ... && \` 续行链里插 `#` 不是注释、是命令的一部分 → `syntax error: unexpected end of file`（本仓踩过，见教训 34）
-#   · post_max_size 100M → **512M**（它是「整个请求体」的上限，控制台/系统设置里
-#     「POST 数据最大限制」显示的就是它）
-#   · upload_max_filesize 100M → **512M**（2026-10-05 追加：单个上传文件的上限也抬到 512M；它必须 ≤ post_max_size）
+#   · upload_max_filesize 构建期兜底 **64M**（单个上传文件的上限；运行期可用环境变量
+#     PHP_UPLOAD_MAX_FILESIZE 覆盖，默认值就是 64M）
+#   · post_max_size 构建期兜底 **68M** = upload_max_filesize + 4M（它是「整个请求体」的上限，
+#     控制台/系统设置里「POST 数据最大限制」显示的就是它；**恒定由 upload 派生**，
+#     不提供单独调 post 的开关 —— 想要更大的表单体就抬 PHP_UPLOAD_MAX_FILESIZE）
 #   · max_execution_time 维持原来的 **600S 不动**（2026-10-05 定：不要改成 300；CLI 下 ini_get 恒为 0，只有 Web 侧吃这个值）
-RUN apt-get update && \
-    apt-get install -y gettext && \
-    apt-get clean && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/*  && \
-    a2enmod rewrite && chmod +x /usr/local/bin/install-php-extensions && \
-    install-php-extensions imagick bcmath pdo_mysql pdo_pgsql redis ftp && \
+RUN set -eu; \
+    apt-get update; \
+    apt-get install -y gettext; \
+    apt-get clean; rm -rf /var/cache/apt/* /var/lib/apt/lists/* /tmp/*; \
+    a2enmod rewrite; chmod +x /usr/local/bin/install-php-extensions; \
+    attempt=0; \
+    until install-php-extensions imagick bcmath pdo_mysql pdo_pgsql redis ftp; do \
+        attempt=$((attempt + 1)); \
+        if [ "$attempt" -ge 5 ]; then \
+            echo "扩展安装连续失败 $attempt 次（多为 PECL 侧网络/网关问题），放弃"; \
+            exit 1; \
+        fi; \
+        echo "扩展安装失败（第 $attempt 次），$((attempt * 15)) 秒后重试"; \
+        sleep $((attempt * 15)); \
+    done; \
+    for ext in imagick bcmath pdo_mysql pdo_pgsql redis ftp; do \
+        php -m | grep -qix "$ext" || { echo "扩展缺失：$ext（install-php-extensions 静默失败）"; exit 1; }; \
+    done; \
     \
     { \
-    echo 'post_max_size = 512M;';\
-    echo 'upload_max_filesize = 512M;';\
+    echo 'post_max_size = 68M;';\
+    echo 'upload_max_filesize = 64M;';\
     echo 'max_execution_time = 600S;';\
     } > /usr/local/etc/php/conf.d/docker-php-upload.ini; \
     \
@@ -392,12 +407,16 @@ RUN apt-get update && \
 #   默认 64M 而不是写死：entrypoint.sh 运行期会把 PHP_MEMORY_LIMIT（默认 64M）渲染进这一项，
 #   在 compose 里改一个 env 就能回 128M/256M、不用重建镜像（脏值只忽略该项并警告）。
 #   其余 ini：opcache-recommended.ini 的 memory_consumption 本次从 128 收到 64（依据见上面 opcache 段）；
-#   docker-php-upload.ini 的 post_max_size 本次 100M → **512M**；max_execution_time 维持 600S 不动
-#   （upload_max_filesize 同步 100M → 512M：单文件上限由它决定 —— 见上面那段注释）。
+#   docker-php-upload.ini 的构建期兜底值是 upload_max_filesize=64M、post_max_size=68M（= upload + 4M），
+#   max_execution_time 维持 600S 不动。运行期 entrypoint 把 PHP_UPLOAD_MAX_FILESIZE（默认 64M）
+#   渲染进 /usr/local/etc/php/conf.d/zz-lsky-upload.ini（zz- 排最后，覆盖镜像里这份兜底），
+#   post_max_size 由它派生（恒 +4M），**不提供单独调 post 的 env**。
 #   构建期自证：用 php -r **真读回 ini_get()** 断言已是目标值 —— 不是 grep 配置文件里有没有那几行
 #   （那只证明"文件写了"，证明不了"PHP 真的读到了"）。expose_php/display_errors 判定用
-#   filter_var(FILTER_VALIDATE_BOOL)，兼容 Off / false / 0 / 空串 几种写法；memory_limit 直接比对
-#   字符串 "64M"。CLI 与 Apache 模块用的是同一份 /usr/local/etc/php/conf.d。
+#   filter_var(FILTER_VALIDATE_BOOL)，兼容 Off / false / 0 / 空串 几种写法；memory_limit / upload /
+#   post 直接比对字符串 "64M"/"68M"，另外把两者换成字节再相减，断言差值恰为 4194304（4M）——
+#   字符串对得上但派生关系断了（比如有人手改成 64M/70M）照样构建失败。
+#   CLI 与 Apache 模块用的是同一份 /usr/local/etc/php/conf.d。
 #   ⚠ 只有 max_execution_time 没法用 ini_get 验：PHP 对 CLI 强制把它的读回值变成 "0"，
 #     所以那一条只能核配置文件原文，Web 侧生效值交给 CI 起真容器再读。
 # ---------------------------------------------------------------------------
@@ -410,8 +429,9 @@ RUN printf '%s\n' \
     && test -f /usr/local/etc/php/conf.d/zz-lsky-hardening.ini \
     && php -r 'foreach (["expose_php", "display_errors"] as $k) { if (filter_var(ini_get($k), FILTER_VALIDATE_BOOL)) { fwrite(STDERR, "ini 加固自证失败：".$k." 仍开着 (".var_export(ini_get($k), true).")".PHP_EOL); exit(1); } echo $k."=".var_export(ini_get($k), true)." 已关闭".PHP_EOL; }' \
     && php -r '$m = ini_get("memory_limit"); if ($m !== "64M") { fwrite(STDERR, "memory_limit 自证失败：读回 ".var_export($m, true)."，期望 64M（zz-lsky-hardening.ini 是否被别的 ini 覆盖？）".PHP_EOL); exit(1); } echo "memory_limit=".$m."（entrypoint 可用 PHP_MEMORY_LIMIT 运行期覆盖）".PHP_EOL;' \
-    && php -r '$p = ini_get("post_max_size"); if ($p !== "512M") { fwrite(STDERR, "post_max_size 自证失败：读回 ".var_export($p, true)."，期望 512M（docker-php-upload.ini 是否被别的 ini 覆盖？）".PHP_EOL); exit(1); } echo "post_max_size=".$p."（整个请求体上限）".PHP_EOL;' \
-    && php -r '$u = ini_get("upload_max_filesize"); if ($u !== "512M") { fwrite(STDERR, "upload_max_filesize 自证失败：读回 ".var_export($u, true)."，期望 512M".PHP_EOL); exit(1); } echo "upload_max_filesize=".$u."（单个文件上限，必须 ≤ post_max_size）".PHP_EOL;' \
+    && php -r '$u = ini_get("upload_max_filesize"); if ($u !== "64M") { fwrite(STDERR, "upload_max_filesize 自证失败：读回 ".var_export($u, true)."，期望 64M（docker-php-upload.ini 是否被别的 ini 覆盖？）".PHP_EOL); exit(1); } echo "upload_max_filesize=".$u."（单个文件上限，运行期可用 PHP_UPLOAD_MAX_FILESIZE 覆盖）".PHP_EOL;' \
+    && php -r '$p = ini_get("post_max_size"); if ($p !== "68M") { fwrite(STDERR, "post_max_size 自证失败：读回 ".var_export($p, true)."，期望 68M = upload_max_filesize(64M) + 4M（docker-php-upload.ini 是否被别的 ini 覆盖？）".PHP_EOL); exit(1); } echo "post_max_size=".$p."（整个请求体上限，恒为 upload + 4M）".PHP_EOL;' \
+    && php -r '$bytes = function ($v) { $v = trim($v); $unit = strtoupper(substr($v, -1)); $mul = ["K" => 1024, "M" => 1048576, "G" => 1073741824]; return isset($mul[$unit]) ? (int) $v * $mul[$unit] : (int) $v; }; $u = $bytes(ini_get("upload_max_filesize")); $p = $bytes(ini_get("post_max_size")); if ($p - $u !== 4194304) { fwrite(STDERR, "上传上限派生关系自证失败：post_max_size(".ini_get("post_max_size").") 减 upload_max_filesize(".ini_get("upload_max_filesize").") = ".($p - $u)." 字节，期望 4194304 字节（4M）—— post 必须恒为 upload + 4M".PHP_EOL); exit(1); } echo "派生关系成立：post_max_size - upload_max_filesize = ".($p - $u)." 字节（4M）".PHP_EOL;' \
     && grep -qx 'max_execution_time = 600S;' /usr/local/etc/php/conf.d/docker-php-upload.ini \
     && echo 'max_execution_time=600S（只核配置文件：CLI 读回恒为 0，Web 侧生效值由 CI 起真容器再验）'
 

@@ -299,10 +299,12 @@ fi
 # 默认 64M 的理由：面向低内存环境（1 vCPU / 965MB），内存是瓶颈；Lsky 单请求实际远用不到 64M，
 # 需要做大图处理/批量时用 PHP_MEMORY_LIMIT 临时抬高即可。
 # 脏值处理原则同上：只忽略这一项并警告，绝不让容器启动失败。
-# ⚠ 注意：post_max_size 与 upload_max_filesize 都已调到 **512M**（见 docker-php-upload.ini）
-#   —— 前者是「整个请求体」上限（控制台里显示的那条），后者才是「单个上传文件」的上限。
+# ⚠ 关于上传上限：`upload_max_filesize` 是「单个上传文件」的上限（控制台里显示的那条），
+#   `post_max_size` 是「整个请求体」的上限，两者都由下面的「PHP 上传上限」段在**运行期**接管：
+#   默认渲染成 64M / 68M（后者固定 = 前者 + 4M），要放大只设 PHP_UPLOAD_MAX_FILESIZE（如 100M）。
+#   镜像里 docker-php-upload.ini 的构建期值会被 zz-lsky-upload.ini 覆盖。
 #   但主机 nginx 的 client_max_body_size 仍是 100m ⇒ 真要传 >100MB 的图，nginx 侧也得放宽（属另一个服务，未经允许不要动）。
-#   处理大图若撞到 64M 内存上限，用 PHP_MEMORY_LIMIT 抬高（或调低上面那两个上传上限）。
+#   处理大图若撞到 64M 内存上限，用 PHP_MEMORY_LIMIT 抬高（与上传上限互相独立）。
 PHP_DEF_MEMORY_LIMIT=64M
 PHP_HARDENING_INI=/usr/local/etc/php/conf.d/zz-lsky-hardening.ini
 
@@ -353,6 +355,105 @@ if [ "$PHP_INI_WRITTEN" = "yes" ]; then
 else
     echo "[lsky] PHP $PHP_MEMORY_SUMMARY 未写入（原因见上一行警告），实际沿用镜像里已有的值"
 fi
+
+# ---------------------------------------------------------------- PHP 上传上限（可运行时覆盖，默认 64M / 68M）
+# 与上面 memory_limit 完全同一套路，只是换了 ini 文件与变量：
+#   upload_max_filesize = PHP_UPLOAD_MAX_FILESIZE（形状 <数字>[KMG]，默认 64M）
+#   post_max_size       = upload_max_filesize + 4M（固定 +4096KB，**没有**环境变量能单独调它）
+# 为什么不复用 zz-lsky-hardening.ini：那个文件管的是 display_errors / expose_php 这类硬化项，
+#   上传上限是另一件事，单独一个文件便于运维一眼看清（都在 conf.d 里，生效顺序互不影响）。
+# 为什么 post 要留 4M：multipart 请求体除了文件本身还有边界串和其它表单字段，
+#   post_max_size 与 upload_max_filesize 相等时，一个「刚好等于上限」的文件会被判成超过 post_max_size。
+# 为什么写 zz- 前缀：conf.d 里的 *.ini 按文件名字典序加载，zz- 排最后 → 覆盖镜像自带的
+#   docker-php-upload.ini（构建期固定值），不用重建镜像就能改。
+# 换算一律先归到 KB 再算（K=原值 / M=×1024 / G=×1024×1024）；输出时能被 1024 整除写 <n>M，否则写 <n>K。
+# 脏值处理原则同上：只忽略这一项并警告，绝不让容器启动失败。
+PHP_DEF_UPLOAD_MAX=64M
+# 默认值的 KB 表示由上面那一行**解析得出**，不另写一个 65536 —— 两个地方各写一份就是「事实的副本」，
+# 改了字符串忘了改数字，实际默认值和日志里印的默认值会分家（本仓踩过同类问题）。
+case "$PHP_DEF_UPLOAD_MAX" in
+    *K) PHP_DEF_UPLOAD_KB=$(( 10#${PHP_DEF_UPLOAD_MAX%K} )) ;;
+    *M) PHP_DEF_UPLOAD_KB=$(( 10#${PHP_DEF_UPLOAD_MAX%M} * 1024 )) ;;
+    *G) PHP_DEF_UPLOAD_KB=$(( 10#${PHP_DEF_UPLOAD_MAX%G} * 1024 * 1024 )) ;;
+    *)  PHP_DEF_UPLOAD_KB=65536 ;;   # 上面三行是开发期常量，走不到这里；留着只为不让脚本因为笔误整段失效
+esac
+PHP_UPLOAD_MAX_KB=16777216          # 上限守卫：16G（换算成 KB 后必须 >0 且 ≤ 此值）
+PHP_UPLOAD_STEP_KB=4096             # post = upload + 4M，固定，不接受环境变量
+PHP_UPLOAD_INI=/usr/local/etc/php/conf.d/zz-lsky-upload.ini
+
+# 合法形状：<数字>[KMG]（大小写不敏感）；换算成 KB 后必须落在 1KB-16G。
+# 脏值（空串 / 0 / abc / 负数 / 越界）一律警告并回落默认值 64M，返回值始终是「一个可用的 KB 数」。
+php_upload_kb() { # $1=变量名 $2=值 → stdout=KB
+    local digits unit num kb
+    if [[ "$2" =~ ^([0-9]+)([KMGkmg])$ ]]; then
+        digits="${BASH_REMATCH[1]}"
+        unit=$(printf '%s' "${BASH_REMATCH[2]}" | tr '[:lower:]' '[:upper:]')
+        # 位数先挡一道：上限 16G 用不到 11 位十进制；超长数字交给 $(( )) 会溢出成一个「假的合法值」
+        if [ "${#digits}" -gt 10 ]; then
+            php_warn "$1=\"$2\" 数字过长（超过 10 位），已忽略该项并沿用默认值 $PHP_DEF_UPLOAD_MAX"
+            printf '%s' "$PHP_DEF_UPLOAD_KB"
+            return 0
+        fi
+        num=$((10#$digits))
+        case "$unit" in
+            K) kb=$num ;;
+            M) kb=$((num * 1024)) ;;
+            G) kb=$((num * 1024 * 1024)) ;;
+        esac
+        if [ "$kb" -gt 0 ] && [ "$kb" -le "$PHP_UPLOAD_MAX_KB" ]; then
+            printf '%s' "$kb"
+            return 0
+        fi
+        php_warn "$1=\"$2\" 换算为 ${kb}KB，超出 1KB-16G(16777216KB) 范围，已忽略该项并沿用默认值 $PHP_DEF_UPLOAD_MAX"
+    else
+        php_warn "$1=\"$2\" 不是 <数字>[KMG] 形状（如 64M / 100M / 1G），已忽略该项并沿用默认值 $PHP_DEF_UPLOAD_MAX"
+    fi
+    printf '%s' "$PHP_DEF_UPLOAD_KB"
+}
+
+# KB → ini 写法：能被 1024 整除写 <n>M，否则写 <n>K（注意 ini 的单位字母必须大写）
+php_ini_size() { # $1=KB
+    if [ $(($1 % 1024)) -eq 0 ]; then
+        printf '%sM' $(($1 / 1024))
+    else
+        printf '%sK' "$1"
+    fi
+}
+
+# 整个文件就两行，直接覆盖（幂等：重复启动结果一致，不会越写越多行）。
+# 目标被目录占住时 `mv 文件 目录` 会静默假成功还返回 0 —— 先挡掉（与 php_ini_render 同一处理）。
+php_upload_ini_render() { # 用 $PHP_UPLOAD_MAX_FILESIZE_VAL / $PHP_POST_MAX_SIZE_VAL
+    local tmp
+    if [ -d "$PHP_UPLOAD_INI" ]; then
+        php_warn "$PHP_UPLOAD_INI 已存在且是目录（预期是文件），放弃写入"
+        return 1
+    fi
+    tmp=$(mktemp) || return 1
+    {
+        printf 'upload_max_filesize = %s;\n' "$PHP_UPLOAD_MAX_FILESIZE_VAL"
+        printf 'post_max_size = %s;\n' "$PHP_POST_MAX_SIZE_VAL"
+    } > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
+    mv "$tmp" "$PHP_UPLOAD_INI" 2>/dev/null || { rm -f "$tmp"; return 1; }
+    return 0
+}
+
+php_upload_apply() {
+    local kb post_kb
+    # 注意用 ${VAR-DEF}（不是 :-）：变量**未设**才静默取默认值；显式设成空串是配置错误，交给
+    # php_upload_kb 打警告并兜底（日志里能看出是"写了空值"而不是"没写"）。
+    kb=$(php_upload_kb PHP_UPLOAD_MAX_FILESIZE "${PHP_UPLOAD_MAX_FILESIZE-$PHP_DEF_UPLOAD_MAX}")
+    post_kb=$((kb + PHP_UPLOAD_STEP_KB))
+    PHP_UPLOAD_MAX_FILESIZE_VAL=$(php_ini_size "$kb")
+    PHP_POST_MAX_SIZE_VAL=$(php_ini_size "$post_kb")
+    PHP_UPLOAD_SUMMARY="upload_max_filesize=$PHP_UPLOAD_MAX_FILESIZE_VAL, post_max_size=$PHP_POST_MAX_SIZE_VAL（post = upload + 4M 固定；PHP_UPLOAD_MAX_FILESIZE 可覆盖，默认 $PHP_DEF_UPLOAD_MAX）"
+    if php_upload_ini_render; then
+        echo "[lsky] PHP $PHP_UPLOAD_SUMMARY 已写入 $PHP_UPLOAD_INI"
+    else
+        php_warn "渲染 $PHP_UPLOAD_INI 失败，沿用镜像里已有的上传上限"
+        echo "[lsky] PHP $PHP_UPLOAD_SUMMARY 未写入（原因见上一行警告），沿用镜像默认"
+    fi
+}
+php_upload_apply
 
 IMAGE_MARKER=/var/www/lsky/.code-revision
 VOLUME_MARKER=/var/www/html/.code-revision

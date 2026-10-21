@@ -275,10 +275,10 @@ console.log('\n[工具栏] 断点 lg→xl + 永不折行');
         nowrap === 7 && /class="whitespace-nowrap text-sm[^"]*"[^>]*>[\s\S]{0,60}?相册</.test(imgs));
 }
 
-console.log('\n[镜像上限] post_max_size 512M（upload_max_filesize 与 max_execution_time 都不动）');
+console.log('\n[镜像上限] 构建期兜底 upload_max_filesize 64M / post_max_size 68M（post 恒为 upload+4M；max_execution_time 不动）');
 {
-    check('Dockerfile：post_max_size 与 upload_max_filesize 都是 512M（都抬到 512M；前者是请求体、后者是单文件）',
-        dockerfile.includes("echo 'post_max_size = 512M;'") && dockerfile.includes("echo 'upload_max_filesize = 512M;'"));
+    check('Dockerfile：构建期兜底 64M，post 恒为 upload+4M（upload=64M、post=68M；前者单文件、后者请求体）',
+        dockerfile.includes("echo 'upload_max_filesize = 64M;'") && dockerfile.includes("echo 'post_max_size = 68M;'"));
     check('Dockerfile：max_execution_time 维持 600S（2026-10-05 拍板不动，别写成 300）',
         dockerfile.includes("echo 'max_execution_time = 600S;'") && ! dockerfile.includes("echo 'max_execution_time = 300"));
     check('构建期自证：真读回 post_max_size（不是只 grep 文件）',

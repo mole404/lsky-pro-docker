@@ -6,6 +6,7 @@ use App\Enums\ConfigKey;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
+use App\Support\Username;
 use App\Utils;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
@@ -34,11 +35,16 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request)
     {
+        // 校验前先裁掉名称两端的空白（含全角空格、NBSP 等多字节空白）。
+        $request->merge(['name' => Username::normalize($request->input('name'))]);
+
         $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'between:1,20', 'not_regex:' . Username::BLANK_PATTERN],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'between:8,32', 'confirmed'],
         ], [
+            'name.between' => '名称必须在 1-20 个字符之间',
+            'name.not_regex' => '名称不能为空白字符',
             'password.between' => '密码必须为 8-32 个字符',
             'password.confirmed' => '两次输入的密码不一致',
         ]);
