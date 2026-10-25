@@ -537,23 +537,38 @@
                  标签按用户隔离，列表来自 GET user/tags，由 JS（loadTags → renderTagFilter）
                  渲染进 #tag-filter-list；勾选任意一项立刻 resetImages({page:1, tags:[...]})。
                  多选项沿用本页约定 min-h-[44px]，手机上点得中。--}}
-            <x-dropdown direction="left" labelledby="tag-filter">
+            <x-dropdown direction="left" labelledby="tag-filter" panel-class="ls-filter-panel">
                 <x-slot name="trigger">
                     {{-- 图标与文字改成 flex 居中对齐：原来纯 inline 时图标盒 14px、文字盒 16px 靠基线
                          对齐，实测图标中心比文字中心高 0.3px、底部高 1.6px（看着往上飘）。
                          py 由 2 收到 1.5 是补偿 flex 带来的高度增量，保证按钮总高与原来一致
                          （否则会顶动 sticky 吸顶工具栏那一行）。--}}
                     <a id="tag-filter" class="inline-flex items-center gap-1.5 text-sm py-1.5 px-3 hover:bg-surface-3 rounded text-ink" href="javascript:void(0)">
-                        <span>标签</span>
+                        <span>筛选</span>
                         {{-- 实测：图标墨迹中心比文字高 0.5px（文字 90.0 / 图标 89.5，按像素量的），
                              用 relative+top 精确压下去 0.5px。--}}
-                        <i class="fas fa-tags text-brand relative top-[0.5px]"></i>
+                        {{-- 图标从标签换成漏斗（fa-filter）：这个下拉现在是「存储策略 + 标签」两组筛选 --}}
+                        <i class="fas fa-filter text-brand relative top-[0.5px]"></i>
                     </a>
                 </x-slot>
 
                 <x-slot name="content">
+                    {{-- fork：面板现在分两段（存储策略 + 标签）。中间 #filter-scroll 是**唯一**滚动区，
+                         高度在打开时按视口算（见 fitFilterPanel）—— 固定 50vh 在横屏/小屏上会溢出屏幕，
+                         再被 .ls-menu 的 overflow-hidden 裁掉，下面几项既看不见也点不到。
+                         底部「清除筛选」「显示图片标签」固定在面板底、不参与滚动。 --}}
                     <div id="tag-filter-menu">
-                        <div id="tag-filter-list" class="max-h-[50vh] overflow-y-auto"></div>
+                        <div id="filter-scroll" class="overflow-y-auto overscroll-contain">
+                            {{-- 存储策略（单选）：只在图片里真出现过策略时才显示这一段 --}}
+                            <div id="strategy-filter-section" class="hidden border-b border-line">
+                                <p class="px-3.5 pt-2 text-[12px] text-ink-3">存储策略</p>
+                                <div id="strategy-filter-list"></div>
+                            </div>
+                            <div id="tag-filter-section">
+                                <p class="px-3.5 pt-2 text-[12px] text-ink-3">标签</p>
+                                <div id="tag-filter-list"></div>
+                            </div>
+                        </div>
                         <a id="tag-filter-clear" class="ls-menu-item hidden text-brand" href="javascript:void(0)" @click="open = false">清除筛选</a>
                         {{-- 卡片角标开关：控制图库里图片上的标签显不显示，状态记在本地（默认显示） --}}
                         <a id="tag-badge-toggle" class="ls-menu-item flex items-center justify-between gap-3 border-t border-line text-ink-2" href="javascript:void(0)" @click="open = false">
@@ -1019,6 +1034,10 @@
              * -------------------------------------------------- */
             let allTags = [];
             let selectedTagIds = [];   // 顶部筛选选中的标签 id（多选，后端是 AND 语义）
+            let allStrategies = [];    // 存储策略清单（只含「图片里实际出现过」的，带当前上下文张数）
+            let strategyNames = {};    // id => 名字，切换上下文后清单里可能暂时没有已选中的那项
+            let selectedStrategyId = null;   // 存储策略是**单选**；null = 不按策略筛（显示全部）
+            let strategiesLoaded = false;    // 懒加载：第一次打开面板才去取清单
 
             // 标签名来自用户输入，塞进 innerHTML 之前一律先转义
             const escapeHtml = (value) => String(value === null || value === undefined ? '' : value)
@@ -2107,6 +2126,10 @@
                 resetGuardUntil = Date.now() + 800;
                 try { window.__lskyResetGuardUntil = resetGuardUntil; } catch (e) {}
                 imagesInfinite.refresh(params);
+                // 上下文变了 ⇒ 面板里的「N 张」也要跟着变（没打开过面板就不发这个请求）
+                if (strategiesLoaded) {
+                    loadStrategies();
+                }
             }
 
             const getAlbums = (options, callback) => {
@@ -2317,6 +2340,72 @@
 
             // 顶部「标签」下拉的内容由这里渲染：点一下即筛选（多选 AND），不等下拉收起。
             // 多选项沿用本页 44px 点击区约定（min-h-[44px]），手机上才点得中。
+            // 「有筛选在生效」的视觉态：浅品牌底胶囊（按钮上刻意不显示数量）
+            const updateFilterButton = () => {
+                const on = selectedStrategyId !== null || selectedTagIds.length > 0;
+                $('#tag-filter').toggleClass('bg-brand-soft text-brand', on).toggleClass('text-ink', ! on);
+                $('#tag-filter-clear').toggleClass('hidden', ! on);
+            };
+
+            // 存储策略清单（单选）：名字允许换行，再长也完整显示，不截断
+            const renderStrategyFilter = () => {
+                let $list = $('#strategy-filter-list');
+                if (! $list.length) {
+                    return;
+                }
+                if (! allStrategies.length && selectedStrategyId === null) {
+                    $('#strategy-filter-section').addClass('hidden');
+                    $list.html('');
+                    return;
+                }
+                $('#strategy-filter-section').removeClass('hidden');
+
+                let html = '';
+                for (const strategy of allStrategies) {
+                    let on = selectedStrategyId === strategy.id;
+                    html += '<a href="javascript:void(0)" data-strategy-id="' + strategy.id + '"'
+                        + ' class="strategy-filter-item flex min-h-[44px] items-center gap-2 px-3.5 py-2 text-[13.5px] cursor-pointer '
+                        + (on ? 'text-brand font-medium' : 'text-ink-2')
+                        + ' hover:bg-surface-2 hover:text-ink" style="align-items: flex-start">'
+                        + '<i class="fas ' + (on ? 'fa-dot-circle text-brand' : 'fa-circle text-ink-3') + ' w-3.5 shrink-0 text-center" style="margin-top: 2px"></i>'
+                        + '<span class="min-w-0 flex-1 break-words">' + escapeHtml(strategy.name) + '</span>'
+                        + '<span class="shrink-0 text-[12px] text-ink-3">' + strategy.total + ' 张</span>'
+                        + '</a>';
+                }
+                $list.html(html);
+            };
+
+            // 面板高度：打开时按视口算一次。固定 50vh 在横屏/小屏上会超出屏幕，
+            // 再被 .ls-menu 的 overflow-hidden 裁掉 —— 表现为下面几项直接消失、还滚不动。
+            const fitFilterPanel = () => {
+                const $scroll = $('#filter-scroll');
+                if (! $scroll.length) {
+                    return;
+                }
+                const $panel = $scroll.closest('.ls-menu');
+                if (! $panel.length) {
+                    return;
+                }
+                if (! $panel.is(':visible')) {
+                    return;
+                }
+                const viewport = window.innerHeight || document.documentElement.clientHeight || 0;
+                // 面板顶：用外层容器（不带展开动画）的底边 + mt-2 的 8px 来算 ——
+                // 面板自己在 enter 动画期间有 translate-y-9，直接量它的 top 会少算 36px。
+                const $anchor = $('#tag-filter').closest('div.relative');
+                const anchorBottom = $anchor.length
+                    ? $anchor[0].getBoundingClientRect().bottom
+                    : $panel[0].getBoundingClientRect().top;
+                const top = anchorBottom + 8;
+                // 可用高度 = 视口 - 面板顶 - 12px 底边距（下限 160px，免得极端情况下算成负值）
+                const available = Math.max(viewport - top - 12, 160);
+                $panel[0].style.maxHeight = available + 'px';
+                // 滚动区 = 可用高度 - 底部固定行（清除筛选 / 显示图片标签）- 面板内边距
+                const fixed = $('#tag-filter-menu > a').toArray()
+                    .reduce((sum, el) => sum + el.getBoundingClientRect().height, 0);
+                $scroll.css('maxHeight', Math.max(available - fixed - 8, 96) + 'px');
+            };
+
             const renderTagFilter = () => {
                 let $list = $('#tag-filter-list');
                 if (! $list.length) {
@@ -2340,9 +2429,37 @@
                     }
                 }
                 $list.html(html);
-                $('#tag-filter-clear').toggleClass('hidden', selectedTagIds.length === 0);
-                $('#tag-filter span').text(selectedTagIds.length ? `标签（${selectedTagIds.length}）` : '标签');
+                updateFilterButton();
             };
+
+            // 策略清单的取数参数与列表同形（相册 / 标签 / 关键字），
+            // 这样面板里的「N 张」永远等于点进去能看到的张数。
+            const strategyFacetParams = () => ({
+                album_id: selectedAlbum.id || undefined,
+                tags: selectedTagIds.slice(),
+                keyword: ($('#search').val() || '').trim() || undefined,
+            });
+
+            const loadStrategies = () => axios.get('{{ route('user.image-strategies') }}', {params: strategyFacetParams()}).then(response => {
+                if (! response.data.status) {
+                    return;
+                }
+                allStrategies = (response.data.data.strategies || []).slice();
+                allStrategies.forEach(strategy => { strategyNames[strategy.id] = strategy.name; });
+
+                // 换了相册/标签后，已选中的策略可能在这个上下文里一张都没有 —— 仍然把它列出来
+                // （标 0 张），否则按钮显示「筛选已启用」却找不到是哪一项。
+                if (selectedStrategyId !== null && allStrategies.every(strategy => strategy.id !== selectedStrategyId)) {
+                    allStrategies.unshift({
+                        id: selectedStrategyId,
+                        name: strategyNames[selectedStrategyId] || '已选策略',
+                        total: 0,
+                    });
+                }
+
+                renderStrategyFilter();
+                updateFilterButton();
+            });
 
             // 拉一次标签列表（页面加载时、以及增删标签之后）
             const loadTags = () => axios.get('{{ route('user.tags') }}').then(response => {
@@ -2354,13 +2471,18 @@
                 renderDetailTagOptions();
             });
 
-            // 按当前选中的标签重拉图片墙（多标签 AND；没有选中就是不筛）
+            // 按当前筛选条件（存储策略 + 标签）重拉图片墙。
+            // 多标签是 AND 语义；策略单选，没选就不传（= 显示全部）。
             const setTags = function () {
-                // ⚠ 这里**必须每次都显式带 tags**（清空时给空数组）：utils.infiniteScroll 是把参数
-                // $.extend 进它内部那份 data 的，只传 {page:1} 的话上一次的 tags 会残留下来 ——
-                // 表现就是「点了清除筛选，结果还是被标签筛着」。空数组会被 axios 序列化成零个参数，
-                // 所以清空时查询串里不会出现任何 tags（后端也就不用处理「空值」这种形状）。
-                resetImages({page: 1, tags: selectedTagIds.slice()});
+                // ⚠ 这里**必须每次都显式带 tags / strategy_ids**（清空时给空数组）：
+                // utils.infiniteScroll 是把参数 $.extend 进它内部那份 data 的，只传 {page:1} 的话
+                // 上一次的条件会残留下来 —— 表现就是「点了清除筛选，结果还是被筛着」。
+                // 空数组会被 axios 序列化成零个参数，所以清空时查询串里不会出现这两个参数。
+                resetImages({
+                    page: 1,
+                    strategy_ids: selectedStrategyId === null ? [] : [selectedStrategyId],
+                    tags: selectedTagIds.slice(),
+                });
             };
 
             // 勾/取消一个标签
@@ -2375,14 +2497,42 @@
                 setTags();
             };
 
+            $('#tag-filter-menu').off('click', '.strategy-filter-item').on('click', '.strategy-filter-item', function () {
+                const id = parseInt($(this).data('strategy-id'), 10);
+                // 单选：点已选中的那项 = 取消；点别的 = 直接换过去
+                selectedStrategyId = (selectedStrategyId === id) ? null : id;
+                renderStrategyFilter();
+                updateFilterButton();
+                setTags();
+            });
+
             $('#tag-filter-menu').off('click', '.tag-filter-item').on('click', '.tag-filter-item', function () {
                 toggleTagFilter($(this).data('tag-id'));
             });
 
+            // 清除筛选 = 策略与标签一起清空
             $('#tag-filter-clear').off('click').on('click', function () {
                 selectedTagIds = [];
+                selectedStrategyId = null;
+                renderStrategyFilter();
                 renderTagFilter();
                 setTags();
+            });
+
+            // 打开面板：先算高度；策略清单第一次打开时才去取（不占首屏请求）
+            $('#tag-filter').off('click.filterpanel').on('click.filterpanel', function () {
+                setTimeout(fitFilterPanel, 0);
+                if (! strategiesLoaded) {
+                    strategiesLoaded = true;
+                    loadStrategies();
+                }
+            });
+
+            // 旋屏 / 改窗口大小后面板可能又超出视口，重算一次
+            $(window).off('resize.filterpanel').on('resize.filterpanel', function () {
+                if ($('#filter-scroll').closest('.ls-menu').is(':visible')) {
+                    fitFilterPanel();
+                }
             });
 
             /* ---------------- 标签管理（全站唯一的标签窗口） ----------------

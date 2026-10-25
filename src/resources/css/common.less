@@ -984,3 +984,11 @@ html.sidebar-collapsed .ls-sidebar-arrow-right {
         color: var(--lsky-text-3);
     }
 }
+
+/* ---------- 图片页「筛选」面板 ----------
+   比默认的 w-48（192px）宽一点：策略名（如「Cloudflare R2 WNAM」）再加「N 张」和勾选图标，
+   192px 里放不下会被截断；名字本身还允许换行，这里只是把上限放宽。
+   编译产物 public/css/common.css 里保持同一条规则（构建期不跑 npm）。 */
+.ls-filter-panel {
+    width: 17rem;
+}

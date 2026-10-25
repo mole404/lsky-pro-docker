@@ -110,8 +110,9 @@ console.log('\n[A. 静态] 标签落点：筛选（多选 AND + 清除）');
     check('筛选下拉换成标签：#tag-filter 触发 + #tag-filter-list 容器 + #tag-filter-clear 清除',
         blade.includes('id="tag-filter"') && blade.includes('id="tag-filter-list"')
         && blade.includes('id="tag-filter-clear"') && blade.includes('>清除筛选</a>'));
-    check('筛选参数沿用 resetImages({tags:[...]})（后端 tags[] 多值 AND）',
-        /resetImages\(\{page: 1, tags: selectedTagIds\.slice\(\)\}\)/.test(blade));
+    check('筛选参数：策略（单选数组）与标签（多值 AND）一起显式传',
+        /strategy_ids: selectedStrategyId === null \? \[\] : \[selectedStrategyId\]/.test(blade)
+        && /tags: selectedTagIds\.slice\(\)/.test(blade));
     check('工具栏没有新增第三个下拉（仍然是「排序 + 标签」两个）',
         (bladeCode.match(/<x-dropdown direction="left"/g) || []).length === 2);
     check('标签多选项有 44px 点击区（手机上点得中）',
@@ -346,8 +347,8 @@ function boot({ gridItems = 1, putStatus = true, postStatus = true, swalConfirme
 
     const dom = new JSDOM(`<!DOCTYPE html><html><body>
         <span id="header-title"></span>
-        <a id="tag-filter" href="javascript:void(0)"><span>标签</span><i class="fas fa-tags"></i></a>
-        <div id="tag-filter-menu"><div id="tag-filter-list"></div>
+        <a id="tag-filter" class="inline-flex items-center gap-1.5 text-sm py-1.5 px-3 rounded text-ink" href="javascript:void(0)"><span>筛选</span><i class="fas fa-filter"></i></a>
+        <div id="tag-filter-menu"><div id="filter-scroll"><div id="strategy-filter-section" class="hidden"><div id="strategy-filter-list"></div></div><div id="tag-filter-list"></div></div>
             <a id="tag-filter-clear" class="ls-menu-item hidden text-brand" href="javascript:void(0)" x-data>清除筛选</a>
             <a id="tag-badge-toggle" href="javascript:void(0)" x-data><span>显示图片标签</span>
                 <span id="tag-badge-switch" class="bg-brand"><span class="tag-badge-knob translate-x-[12px]"></span></span></a>
@@ -473,28 +474,32 @@ console.log('\n[B. 行为] 顶部标签筛选（多选 AND + 清除）');
     check('没有选中时「清除筛选」是隐藏的', $('#tag-filter-clear').hasClass('hidden'));
 
     rows().eq(0).trigger('click');
-    check('勾一个标签 → 图片墙按 {page:1, tags:[11]} 重拉',
-        JSON.stringify(calls.refreshes.at(-1)) === JSON.stringify({ page: 1, tags: [11] }),
+    // 现在两个维度一起传：strategy_ids 单选（没选就是空数组）+ tags 多值
+    check('勾一个标签 → 图片墙按 {page:1, strategy_ids:[], tags:[11]} 重拉',
+        JSON.stringify(calls.refreshes.at(-1)) === JSON.stringify({ page: 1, strategy_ids: [], tags: [11] }),
         JSON.stringify(calls.refreshes.at(-1)));
-    check('触发文案变成「标签 (1)」+ 勾选态图标换成 check-square',
-        $('#tag-filter span').text() === '标签（1）' && rows().eq(0).find('i').hasClass('fa-check-square'));
+    check('按钮文案固定是「筛选」（不显示数量）+ 勾选态图标换成 check-square + 按钮进启用态',
+        $('#tag-filter span').text() === '筛选'
+        && rows().eq(0).find('i').hasClass('fa-check-square')
+        && $('#tag-filter').hasClass('bg-brand-soft'));
     check('「清除筛选」出现了', ! $('#tag-filter-clear').hasClass('hidden'));
 
     $('#tag-filter-list .tag-filter-item').eq(1).trigger('click');
     check('再勾一个 → 两个标签按 AND 一起带上 {tags:[11,12]}',
-        JSON.stringify(calls.refreshes.at(-1)) === JSON.stringify({ page: 1, tags: [11, 12] }),
+        JSON.stringify(calls.refreshes.at(-1)) === JSON.stringify({ page: 1, strategy_ids: [], tags: [11, 12] }),
         JSON.stringify(calls.refreshes.at(-1)));
 
     $('#tag-filter-list .tag-filter-item').eq(0).trigger('click');
     check('取消一个 → 只剩 {tags:[12]}',
-        JSON.stringify(calls.refreshes.at(-1)) === JSON.stringify({ page: 1, tags: [12] }));
+        JSON.stringify(calls.refreshes.at(-1)) === JSON.stringify({ page: 1, strategy_ids: [], tags: [12] }));
 
     $('#tag-filter-clear').trigger('click');
     // ⚠ 清空时也必须显式带上 tags（空数组）：utils.infiniteScroll 是 $.extend 进内部 data 的，
     //    只传 {page:1} 会让上一次的 tags 残留 —— 浏览器实测踩过「点清除没反应」。
-    check('点「清除筛选」→ 显式传空 tags（axios 序列化后查询串里没有 tags 参数，回到全部）',
-        JSON.stringify(calls.refreshes.at(-1)) === JSON.stringify({ page: 1, tags: [] })
-        && t.getSelectedTagIds().length === 0 && $('#tag-filter span').text() === '标签',
+    check('点「清除筛选」→ 策略与标签都显式传空（回到全部）',
+        JSON.stringify(calls.refreshes.at(-1)) === JSON.stringify({ page: 1, strategy_ids: [], tags: [] })
+        && t.getSelectedTagIds().length === 0 && $('#tag-filter span').text() === '筛选'
+        && ! $('#tag-filter').hasClass('bg-brand-soft'),
         JSON.stringify(calls.refreshes.at(-1)));
 }
 

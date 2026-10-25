@@ -8,3 +8,4 @@
 .ls-checklist__item:hover,.ls-checklist__item:focus-within{background-color:var(--lsky-surface-2)}
 .ls-checklist__name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ls-checklist__empty{margin:0;padding:.5rem;color:var(--lsky-text-3)}
+.ls-filter-panel{width:17rem}

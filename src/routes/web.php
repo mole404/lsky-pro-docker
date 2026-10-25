@@ -63,6 +63,8 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('images', [ImageController::class, 'index'])->name('images');
     Route::group(['prefix' => 'user'], function () {
         Route::get('images', [ImageController::class, 'images'])->name('user.images');
+        // fork 新增：筛选面板的存储策略清单（带当前上下文的分面张数）
+        Route::get('image-strategies', [ImageController::class, 'strategies'])->name('user.image-strategies');
         Route::get('images/{id}', [ImageController::class, 'image'])->name('user.image');
         Route::delete('images', [ImageController::class, 'delete'])->name('user.images.delete');
         Route::put('images/permission', [ImageController::class, 'permission'])->name('user.images.permission');

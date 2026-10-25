@@ -8,6 +8,7 @@ use App\Http\Requests\ImageRenameRequest;
 use App\Http\Requests\TagRequest;
 use App\Models\Album;
 use App\Models\Image;
+use App\Models\Strategy;
 use App\Models\Tag;
 use App\Models\User;
 use App\Services\UserService;
@@ -47,6 +48,43 @@ class ImageController extends Controller
             ]);
         });
         return $this->success('success', compact('images'));
+    }
+
+    /**
+     * fork 新增：筛选面板里的「存储策略」清单。
+     *
+     * 返回「当前用户图片里实际出现过的策略」+ 该策略在**当前上下文**（相册 / 标签 / 关键字）下的张数。
+     * 这里刻意复用列表用的 filter()，而不是按全量统计 —— 否则面板写着 358 张、点进去只有 351 张
+     * （剩下几张在别的相册里），看起来像漏图。
+     * 0 张的策略不返回；strategy_id 为 null 的图（策略被删过）没有可点的策略，也一并排除。
+     */
+    public function strategies(Request $request): Response
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        $counts = $user->images()
+            ->filter($request)
+            // filter() 会带上列表的排序，GROUP BY 查询用不上（SQLite 下还会随便挑一行来排）
+            ->reorder()
+            ->selectRaw('strategy_id, count(*) as total')
+            ->groupBy('strategy_id')
+            ->pluck('total', 'strategy_id');
+
+        $names = Strategy::query()
+            ->whereIn('id', $counts->keys()->map(fn ($id) => (int) $id)->filter(fn (int $id) => $id > 0)->all())
+            ->pluck('name', 'id');
+
+        $strategies = $counts
+            ->map(fn ($total, $id) => [
+                'id' => (int) $id,
+                'name' => (string) ($names[(int) $id] ?? ''),
+                'total' => (int) $total,
+            ])
+            ->filter(fn (array $row) => $row['id'] > 0 && $row['name'] !== '')
+            ->values();
+
+        return $this->success('success', compact('strategies'));
     }
 
     public function image(Request $request): Response
