@@ -24,7 +24,11 @@ class ImageController extends Controller
             $qualifiers = [
                 'name:', 'album:', 'group:', 'strategy:', 'email:', 'extension:', 'md5:', 'sha1:', 'ip:', 'is:', 'order:',
             ];
-            collect(array_filter(explode(' ', $keywords)))->filter(function ($keyword) use ($qualifiers, &$words) {
+            // 引号感知分词：限定符的值里含空格时（如 strategy:"AWS S3"）要整体作为一个 token，
+            // 不能再按空格硬切。未闭合的引号按普通字符处理，保持旧的逐词行为。
+            preg_match_all('/\S+:"[^"]*"|\S+/u', (string) $keywords, $matched);
+            $tokens = $matched[0] ?? [];
+            collect($tokens)->filter(function ($keyword) use ($qualifiers, &$words) {
                 if (Str::startsWith($keyword, $qualifiers)) {
                     return true;
                 }
@@ -44,7 +48,12 @@ class ImageController extends Controller
                     default => 0,
                 };
 
-                [$qualifier, $value] = explode(':', $filter);
+                [$qualifier, $value] = explode(':', $filter, 2);
+
+                // 值两端的双引号只用于在查询串里保住空格，交给数据库前必须去掉。
+                if (Str::startsWith($value, '"') && Str::endsWith($value, '"')) {
+                    $value = substr($value, 1, -1);
+                }
 
                 if ($value) {
                     $callback = fn (Builder $builder) => $builder->where('name', $value);
@@ -63,10 +72,18 @@ class ImageController extends Controller
                 }
             });
 
-            foreach ($words as $word) {
-                $builder->where('name', 'like', "%{$word}%")
-                    ->orWhere('origin_name', 'like', "%{$word}%")
-                    ->orWhere('alias_name', 'like', "%{$word}%");
+            if ($words) {
+                // 必须把关键字 OR 组包进闭包：直接挂在最外层时，orWhere 会和上面的限定符条件
+                // （whereHas / where）平铺在同一个布尔层级，SQL 会被拼成
+                // `限定符条件 or origin_name like ...`，即关键字只要沾上就绕过限定符，过滤失效。
+                // 包一层闭包后生成 `限定符条件 and (name like ... or origin_name like ...)`。
+                $builder->where(function (Builder $q) use ($words) {
+                    foreach ($words as $word) {
+                        $q->orWhere('name', 'like', "%{$word}%")
+                            ->orWhere('origin_name', 'like', "%{$word}%")
+                            ->orWhere('alias_name', 'like', "%{$word}%");
+                    }
+                });
             }
         })->latest()->paginate(40);
         $images->getCollection()->each(function (Image $image) {

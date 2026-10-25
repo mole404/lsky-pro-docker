@@ -228,6 +228,7 @@
     <script type="text/html" id="search-grammar-tpl">
         <p class="text-ink-2">默认输入关键字搜索会根据图片的别名、原始名称进行匹配，你也可以使用下面的搜索语法进行高级搜索，并可以以任意组合使用这些搜索限定符来缩小结果范围。例如查找名称为张三，邮箱为 a@qq.com 且图片拓展名为 jpg 的所有图片：</p>
         <p class="text-ink-2 mb-2"><b>name:张三 email:a@qq.com extension:jpg</b></p>
+        <p class="text-ink-2 mb-2">限定符的值里含空格时，用双引号把整个值包住，例如 <b>name:"张 三"</b>。</p>
         <table class="min-w-full divide-y divide-line">
             <thead class="bg-surface-2">
             <tr>
@@ -254,7 +255,7 @@
             </tr>
             <tr>
                 <td class="px-3 py-2 text-ink-2 text-sm">strategy:<span class="italic">STRATEGY_NAME</span></td>
-                <td class="px-3 py-2 text-sm">匹配图片所属策略名称为 STRATEGY_NAME 的图片</td>
+                <td class="px-3 py-2 text-sm">匹配图片所属策略名称为 STRATEGY_NAME 的图片，如 <b>strategy:"Cloudflare R2"</b>（示例，请替换成自己的策略名）</td>
             </tr>
             <tr>
                 <td class="px-3 py-2 text-ink-2 text-sm">email:<span class="italic">EMAIL</span></td>
