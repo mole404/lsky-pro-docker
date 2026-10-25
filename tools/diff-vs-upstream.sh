@@ -349,6 +349,12 @@ src/app/Http/Controllers/Auth/NewPasswordController.php
 src/lang/zh_CN/validation.php
 #   src/lang/zh_CN/zh_CN.json
 src/lang/zh_CN/zh_CN.json
+
+# [16 存储策略删除保护：策略里还有图片时拒绝删除]
+#   src/app/Http/Controllers/Admin/StrategyController.php
+#       （delete() 原来在该策略的图片上把 strategy_id 置 null 再删策略，等于让那批图为空、
+#         url 前缀丢失；现在改为事务内复查图片数、有图直接返回失败，那句置 null 一并删除）
+src/app/Http/Controllers/Admin/StrategyController.php
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单
