@@ -2377,6 +2377,19 @@
 
             // 面板高度：打开时按视口算一次。固定 50vh 在横屏/小屏上会超出屏幕，
             // 再被 .ls-menu 的 overflow-hidden 裁掉 —— 表现为下面几项直接消失、还滚不动。
+            /* 页面缩放倍数（桌面端 html{zoom:1.1}，外加浏览器自带缩放）。
+             * 用「视觉尺寸 ÷ 布局尺寸」的比值求，不读 getComputedStyle(html).zoom ——
+             * 浏览器 Ctrl+± 也会折进那个值里，读数会偏大（与 dsPageZoom 同一条约定）。 */
+            const pageZoom = () => {
+                const el = document.getElementById('tag-filter');
+                if (! el) {
+                    return 1;
+                }
+                const visual = el.getBoundingClientRect().width;
+                const layout = el.offsetWidth;
+                return (visual > 0 && layout > 0) ? visual / layout : 1;
+            };
+
             const fitFilterPanel = () => {
                 const $scroll = $('#filter-scroll');
                 if (! $scroll.length) {
@@ -2399,11 +2412,21 @@
                 const top = anchorBottom + 8;
                 // 可用高度 = 视口 - 面板顶 - 12px 底边距（下限 160px，免得极端情况下算成负值）
                 const available = Math.max(viewport - top - 12, 160);
-                $panel[0].style.maxHeight = available + 'px';
+                // ⚠ 桌面端 html 有 zoom:1.1（common.less 的 110% 缩放），getBoundingClientRect 给的
+                // 是放大后的视口坐标，而 style.maxHeight 的单位会被 zoom 再放大 1.1 倍 ——
+                // 直接把视口算出来的数写进 max-height，面板实际高度会多出 10%（1280x800 实测多 58px，
+                // 底边跑到屏幕外）。所以写回去之前先除以 zoom，换算到面板自己的坐标系。
+                const zoom = pageZoom() || 1;
+                const fit = available / (zoom > 0 ? zoom : 1);
+                $panel[0].style.maxHeight = fit + 'px';
                 // 滚动区 = 可用高度 - 底部固定行（清除筛选 / 显示图片标签）- 面板内边距
+                // 固定行高度用 offsetHeight 量（布局坐标，和 max-height 同一坐标系），
+                // 不能用 getBoundingClientRect —— 那个是视口坐标，zoom 下会差 1.1 倍。
                 const fixed = $('#tag-filter-menu > a').toArray()
-                    .reduce((sum, el) => sum + el.getBoundingClientRect().height, 0);
-                $scroll.css('maxHeight', Math.max(available - fixed - 8, 96) + 'px');
+                    .reduce((sum, el) => sum + el.offsetHeight, 0);
+                // 下限放到 60px：横屏小屏（如 844x390，可用只有 ~174px）扣掉固定行只剩 ~70px，
+                // 若还按 96px 兜底就会把面板顶出屏幕。60px 仍能露出 1 个多条目，可继续滚动。
+                $scroll.css('maxHeight', Math.max(fit - fixed - 8, 60) + 'px');
             };
 
             const renderTagFilter = () => {

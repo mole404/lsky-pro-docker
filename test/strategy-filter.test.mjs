@@ -67,6 +67,17 @@ console.log('[A. 前端] 筛选面板：存储策略 + 标签');
     check('面板高度按视口算（fitFilterPanel 用 innerHeight）',
         /fitFilterPanel[\s\S]{0,900}window\.innerHeight/.test(blade));
 
+    // 桌面端 html{zoom:1.1}：写进 max-height 的数值会被再放大 1.1 倍，
+    // 不除回去面板底边就跑出视口（1280x800 实测多 58px）。倍数用尺寸比值求，
+    // 不读 getComputedStyle(html).zoom（浏览器缩放会折进去，读数偏大）。
+    check('面板高度按页面缩放折算（available ÷ pageZoom 后再写 max-height）',
+        /const fit = available \/ \(zoom > 0 \? zoom : 1\)/.test(blade)
+        && /style\.maxHeight = fit \+ 'px'/.test(blade)
+        && ! /getComputedStyle\(document\.documentElement\)\.zoom/.test(blade));
+
+    check('固定行高度用 offsetHeight 量（与 max-height 同一坐标系，rect 是视口坐标）',
+        /tag-filter-menu > a'\)[\s\S]{0,160}el\.offsetHeight/.test(blade));
+
     check('策略清单懒加载：第一次打开面板才取（strategiesLoaded 闸门）',
         /if \(! strategiesLoaded\) \{[\s\S]{0,120}strategiesLoaded = true;[\s\S]{0,120}loadStrategies\(\)/.test(blade));
 
