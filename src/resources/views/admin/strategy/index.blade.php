@@ -11,7 +11,7 @@
 
         <x-table :columns="['ID', '名称', '驱动', '图片数量', '已使用存储', '操作']">
             @foreach($strategies as $strategy)
-            <tr data-id="{{ $strategy->id }}">
+            <tr data-id="{{ $strategy->id }}" data-images-count="{{ $strategy->images_count }}">
                 <td class="px-6 py-4 whitespace-nowrap">{{ $strategy->id }}</td>
                 <td class="px-6 py-4 whitespace-nowrap name">{{ $strategy->name }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
@@ -40,15 +40,31 @@
     @push('scripts')
         <script>
             $('[data-operate="delete"]').click(function () {
+                let $row = $(this).closest('tr');
+                let name = $row.find('td.name').text();
+                let imagesCount = parseInt($row.attr('data-images-count'), 10) || 0;
+
+                // 策略里还有图片就只提示、不发请求，避免删掉策略后图片失去归属
+                if (imagesCount > 0) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: `无法删除存储策略【${name}】`,
+                        html: `该存储策略内已有 <b>${imagesCount}</b> 张图片，无法直接删除。<br>如需删除，请先删除该存储策略内的所有图片。`,
+                        showCancelButton: false,
+                        confirmButtonText: '知道了'
+                    });
+                    return;
+                }
+
                 Swal.fire({
-                    title: `确认删除存储策略【${$(this).closest('tr').find('td.name').text()}】吗?`,
-                    text: "如果某个组下面没有存储策略，该组下面的用户将无法上传图片，同时已上传至该存储的图片将无法在系统中预览。",
+                    title: `确认删除存储策略【${name}】吗?`,
+                    text: "如果某个组下面没有存储策略，该组下面的用户将无法上传图片。",
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonText: '确认删除',
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        let id = $(this).closest('tr').data('id');
+                        let id = $row.data('id');
                         axios.delete(`/admin/strategies/${id}`).then(response => {
                             if (response.data.status) {
                                 history.go(0);

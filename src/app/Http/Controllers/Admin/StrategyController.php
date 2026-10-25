@@ -65,10 +65,21 @@ class StrategyController extends Controller
     {
         /** @var Strategy $strategy */
         if ($strategy = Strategy::query()->find($request->route('id'))) {
-            DB::transaction(function () use ($strategy) {
-                $strategy->images()->update(['strategy_id' => null]);
+            $imagesCount = 0;
+            DB::transaction(function () use ($strategy, &$imagesCount) {
+                // 必须在事务内再查一次图片数量：前端的图片数是页面渲染时的快照，
+                // 用户停留在删除确认框期间可能刚好有人往该策略上传了图片，
+                // 只有进事务后复查才能挡住这种竞态。
+                $imagesCount = $strategy->images()->count();
+                if ($imagesCount > 0) {
+                    // 有图片时直接结束事务，不写入任何数据，避免留下半截状态
+                    return;
+                }
                 $strategy->delete();
             });
+            if ($imagesCount > 0) {
+                return $this->fail("该存储策略内已有 {$imagesCount} 张图片，请先删除该存储策略内的所有图片");
+            }
         }
         return $this->success('删除成功');
     }
