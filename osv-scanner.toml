@@ -84,3 +84,32 @@ reason = "phpunit 是 packages-dev 开发依赖，不进 --no-dev 镜像；同�
 #    三条公告（GHSA-457r-cqc8-9vj9 / GHSA-8jh9-wqpf-q52c / GHSA-pg98-6v7f-2xfv）随之消失，
 #    白名单条目已删除 —— 若任一侧的锁被回退，会被扫描重新报出来。
 # -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# 6) 2026-10-25 新发布的三组公告（扫描器/公告库更新后新命中，与本次改动无关）
+#    · laravel/framework 9.52.22 —— 生产依赖，9.x 已 EOL，仍无 9.x 补丁。
+#      本条要求「配置了 token 型 API guard」且「数据库是 MySQL/MariaDB」；
+#      本站 config/auth.php 只有 web(session) 这一个 guard、API 走 auth:sanctum，
+#      数据库是 SQLite ⇒ 不触发。
+#    · undici —— 只出现在 test/package-lock.json（jsdom 的传递依赖，本地测试工具链），
+#      不进镜像；三条均与 fetch/websocket 解压相关，测试里不涉及。修法是升 undici 到 8.12.2。
+# -----------------------------------------------------------------------------
+[[IgnoredVulns]]
+id = "GHSA-f9x3-7vq9-cph6"        # Laravel TokenGuard 认证绕过
+ignoreUntil = 2027-06-30
+reason = "9.x(EOL) 无补丁；需 token 型 guard + MySQL/MariaDB；本站只有 session guard、API 走 Sanctum、SQLite"
+
+[[IgnoredVulns]]
+id = "GHSA-4qv8-2p9j-2685"        # undici：解压相关
+ignoreUntil = 2027-06-30
+reason = "test/package-lock.json 的 dev 传递依赖（jsdom），不进镜像；修法=升 undici 8.12.2"
+
+[[IgnoredVulns]]
+id = "GHSA-f72v-6w45-q472"        # undici：解压相关
+ignoreUntil = 2027-06-30
+reason = "同上：dev-only 测试工具链，不进镜像"
+
+[[IgnoredVulns]]
+id = "GHSA-xjj6-f33q-929c"        # undici：websocket 相关
+ignoreUntil = 2027-06-30
+reason = "同上：dev-only 测试工具链，不进镜像"
