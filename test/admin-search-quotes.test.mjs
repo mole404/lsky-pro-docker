@@ -75,8 +75,11 @@ console.log('\n[2] 值切分与去引号');
 console.log('\n[3] 关键字 OR 不得逃逸');
 {
     check('orWhere 挂在闭包的 $q 上，而不是最外层 $builder',
-        controllerCode.includes('$q->orWhere'),
-        fail('$q->orWhere'));
+        // 修复 LIKE 元字符转义后，这三条改成 Like::orWhereContains($q, …)（内部就是
+        // $q->orWhereRaw(…)，带显式 ESCAPE 子句）。判据跟着换成「$q 必须是第一个实参」，
+        // 守的东西没变：OR 组仍挂在闭包自己的 builder 上，不会与限定符条件平铺。
+        controllerCode.includes('Like::orWhereContains($q,') && ! /->orWhere\(/.test(controllerCode),
+        fail('Like::orWhereContains($q, …)'));
 
     check('关键字组被 where(function (Builder $q) 包住',
         controllerCode.includes('$builder->where(function (Builder $q) use ($words)'),
@@ -110,6 +113,55 @@ console.log('\n[4] 搜索语法说明');
     check('示例旁不再带「请替换成自己的策略名」这类旁注',
         ! /替换成自己的策略名/.test(tpl),
         '仍残留「（示例，请替换成自己的策略名）」');
+}
+
+console.log('\n[5] LIKE 元字符转义（后台图片搜索 + 后台用户列表共用）');
+{
+    const like = read('app', 'Support', 'Like.php');
+    const userController = read('app', 'Http', 'Controllers', 'Admin', 'UserController.php');
+    const userCode = userController.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+    check('转义工具在 app/Support/Like.php', like.includes('final class Like'), fail('final class Like'));
+
+    check('escape() 把 \\ % _ 三个元字符换成带转义符的字面量',
+        like.includes(String.raw`['\\', '%', '_']`) && like.includes(String.raw`['\\\\', '\\%', '\\_']`),
+        fail("str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], …)"));
+
+    check('反斜杠第一个换（否则后面换出的 \\% 会被再翻一倍）',
+        like.indexOf(String.raw`['\\', '%', '_']`) < like.indexOf(String.raw`['\\\\', '\\%', '\\_']`),
+        '替换顺序不对');
+
+    check('ESCAPE 子句是显式写出来的（SQLite 没有默认转义符，靠 where(...,\'like\',?) 拼不出来）',
+        like.includes("' like ? '") && like.includes('whereRaw(') && like.includes('orWhereRaw('));
+
+    {
+        check('MySQL 用 escape \'\\\\\'（SQL 文本两个字面反斜杠 = 一个字符；写 \'\\\' 会把引号吃掉）',
+            like.includes(String.raw`? "escape '\\\\'"`), fail(String.raw`? "escape '\\\\'"`));
+        check('SQLite / PostgreSQL 用 escape \'\\\'（两个字符会被拒：ESCAPE 只接受单字符）',
+            like.includes(String.raw`"escape '\\'"`), fail(String.raw`"escape '\\'"`));
+    }
+
+    check('后台图片搜索：三处 name/origin_name/alias_name like 都走转义工具',
+        (controllerCode.match(/Like::orWhereContains\(\$q, '(name|origin_name|alias_name)', \$word\)/g) || []).length === 3,
+        fail('3 处 Like::orWhereContains'));
+    check('后台图片搜索：不再有 %{$word}% 裸拼进 like',
+        ! /'like',\s*"%\{\$word\}%"/.test(controllerCode), '仍有裸拼的关键字 like');
+    check('限定符等值查询不动（extension: 仍是等值）',
+        /'extension' => \$builder->where\('extension', \$value\)/.test(controllerCode));
+
+    check('后台用户列表：两个 like 包进闭包（否则 status 被邮箱那一支绕过）',
+        /\$builder->where\(function \(Builder \$q\) use \(\$keywords\) \{[\s\S]{0,400}Like::whereContains\(\$q, 'name', \$keywords\);[\s\S]{0,160}Like::orWhereContains\(\$q, 'email', \$keywords\);/.test(userCode),
+        fail('$builder->where(function (Builder $q) use ($keywords) …'));
+    check('后台用户列表：外层不再有平铺的 orWhere（status=? and name like ? or email like ?）',
+        ! /\$builder->where\('name', 'like'.*orWhere\('email', 'like'/.test(userCode)
+        && ! /'like',\s*"%\{\$keywords\}%"/.test(userCode),
+        '仍有平铺或裸拼的 like');
+
+    // 顺序：闭包必须挂在 status 的 when 之后 —— when 是链式，靠源码顺序即可保证
+    const statusAt = userCode.indexOf("$builder->where('status', $status)");
+    const groupAt = userCode.indexOf('$builder->where(function (Builder $q) use ($keywords)');
+    check('用户列表：status 条件仍在关键字组之前（括号组挂在它后面）',
+        statusAt > -1 && groupAt > statusAt, `statusAt=${statusAt} groupAt=${groupAt}`);
 }
 
 // ================================================================ 汇总

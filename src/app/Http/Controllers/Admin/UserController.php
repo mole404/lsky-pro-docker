@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UserRequest;
 use App\Models\User;
+use App\Support\Like;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -23,7 +24,16 @@ class UserController extends Controller
         $users = User::query()->when($status > -1, function (Builder $builder) use ($status) {
             $builder->where('status', $status);
         })->when($keywords, function (Builder $builder, $keywords) {
-            $builder->where('name', 'like', "%{$keywords}%")->orWhere('email', 'like', "%{$keywords}%");
+            // 两个 like 必须包进闭包：平铺时拼出来的 SQL 是
+            //   status = ? and name like ? or email like ?
+            // 而 AND 的优先级高于 OR ⇒ 邮箱那一支整体绕过 status 筛选
+            // （选「正常」时冻结用户照样出现在列表里）。包一层后是
+            //   status = ? and (name like ? or email like ?)
+            // 与 Admin\ImageController 里关键字组的写法一致。
+            $builder->where(function (Builder $q) use ($keywords) {
+                Like::whereContains($q, 'name', $keywords);
+                Like::orWhereContains($q, 'email', $keywords);
+            });
         })->with('group')->withSum('images', 'size')->latest()->paginate();
         $users->getCollection()->each(function (User $user) {
             $user->group->setVisible(['name']);

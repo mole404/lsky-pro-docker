@@ -6,6 +6,7 @@ use App\Enums\GroupConfigKey;
 use App\Enums\UserStatus;
 use App\Enums\Watermark\Mode;
 use App\Exceptions\UploadException;
+use App\Http\Middleware\EnsureEmailIsVerifiedIfRequired;
 use App\Http\Result;
 use App\Models\Group;
 use App\Models\Image;
@@ -125,6 +126,14 @@ class Controller extends BaseController
 
     public function upload(Request $request, ImageService $service): Response
     {
+        // 这条路由同时服务「游客上传」，挂不上 verified.if-required 中间件（auth 组会把游客
+        // 挡去登录页），所以判据在入口补一次 —— 与 middleware 里用的是同一个 blocks()：
+        // 后台开关关着 / 管理员 / 已验证 都放行，$request->user() 为 null（游客）也放行。
+        // 不补这一刀的话：开着邮箱验证时，登录但未验证的账号仍能经网页上传把图记到自己名下。
+        if (EnsureEmailIsVerifiedIfRequired::blocks($request->user())) {
+            return $this->fail('请先验证您的邮箱');
+        }
+
         try {
             $image = $service->store($request);
         } catch (UploadException $e) {

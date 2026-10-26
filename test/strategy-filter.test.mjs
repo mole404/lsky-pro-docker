@@ -79,7 +79,7 @@ console.log('[A. 前端] 筛选面板：存储策略 + 标签');
         /tag-filter-menu > a'\)[\s\S]{0,160}el\.offsetHeight/.test(blade));
 
     check('策略清单预取：图片墙第一页落地后就取（不用等第一次打开面板）',
-        /ds\.setSelectables\(\$photos\.find\(IMAGES_ITEM\)\);[\s\S]{0,400}if \(! strategiesLoaded\) \{[\s\S]{0,120}strategiesLoaded = true;[\s\S]{0,120}loadStrategies\(\)/.test(blade));
+        /ds\.setSelectables\(\$photos\.find\(IMAGES_ITEM\)\);[\s\S]{0,500}if \(! strategiesLoaded\) \{[\s\S]{0,160}loadStrategies\(\)/.test(blade));
 
     check('打开面板那条懒加载兜底仍在（预取失败也不至于空白）',
         /#tag-filter'\)\.off\('click\.filterpanel'\)[\s\S]{0,300}if \(! strategiesLoaded\) \{[\s\S]{0,120}loadStrategies\(\)/.test(blade));
@@ -89,6 +89,50 @@ console.log('[A. 前端] 筛选面板：存储策略 + 标签');
 
     check('面板宽度走自定义类（w-64 之类在编译产物里不存在）',
         /panel-class="ls-filter-panel"/.test(blade));
+}
+
+console.log('\n[A2. 分面数字的口径与请求竞态]');
+{
+    // 面板上的「N 张」必须和列表同一口径：列表只在搜索框回车时才带 keyword，
+    // 面板若读输入框实时值，用户敲着字还没回车面板就先变了 —— 数字对不上列表。
+    const facet = (blade.match(/const strategyFacetParams = \(\) => \(\{[\s\S]{0,400}?\}\);/)
+        || [''])[0];
+    check('取到了 strategyFacetParams 的参数表', facet.length > 0);
+    check('facet 的 keyword 读已提交变量 committedKeyword（不是输入框实时值）',
+        /keyword: committedKeyword \|\| undefined/.test(facet) && ! /\$\('#search'\)/.test(facet),
+        facet.replace(/\s+/g, ' ').slice(0, 160));
+
+    check('committedKeyword 在 resetImages 里随「带 keyword 的那次重置」更新（不覆盖其它重置）',
+        /const resetImages = \(params\) => \{[\s\S]{0,2000}hasOwnProperty\.call\(params, 'keyword'\)[\s\S]{0,300}committedKeyword = /.test(blade));
+
+    check('更新发生在 imagesInfinite.refresh(params) 之前（分面刷新读到的已是新值）',
+        (() => {
+            const at = blade.indexOf("hasOwnProperty.call(params, 'keyword')");
+            const refresh = blade.indexOf('imagesInfinite.refresh(params)', at);
+            return at > -1 && refresh > at;
+        })());
+
+    check('搜索框仍然只在回车时提交（keydown 13 → resetImages 带 keyword）',
+        /#search'\)\.keydown\(function \(e\) \{[\s\S]{0,200}resetImages\(\{page: 1, keyword: \$\(this\)\.val\(\)\}\)/.test(blade));
+
+    check('分面请求有独立序号 facetSeq 并丢弃过期响应',
+        /let facetSeq = 0;/.test(blade)
+        && (blade.match(/seq !== facetSeq/g) || []).length >= 2,
+        `守卫 ${(blade.match(/seq !== facetSeq/g) || []).length} 处`);
+
+    check('分面请求有 .catch() 兜底（失败不抛未处理的 rejection、不弹窗）',
+        /route\('user\.image-strategies'\)[\s\S]{0,2000}\.catch\(\(\) => \{[\s\S]{0,300}strategiesLoaded = false/.test(blade));
+
+    check('strategiesLoaded 在成功渲染之后才置 true（失败保留未加载态，可重试）',
+        (() => {
+            const body = blade.slice(blade.indexOf('const loadStrategies = () => {'));
+            const render = body.indexOf('renderStrategyFilter();');
+            const flag = body.indexOf('strategiesLoaded = true;');
+            return render > -1 && flag > render;
+        })());
+
+    check('两个调用点都不再「先置已加载再发请求」（否则一次失败永久不重取）',
+        ! /strategiesLoaded = true;\s*\n\s*loadStrategies\(\)/.test(blade));
 }
 
 console.log('\n[B. 后端] 取数端点');

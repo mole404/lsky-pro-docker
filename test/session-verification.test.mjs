@@ -269,5 +269,34 @@ test('/api/* 回 200 + status:false，不 redirect、不回 401/403', () => {
     assert.ok(!/redirect|403/.test(body), 'api 分支不该 redirect 或带 403');
 });
 
+/* --------------------------------------------- G 网页上传门禁 */
+section('G. 网页上传（POST /upload）的门禁');
+
+test('基础 Controller 的 upload() 用同一个 blocks() 判据', () => {
+    const baseController = read('app', 'Http', 'Controllers', 'Controller.php');
+    assert.match(baseController, /use App\\Http\\Middleware\\EnsureEmailIsVerifiedIfRequired;/);
+    assert.match(baseController, /function upload\(Request \$request, ImageService \$service\): Response/);
+    assert.match(baseController, /EnsureEmailIsVerifiedIfRequired::blocks\(\$request->user\(\)\)/);
+    assert.match(baseController, /请先验证您的邮箱/);
+});
+
+test('判据在存图之前（不能先落库再拒绝）', () => {
+    const baseController = read('app', 'Http', 'Controllers', 'Controller.php');
+    const body = baseController.slice(baseController.indexOf('function upload(Request $request'));
+    const gate = body.indexOf('blocks(');
+    const store = body.indexOf('$service->store(');
+    assert.ok(gate > -1 && store > -1 && gate < store, `gate=${gate} store=${store}`);
+});
+
+test('游客（user() 为 null）仍然放行 —— 这条路由同时服务游客上传', () => {
+    // 判据本身不拦 null：blocks() 第一个条件就是 $user &&
+    assert.match(middleware, /return \$user\s*\n\s*&& Utils::config\(ConfigKey::IsUserNeedVerify\)/);
+    // 路由结构没动：这条路由仍在登录组之外（挂进组里会把游客赶去登录页）
+    const uploadAt = routes.indexOf("Route::post('upload'");
+    const gatedAt = routes.indexOf("['auth', 'verified.if-required']");
+    assert.ok(uploadAt > -1 && gatedAt > -1 && uploadAt < gatedAt, 'POST upload 必须在登录组之前（组外）');
+});
+
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Image;
 use App\Services\UserService;
+use App\Support\Like;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Http\Request;
@@ -79,9 +80,11 @@ class ImageController extends Controller
                 // 包一层闭包后生成 `限定符条件 and (name like ... or origin_name like ...)`。
                 $builder->where(function (Builder $q) use ($words) {
                     foreach ($words as $word) {
-                        $q->orWhere('name', 'like', "%{$word}%")
-                            ->orWhere('origin_name', 'like', "%{$word}%")
-                            ->orWhere('alias_name', 'like', "%{$word}%");
+                        // 关键字一律当字面量：% _ \ 由 Like 转义 + 显式 ESCAPE 子句，
+                        // 否则搜 `a_b` / `100%` 会被通配符带到无关的图。
+                        Like::orWhereContains($q, 'name', $word);
+                        Like::orWhereContains($q, 'origin_name', $word);
+                        Like::orWhereContains($q, 'alias_name', $word);
                     }
                 });
             }

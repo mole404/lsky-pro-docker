@@ -3,7 +3,8 @@ name: Build and push image to GHCR
 # 上游 workflow 是「每天定时拉 master 重新构建并推到 DockerHub」，本 fork 改成：
 #   - 只在 master 有推送时构建（源码已钉死，定时重建没有意义）
 #   - 推到 GHCR，用仓库自带的 GITHUB_TOKEN，不需要任何 secret
-#   - 只构建 linux/amd64（部署机是 x86_64，arm64 白烧一半时间）
+#   - 平台：master 与 test/test/* 出 linux/amd64 + linux/arm64，其它分支只出 linux/amd64
+#     （2026-10-26：test 也开始出 arm64 —— 详见 Resolve 步骤里「构建平台」那段注释）
 #   - 构建前先跑 test/ 里的 jsdom 行为测试（iOS 长按 / 菜单收放 / 触摸端二级菜单）
 #   - 先推到不可变的 sha tag → 真机自证 → 自证通过才把 latest 指过去
 #     这样自证失败时 latest 仍停在上一个已知可用的镜像，线上拉到的不会是坏版本
@@ -69,7 +70,7 @@ on:
         default: ''
         type: string
       platforms:
-        description: '（可留空）构建平台。留空=按分支自动：master 出 linux/amd64,linux/arm64，其它分支只出 linux/amd64'
+        description: '（可留空）构建平台。留空=按分支自动：master 与 test/test/* 出 linux/amd64,linux/arm64，其它分支只出 linux/amd64'
         required: false
         default: ''
         type: string
@@ -239,20 +240,33 @@ jobs:
             echo "is_test_build=false" >> "$GITHUB_OUTPUT"
           fi
 
-          # ---- 构建平台（2026-10-07 定）--------------------------------------
-          #   master（正式版）  = linux/amd64,linux/arm64 —— 正式版必须两种架构都能用；
-          #   其它分支/试构建   = linux/amd64（测试版不烧 arm64 的时间）。
-          #   QEMU 已在 build job 里 setup（docker/setup-qemu-action），所以 arm64 走模拟构建。
-          #   手动 dispatch 可用 inputs.platforms 覆盖 —— 用来在**分支上**先试跑多架构，
-          #   因为 promote 只认 master，分支上跑多架构不会动 :latest。
-          # 注意：下面用的都是 GITHUB_REF（Actions 默认环境变量），与 if: 里的 github.ref 同源。
+          # ---- 构建平台（2026-10-07 定；2026-10-26 扩到 test 分支）------------
+          #   双架构 linux/amd64,linux/arm64：
+          #     · master（正式版）—— 正式版必须两种架构都能用；
+          #     · test / test/*（测试版分支）—— 2026-10-26 起也出双架构。
+          #       理由：test 是 master 的预演分支，arm64 相关问题（QEMU 模拟下编译原生扩展、
+          #       依赖在 arm64 上的可用性）只有真构建一次才暴露；等合进 master 才发现，
+          #       就把风险留给了正式发布。代价：test 每次构建多烧一份 arm64 模拟构建
+          #       （约 +50%~100% 构建时长）与约 2 倍 GHCR 存储（每版本 ~1GB → ~1.8GB）。
+          #   单架构 linux/amd64：其余分支；以及试构建（php_version ≠ Dockerfile 默认）。
+          #   QEMU 已在 build job 里 setup（docker/setup-qemu-action，默认装全平台 binfmt），
+          #   且排在 Set up Docker Buildx 之前，所以 arm64 能走模拟构建；build job 没设
+          #   timeout-minutes → 用 GitHub 默认 360 分钟/job，arm64 那份（含真升级用例）
+          #   仍有充足余量，不会因为多一个架构被超时打断。
+          #   手动 dispatch 可用 inputs.platforms 覆盖 —— 优先级最高（非空即直接采用）；
+          #   又因为 promote 只认 master，在 test 上跑多架构（含 dispatch）不会动 :latest。
+          # 注意：下面用的都是 GITHUB_REF（Actions 默认环境变量），与 if: 里的 github.ref 同源，
+          #   其值就是「本次被推送/被 dispatch 的那个 ref」，所以 push test 与 dispatch on test
+          #   都命中 refs/heads/test（PR 不触发本 workflow，见 on: 段）。
           PLAT="${REQ_PLATFORMS:-}"
           if [ -z "$PLAT" ]; then
-            if [ "$GITHUB_REF" = "refs/heads/master" ]; then
-              PLAT="linux/amd64,linux/arm64"
-            else
-              PLAT="linux/amd64"
-            fi
+            case "$GITHUB_REF" in
+              # master 正式版 + test/test/* 测试版：都出双架构
+              refs/heads/master|refs/heads/test|refs/heads/test/*)
+                PLAT="linux/amd64,linux/arm64" ;;
+              *)
+                PLAT="linux/amd64" ;;
+            esac
           fi
           echo "platforms=$PLAT" >> "$GITHUB_OUTPUT"
           echo "本次构建平台 = $PLAT（ref=$GITHUB_REF）"
@@ -345,8 +359,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # 只推不可变 tag；latest 由最后的 Promote 步骤在自证通过后才指过来。
-      # 平台策略（2026-10-07 定）：正式版（master）必须同时支持 amd64 + arm64；
-      #   测试版分支只出 amd64（arm64 走 QEMU 模拟，白烧一半时间）。
+      # 平台策略：master 与 test/test/* 都出 amd64 + arm64（2026-10-26 起 test 也出 arm64，
+      #   理由见 Resolve 步骤那段注释）；其余分支只出 amd64。
+      # 自证覆盖面：下面的 Verify 步骤都在 ubuntu-latest(amd64) runner 上 `docker pull` 多架构
+      #   的 sha tag → Docker 会取 index 里 amd64 那一份，所以**运行自证只覆盖 amd64**；
+      #   arm64 侧的保证 = 构建 + 推送成功（arm64 的问题会在构建期暴露）。别把这一点读成
+      #   「arm64 跑过真机自证」。
       # 具体值由 Resolve 步骤算成 steps.pin.outputs.platforms（见那里注释），这里不写死。
       - name: Build and push (multi-platform per ref)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
@@ -363,6 +381,9 @@ jobs:
           build-args: ${{ steps.pin.outputs.build_args }}
           # scope 必须带上 ref：不设 scope 时 master 与其它分支的构建共用同一个 GHA 缓存条目，
           # 两个 ref 的 buildkit exporter 并发写同一 scope 会互相踩（缓存抖动/导出偶发失败）。
+          # 代价（2026-10-26 起 test 也出多架构后更明显）：scope 按 ref 隔离 ⇒ test 的 arm64
+          # 层**不能**复用 master 的 arm64 缓存层，test 上首次双架构构建对 arm64 是冷构建
+          # （之后同 ref 内可复用）。别为了「吃缓存」把 scope 改回共用 —— 那是主动制造并发写冲突。
           cache-from: type=gha,scope=${{ github.ref_name }}
           cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
 

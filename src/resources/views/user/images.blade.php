@@ -1037,7 +1037,10 @@
             let allStrategies = [];    // 存储策略清单（只含「图片里实际出现过」的，带当前上下文张数）
             let strategyNames = {};    // id => 名字，切换上下文后清单里可能暂时没有已选中的那项
             let selectedStrategyId = null;   // 存储策略是**单选**；null = 不按策略筛（显示全部）
-            let strategiesLoaded = false;    // 懒加载：第一次打开面板才去取清单
+            let strategiesLoaded = false;    // 清单是否真的取到了（**成功落地才置 true**：失败要能再试）
+            // 已经提交给图片列表的搜索词。输入框里正在敲、还没回车的字不算 ——
+            // 面板上的「N 张」必须和列表同口径，否则会出现「面板说 3 张、点进去 7 张」。
+            let committedKeyword = '';
 
             // 标签名来自用户输入，塞进 innerHTML 之前一律先转义
             const escapeHtml = (value) => String(value === null || value === undefined ? '' : value)
@@ -2083,8 +2086,9 @@
                     // 策略清单在图片墙第一页落地后就静默预取：第一次点开「筛选」时选项已经在，
                     // 不用再等一次请求（原本是「第一次打开面板才去取」，那一下会空一会儿）。
                     // 只发一次；之后由 resetImages() 随上下文刷新。
+                    // 注意别在这里预设「已加载」：loadStrategies() 自己会在成功落地后才置 true，
+                    // 失败时留 false ⇒ 打开面板那一刻还会再试一次。
                     if (! strategiesLoaded) {
-                        strategiesLoaded = true;
                         loadStrategies();
                     }
                 },
@@ -2133,6 +2137,13 @@
                 //   这段时间页面高度剧烈变化（塌缩 → 逐页长回来），最容易被补齐/重排带着连发。
                 resetGuardUntil = Date.now() + 800;
                 try { window.__lskyResetGuardUntil = resetGuardUntil; } catch (e) {}
+                // 只有「带 keyword 的那次重置」才是搜索词变更（搜索框回车）；其它重置（换排序、
+                // 换相册/标签/策略）都沿用列表里已有的那份 —— 列表自己的 data.keyword 也是这么
+                // 累积的，这样面板分面的口径永远等于列表。
+                // 这里刻意不 trim：后端就是照请求值做 like 的，裁掉空白会让面板与列表口径分叉。
+                if (Object.prototype.hasOwnProperty.call(params, 'keyword')) {
+                    committedKeyword = params.keyword === null || params.keyword === undefined ? '' : String(params.keyword);
+                }
                 imagesInfinite.refresh(params);
                 // 上下文变了 ⇒ 面板里的「N 张」也要跟着变（没打开过面板就不发这个请求）
                 if (strategiesLoaded) {
@@ -2465,32 +2476,54 @@
 
             // 策略清单的取数参数与列表同形（相册 / 标签 / 关键字），
             // 这样面板里的「N 张」永远等于点进去能看到的张数。
+            // 关键字取 committedKeyword（已提交的那一份），不读输入框实时值：
+            // 列表只在回车时才带上搜索词，读实时值会让面板先「变」而列表没变。
             const strategyFacetParams = () => ({
                 album_id: selectedAlbum.id || undefined,
                 tags: selectedTagIds.slice(),
-                keyword: ($('#search').val() || '').trim() || undefined,
+                keyword: committedKeyword || undefined,
             });
 
-            const loadStrategies = () => axios.get('{{ route('user.image-strategies') }}', {params: strategyFacetParams()}).then(response => {
-                if (! response.data.status) {
-                    return;
-                }
-                allStrategies = (response.data.data.strategies || []).slice();
-                allStrategies.forEach(strategy => { strategyNames[strategy.id] = strategy.name; });
+            // 分面请求的序号：连点几下筛选/换相册时会有多个请求在路上，只让最新那个落地
+            // （旧响应后到会把新上下文的张数覆盖回去）。
+            let facetSeq = 0;
 
-                // 换了相册/标签后，已选中的策略可能在这个上下文里一张都没有 —— 仍然把它列出来
-                // （标 0 张），否则按钮显示「筛选已启用」却找不到是哪一项。
-                if (selectedStrategyId !== null && allStrategies.every(strategy => strategy.id !== selectedStrategyId)) {
-                    allStrategies.unshift({
-                        id: selectedStrategyId,
-                        name: strategyNames[selectedStrategyId] || '已选策略',
-                        total: 0,
-                    });
-                }
+            const loadStrategies = () => {
+                const seq = ++facetSeq;
+                return axios.get('{{ route('user.image-strategies') }}', {params: strategyFacetParams()}).then(response => {
+                    if (seq !== facetSeq) {
+                        return;                     // 已被更新的一次请求取代
+                    }
+                    if (! response.data.status) {
+                        strategiesLoaded = false;   // 没拿到清单 ⇒ 回到未加载，下次再试
+                        return;
+                    }
+                    allStrategies = (response.data.data.strategies || []).slice();
+                    allStrategies.forEach(strategy => { strategyNames[strategy.id] = strategy.name; });
 
-                renderStrategyFilter();
-                updateFilterButton();
-            });
+                    // 换了相册/标签后，已选中的策略可能在这个上下文里一张都没有 —— 仍然把它列出来
+                    // （标 0 张），否则按钮显示「筛选已启用」却找不到是哪一项。
+                    if (selectedStrategyId !== null && allStrategies.every(strategy => strategy.id !== selectedStrategyId)) {
+                        allStrategies.unshift({
+                            id: selectedStrategyId,
+                            name: strategyNames[selectedStrategyId] || '已选策略',
+                            total: 0,
+                        });
+                    }
+
+                    renderStrategyFilter();
+                    updateFilterButton();
+                    // 只有真正渲染出来了才算「加载过」：置得太早（旧实现是发请求之前就置 true）
+                    // 会让一次失败永久关掉重试 —— 面板从此一直显示空/旧数字，再也不重取。
+                    strategiesLoaded = true;
+                }).catch(() => {
+                    if (seq !== facetSeq) {
+                        return;
+                    }
+                    // 面板只是辅助信息，失败不打扰用户（不弹 toastr）；回到未加载态等下次重试
+                    strategiesLoaded = false;
+                });
+            };
 
             // 拉一次标签列表（页面加载时、以及增删标签之后）
             const loadTags = () => axios.get('{{ route('user.tags') }}').then(response => {
@@ -2551,10 +2584,10 @@
             });
 
             // 打开面板：先算高度；策略清单第一次打开时才去取（不占首屏请求）
+            // 预设「已加载」的活交给 loadStrategies() 自己（成功才置 true），这里只发起。
             $('#tag-filter').off('click.filterpanel').on('click.filterpanel', function () {
                 setTimeout(fitFilterPanel, 0);
                 if (! strategiesLoaded) {
-                    strategiesLoaded = true;
                     loadStrategies();
                 }
             });
