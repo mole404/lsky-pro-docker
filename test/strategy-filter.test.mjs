@@ -78,8 +78,11 @@ console.log('[A. 前端] 筛选面板：存储策略 + 标签');
     check('固定行高度用 offsetHeight 量（与 max-height 同一坐标系，rect 是视口坐标）',
         /tag-filter-menu > a'\)[\s\S]{0,160}el\.offsetHeight/.test(blade));
 
-    check('策略清单懒加载：第一次打开面板才取（strategiesLoaded 闸门）',
-        /if \(! strategiesLoaded\) \{[\s\S]{0,120}strategiesLoaded = true;[\s\S]{0,120}loadStrategies\(\)/.test(blade));
+    check('策略清单预取：图片墙第一页落地后就取（不用等第一次打开面板）',
+        /ds\.setSelectables\(\$photos\.find\(IMAGES_ITEM\)\);[\s\S]{0,400}if \(! strategiesLoaded\) \{[\s\S]{0,120}strategiesLoaded = true;[\s\S]{0,120}loadStrategies\(\)/.test(blade));
+
+    check('打开面板那条懒加载兜底仍在（预取失败也不至于空白）',
+        /#tag-filter'\)\.off\('click\.filterpanel'\)[\s\S]{0,300}if \(! strategiesLoaded\) \{[\s\S]{0,120}loadStrategies\(\)/.test(blade));
 
     check('每次重拉列表后同步刷新分面张数（resetImages 里）',
         /imagesInfinite\.refresh\(params\);[\s\S]{0,200}if \(strategiesLoaded\) \{[\s\S]{0,120}loadStrategies\(\)/.test(blade));
@@ -99,11 +102,20 @@ console.log('\n[B. 后端] 取数端点');
     check('GROUP BY strategy_id 前先 reorder()（避免把列表排序带进聚合查询）',
         /->filter\(\$request\)[\s\S]{0,200}->reorder\(\)[\s\S]{0,200}->groupBy\('strategy_id'\)/.test(controller));
 
-    check('返回结构是 [{id, name, total}]',
-        /'id' => \(int\) \$id,[\s\S]{0,120}'name' =>[\s\S]{0,120}'total' => \(int\) \$total/.test(controller));
+    check('选项清单取「全部图片」的策略分组（不受当前筛选影响，0 张也留在列表里）',
+        /\$allCounts = \$user->images\(\)[\s\S]{0,200}->reorder\(\)[\s\S]{0,200}->groupBy\('strategy_id'\)[\s\S]{0,120}->pluck\('total', 'strategy_id'\)/.test(controller)
+        && ! /\$allCounts = \$user->images\(\)[\s\S]{0,80}->filter\(/.test(controller));
 
-    check('strategy_id 为 null 的图不返回（id > 0 且名字非空才留下）',
-        /\$row\['id'\] > 0 && \$row\['name'\] !== ''/.test(controller));
+    check('每项的张数仍取当前上下文（$counts[$id] ?? 0）',
+        /'total' => \(int\) \(\$counts\[\$id\] \?\? 0\)/.test(controller));
+
+    check('返回结构是 [{id, name, total}]', /'id' => \$id,[\s\S]{0,120}'name' =>[\s\S]{0,120}'total' =>/.test(controller));
+
+    check('strategy_id 为 null 的图不出选项（id > 0 且名字非空才留下）',
+        /filter\(fn \(int \$id\) => \$id > 0\)/.test(controller)
+        && /\$row\['name'\] !== ''/.test(controller));
+
+    check('选项顺序稳定（按 id 升序，不随张数重排）', /->sort\(\)\s*->values\(\)/.test(controller));
 }
 
 console.log('\n[C. 样式] 面板宽度（less 与提交的产物各一份）');

@@ -63,6 +63,15 @@ class ImageController extends Controller
         /** @var User $user */
         $user = Auth::user();
 
+        // 选项清单 = 该用户「全部图片」里出现过的策略 —— 刻意不受当前筛选影响。
+        // 否则筛到某个标签后，上下文里 0 张的策略会整条消失，选项忽有忽无。
+        $allCounts = $user->images()
+            ->reorder()
+            ->selectRaw('strategy_id, count(*) as total')
+            ->groupBy('strategy_id')
+            ->pluck('total', 'strategy_id');
+
+        // 每项后面那个「N 张」才是当前上下文的数字（相册 / 标签 / 关键字同列表口径）。
         $counts = $user->images()
             ->filter($request)
             // filter() 会带上列表的排序，GROUP BY 查询用不上（SQLite 下还会随便挑一行来排）
@@ -71,17 +80,24 @@ class ImageController extends Controller
             ->groupBy('strategy_id')
             ->pluck('total', 'strategy_id');
 
+        // 按 id 升序 ⇒ 选项顺序稳定，不会随张数变化而重排；strategy_id 为空（未挂策略）的图不出选项
+        $ids = $allCounts->keys()
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->sort()
+            ->values();
+
         $names = Strategy::query()
-            ->whereIn('id', $counts->keys()->map(fn ($id) => (int) $id)->filter(fn (int $id) => $id > 0)->all())
+            ->whereIn('id', $ids->all())
             ->pluck('name', 'id');
 
-        $strategies = $counts
-            ->map(fn ($total, $id) => [
-                'id' => (int) $id,
-                'name' => (string) ($names[(int) $id] ?? ''),
-                'total' => (int) $total,
+        $strategies = $ids
+            ->map(fn (int $id) => [
+                'id' => $id,
+                'name' => (string) ($names[$id] ?? ''),
+                'total' => (int) ($counts[$id] ?? 0),
             ])
-            ->filter(fn (array $row) => $row['id'] > 0 && $row['name'] !== '')
+            ->filter(fn (array $row) => $row['name'] !== '')
             ->values();
 
         return $this->success('success', compact('strategies'));

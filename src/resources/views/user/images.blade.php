@@ -2079,6 +2079,14 @@
 
                     $photos.append(html);
                     ds.setSelectables($photos.find(IMAGES_ITEM));
+
+                    // 策略清单在图片墙第一页落地后就静默预取：第一次点开「筛选」时选项已经在，
+                    // 不用再等一次请求（原本是「第一次打开面板才去取」，那一下会空一会儿）。
+                    // 只发一次；之后由 resetImages() 随上下文刷新。
+                    if (! strategiesLoaded) {
+                        strategiesLoaded = true;
+                        loadStrategies();
+                    }
                 },
                 complete: function () {
                     if ($photos.html() !== '') {
