@@ -46,7 +46,7 @@
                 @endforeach
             </div>
             <div class="mt-2">
-                {{ $images->links() }}
+                <x-pagination :paginator="$images" />
             </div>
         @else
             <x-no-data message="这里还是空的～" />

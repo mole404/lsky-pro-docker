@@ -54,7 +54,7 @@
             <x-no-data message="没有找到任何角色组"/>
         @else
             <div class="mt-4">
-                {{ $groups->links() }}
+                <x-pagination :paginator="$groups" />
             </div>
         @endif
     </div>

@@ -183,6 +183,8 @@ src/resources/views/components/modal.blade.php
 src/resources/views/components/nav-link.blade.php
 #   src/resources/views/components/no-data.blade.php
 src/resources/views/components/no-data.blade.php
+#   src/resources/views/components/pagination.blade.php
+src/resources/views/components/pagination.blade.php
 #   src/resources/views/components/select.blade.php
 src/resources/views/components/select.blade.php
 #   src/resources/views/components/table.blade.php

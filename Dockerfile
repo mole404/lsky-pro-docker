@@ -127,7 +127,7 @@ RUN printf '%s\n' \
 # 这几个文件以后只要被改动（哪怕手滑），构建就会红 —— md5 必须随改动同步更新。
 RUN printf '%s\n' \
         'dcc6b370414cf329b7902cdd85f33d2f  ./config/convention.php' \
-        'ce9b22171fe3633beaa7caac7f5f4a01  ./routes/web.php' \
+        'f3cbca18762ba5c5bf96b58f2c3ee254  ./routes/web.php' \
         'c1ab546f3e7f5237c1d45435171858ce  ./routes/auth.php' \
         'c0ea82b790494e247de943f75fa5d059  ./app/Services/ImageService.php' \
     | md5sum -c -

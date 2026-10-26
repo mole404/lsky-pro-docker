@@ -43,7 +43,7 @@
             <x-no-data message="没有找到任何用户"/>
         @else
             <div class="mt-4">
-                {{ $users->links() }}
+                <x-pagination :paginator="$users" />
             </div>
         @endif
     </div>
