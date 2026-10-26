@@ -4,9 +4,9 @@
     <div class="mb-4 p-4 ls-card">
         <h1 class="text-xl font-semibold text-ink mb-2">上传图片</h1>
         <p class="text-ink-3 text-[13.5px] leading-relaxed">
-            最大可上传 {{ \App\Utils::formatSize($_group->configs->get(\App\Enums\GroupConfigKey::MaximumFileSize) * 1024) }} 的图片，上传队列最多
+            最大可上传 {{ \App\Utils::formatSize($_group->configs->get(\App\Enums\GroupConfigKey::MaximumFileSize) * 1024) }} 的图片，允许并发上传
             {{ $_group->configs->get(\App\Enums\GroupConfigKey::ConcurrentUploadNum) }}
-            张。本站已托管 {{ \App\Models\Image::query()->count() }} 张图片。
+            张。本站已存储 {{ \App\Models\Image::query()->count() }} 张图片。
         </p>
         <div class="mt-3 rounded-xl border-2 border-dotted border-line-2 w-full h-full" id="picker-dnd" onclick="$('#picker').click()">
             <div id="upload-container" class="relative group flex flex-col justify-center items-center gap-4 p-6 w-full h-full min-h-[200px] sm:min-h-[320px] text-ink-3 cursor-pointer">
