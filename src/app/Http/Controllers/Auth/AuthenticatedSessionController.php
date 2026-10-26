@@ -43,7 +43,9 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request)
     {
-        Auth::guard('web')->logout();
+        // 只注销当前这台设备：其它设备的会话、以及 remember token 都保持不动。
+        // （想一次踢掉全部设备，用设置页的「退出所有登录会话」。）
+        Auth::guard('web')->logoutCurrentDevice();
 
         $request->session()->invalidate();
 

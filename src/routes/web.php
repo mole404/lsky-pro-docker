@@ -38,7 +38,7 @@ Route::get('/', fn () => auth()->check() ? redirect()->route('images') : view('w
 
 Route::any('install', [Controller::class, 'install'])->name('install');
 Route::post('upload', [Controller::class, 'upload']);
-Route::group(['middleware' => ['auth']], function () {
+Route::group(['middleware' => ['auth', 'verified.if-required']], function () {
     Route::get('dashboard', [UserController::class, 'dashboard'])->name('dashboard');
     Route::prefix('settings')->group(function () {
         Route::get('', [UserController::class, 'settings'])->name('settings');
@@ -51,6 +51,9 @@ Route::group(['middleware' => ['auth']], function () {
         // 取消导出：置服务端旗标，流式循环在下一张图的边界停下（原生下载没法在客户端掐断）
         Route::post('export/cancel', [ExportController::class, 'cancel'])->name('settings.export.cancel');
     });
+
+    // 退出所有登录会话：轮换 remember token + 清掉该用户全部会话（含当前这台）
+    Route::post('logout-all-sessions', [UserController::class, 'logoutAllSessions'])->name('user.logout-all');
 
     Route::group([
         'prefix' => 'api',

@@ -64,5 +64,7 @@ class Kernel extends HttpKernel
         'signed' => \Illuminate\Routing\Middleware\ValidateSignature::class,
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
+        // 站内用户功能用这个：只在后台开着「邮箱验证」时拦未验证用户（管理员豁免）
+        'verified.if-required' => \App\Http\Middleware\EnsureEmailIsVerifiedIfRequired::class,
     ];
 }

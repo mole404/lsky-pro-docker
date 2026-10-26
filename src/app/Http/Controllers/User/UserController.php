@@ -13,6 +13,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -91,6 +92,71 @@ class UserController extends Controller
         }
         $user->save();
         return $this->success('保存成功');
+    }
+
+    /**
+     * 退出所有登录会话（设置页「登录会话」模块）。
+     *
+     * 三步的顺序有讲究：
+     *   ① 先轮换 remember_token —— 只删会话文件的话，设备拿着「记住我」cookie 下次请求就自动登回来
+     *   ② 再清掉该用户的全部会话（含当前这台）
+     *   ③ 最后把当前请求的会话也作废，前端收到成功响应后跳登录页
+     */
+    public function logoutAllSessions(Request $request): Response
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        $user->forceFill(['remember_token' => Str::random(60)])->save();
+
+        $this->purgeUserSessions($user->getAuthIdentifier());
+
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return $this->success('已退出所有登录会话');
+    }
+
+    /**
+     * 清掉某个用户的全部会话。按驱动分流：
+     *   · database —— sessions 表有 user_id 列，一条 DELETE 搞定
+     *   · file     —— 目录里一人一个文件，只能逐个读出来看里面的登录键（login_web_<sha1>）
+     *   · 其它     —— redis/memcached 没有按用户建的索引，做不到就记一条日志，别静默失败
+     */
+    protected function purgeUserSessions($userId): void
+    {
+        $driver = config('session.driver');
+
+        if ($driver === 'database') {
+            DB::connection(config('session.connection'))
+                ->table(config('session.table', 'sessions'))
+                ->where('user_id', $userId)
+                ->delete();
+
+            return;
+        }
+
+        if ($driver === 'file') {
+            $key = Auth::guard('web')->getName();   // login_web_<sha1(SessionGuard)>
+            $files = glob(rtrim((string) config('session.files'), '/').'/*') ?: [];
+
+            foreach ($files as $file) {
+                $contents = @file_get_contents($file);
+                if ($contents === false || $contents === '') {
+                    continue;
+                }
+                // 会话内容是 serialize() 过的数组，只认标量/数组，不许实例化任何类
+                $data = @unserialize($contents, ['allowed_classes' => false]);
+                if (is_array($data) && isset($data[$key]) && (string) $data[$key] === (string) $userId) {
+                    @unlink($file);
+                }
+            }
+
+            return;
+        }
+
+        Log::warning('logout-all: 当前 session 驱动无法按用户清理会话', ['driver' => $driver]);
     }
 
     public function setStrategy(Request $request): Response

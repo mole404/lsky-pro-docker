@@ -179,7 +179,9 @@ assert(CONTROLLER.includes('StreamedZipWriter::normalizeName('),
 const exportRoutes = lines(ROUTES).filter((l) => l.includes('ExportController::class'));
 assert(exportRoutes.length === 4, `导出路由 4 条（实际 ${exportRoutes.length}）`);
 assert(exportRoutes.every((l) => !l.includes('{')), '导出路由都不带路由参数（不会被 /user/images/{id} 抢走）');
-const authGroup = lineOf(ROUTES, "Route::group(['middleware' => ['auth']]");
+// 登录组现在挂两个中间件（auth + verified.if-required），按前缀匹配，别钉死整串
+const authGroupLine = lines(ROUTES).find((l) => /Route::group\(\['middleware' => \['auth'/.test(l)) || '';
+const authGroup = authGroupLine ? lineOf(ROUTES, authGroupLine) : -1;
 assert(authGroup > 0 && exportRoutes.every((l) => lineOf(ROUTES, l) > authGroup), '导出路由都在 auth 组内');
 
 /* ── ④ 用量统计兜底 ─────────────────────────────────────────────────────────── */

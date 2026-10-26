@@ -355,6 +355,21 @@ src/lang/zh_CN/zh_CN.json
 #       （delete() 原来在该策略的图片上把 strategy_id 置 null 再删策略，等于让那批图为空、
 #         url 前缀丢失；现在改为事务内复查图片数、有图直接返回失败，那句置 null 一并删除）
 src/app/Http/Controllers/Admin/StrategyController.php
+
+# [17 邮箱验证门禁：未验证用户登录后只能停在验证页]
+#   src/app/Http/Kernel.php
+#       （新增中间件别名 verified.if-required；原来的 verified 别名保留不动）
+#   src/app/Http/Controllers/Auth/AuthenticatedSessionController.php
+#       （destroy() 从 logout() 改成 logoutCurrentDevice()：默认只注销当前这台设备，
+#         「退出所有登录会话」交给设置页的独立按钮）
+src/app/Http/Kernel.php
+src/app/Http/Controllers/Auth/AuthenticatedSessionController.php
+
+# [18 用户设置页：批量导出之外再加「登录会话」模块（退出所有登录会话）]
+#   src/resources/views/user/settings.blade.php
+#       （页面底部新增一块说明 + 按钮，SweetAlert2 二次确认后调 logout-all-sessions；
+#         未验证用户被门禁挡住时走不到这里，属于预期）
+src/resources/views/user/settings.blade.php
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单

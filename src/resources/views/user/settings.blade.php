@@ -179,6 +179,20 @@
                 </div>
             </div>
         </div>
+
+        {{-- 登录会话：登出所有设备。按钮不进 settings.update 那个 form（页面脚本用
+             `$('form').submit()` 统一接管设置提交，塞进去会被当成保存设置）。 --}}
+        <p class="mt-6 mb-3 font-semibold text-lg text-ink">登录会话</p>
+        <div class="overflow-hidden sm:rounded-md shadow-card">
+            <div class="px-3 py-4 bg-surface sm:p-6">
+                <p class="text-sm text-ink-2 leading-relaxed">立即使您的账号在所有设备上退出登录，需要重新输入密码登录账号。</p>
+                <div class="mt-4">
+                    <button type="button" id="logout-all-sessions" class="ls-btn ls-btn-danger">
+                        <i class="fas fa-sign-out-alt"></i>退出所有登录会话
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     @push('scripts')
@@ -1747,6 +1761,32 @@
 
                 refresh();
             })();
+
+            // 退出所有登录会话：二次确认 → POST → 成功后回登录页。
+            // 默认焦点落在「取消」上（focusCancel），误触不会直接把所有设备踢下线。
+            $('#logout-all-sessions').on('click', function () {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '退出所有登录会话？',
+                    html: '立即使您的账号在所有设备上退出登录，需要重新输入密码登录账号。',
+                    showConfirmButton: false,
+                    showDenyButton: true,
+                    denyButtonText: '全部退出',
+                    showCancelButton: true,
+                    cancelButtonText: '取消',
+                    reverseButtons: true,
+                    focusCancel: true,
+                    heightAuto: false,
+                    scrollbarPadding: false,
+                }).then(result => {
+                    if (!result.isDenied) {
+                        return;
+                    }
+                    axios.post('{{ route('user.logout-all') }}').then(() => {
+                        window.location.href = '{{ route('login') }}';
+                    }).catch(() => toastr.error('退出失败，请重试'));
+                });
+            });
         </script>
     @endpush
 
