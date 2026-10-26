@@ -104,5 +104,25 @@ check('前端提交输入式确认', /confirm: '确认删除'/.test(strategyBlad
 check('前端按游标循环并有防空转保护', /data\.deleted === 0 && cursor === lastCursor/.test(strategyBlade));
 check('前端有"只删记录"开关', /purge-delete-files/.test(strategyBlade));
 
+
+check('「清空图片」排在「删除」之后', (() => {
+    const del = strategyBlade.indexOf('data-operate="delete"');
+    const purge = strategyBlade.indexOf('data-operate="purge"');
+    return del !== -1 && purge !== -1 && del < purge;
+})());
+check('有图时的删除提示改口径（清空而不是删除）', /请先清空该存储策略内的所有图片/.test(strategyBlade));
+check('勾选框默认不勾选（只删记录为默认行为）', /id="purge-delete-files"[^-]*?>/s.test(strategyBlade) && !/id="purge-delete-files"\s+checked/.test(strategyBlade));
+check('说明文案为「只删图床数据库记录 / 希望保留存储内图片」', /只删图床数据库记录[\s\S]{0,40}希望保留存储内图片/.test(strategyBlade));
+check('勾选框去掉蓝色焦点框', /#purge-delete-files\{outline:none!important/.test(strategyBlade));
+
+/* ---------------- C. 图片页筛选面板：清除筛选出现后要重算高度 ---------------- */
+
+console.log('C. 图片页筛选面板');
+const userBlade = read('resources', 'views', 'user', 'images.blade.php');
+check(
+    'updateFilterButton 切换「清除筛选」后重算面板高度',
+    /\$\('#tag-filter-clear'\)\.toggleClass\('hidden', ! on\);\s*\n(?:\s*\/\/[^\n]*\n)*\s*fitFilterPanel\(\);/.test(userBlade)
+);
+
 console.log(failures === 0 ? '\n全部通过' : `\n失败 ${failures} 项`);
 process.exit(failures === 0 ? 0 : 1);

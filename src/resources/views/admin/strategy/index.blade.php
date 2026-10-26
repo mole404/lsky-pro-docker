@@ -23,10 +23,10 @@
                 <td class="px-6 py-4 whitespace-nowrap">{{ \App\Utils::formatSize($strategy->images_sum_size * 1024) }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                     <a href="{{ route('admin.strategy.edit', ['id' => $strategy->id]) }}" class="text-brand hover:opacity-80">编辑</a>
+                    <a href="javascript:void(0)" data-operate="delete" class="text-danger hover:opacity-80">删除</a>
                     @if($strategy->images_count > 0)
                         <a href="javascript:void(0)" data-operate="purge" class="text-danger hover:opacity-80">清空图片</a>
                     @endif
-                    <a href="javascript:void(0)" data-operate="delete" class="text-danger hover:opacity-80">删除</a>
                 </td>
             </tr>
             @endforeach
@@ -51,11 +51,13 @@
                 Swal.fire({
                     icon: 'warning',
                     title: `清空存储策略【${name}】的图片？`,
-                    html: `该策略内共有 <b>${total}</b> 张图片，删除后无法恢复。<br><br>`
-                        + '<label style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px">'
-                        + '<input type="checkbox" id="purge-delete-files" checked> 同时删除存储里的物理文件</label>'
-                        + '（不勾选则只删数据库记录，适合存储已不可达或整桶即将删除的情况）<br><br>'
-                        + '请输入 <b>确认删除</b> 后继续',
+                    html: `<div style="text-align:left">该策略内共有 <b>${total}</b> 张图片，删除后无法恢复。<br><br>`
+                        + '<label style="display:flex;align-items:center;justify-content:flex-start;gap:8px">'
+                        + '<input type="checkbox" id="purge-delete-files"> 同时删除存储里的物理文件</label>'
+                        + '（不勾选则只删图床数据库记录，适合存储已不可达或希望保留存储内图片的情况）<br><br>'
+                        + '请输入 <b>确认删除</b> 后继续</div>'
+                        + '<style>#purge-delete-files{outline:none!important;box-shadow:none!important}'
+                        + '#purge-delete-files:focus,#purge-delete-files:focus-visible{outline:none!important;box-shadow:none!important}</style>',
                     input: 'text',
                     inputPlaceholder: '确认删除',
                     showCancelButton: true,
@@ -166,7 +168,7 @@
                     Swal.fire({
                         icon: 'warning',
                         title: `无法删除存储策略【${name}】`,
-                        html: `该存储策略内已有 <b>${imagesCount}</b> 张图片，无法直接删除。<br>如需删除，请先删除该存储策略内的所有图片。`,
+                        html: `该存储策略内已有 <b>${imagesCount}</b> 张图片，无法直接删除。<br>如需删除，请先清空该存储策略内的所有图片。`,
                         showCancelButton: false,
                         confirmButtonText: '知道了'
                     });

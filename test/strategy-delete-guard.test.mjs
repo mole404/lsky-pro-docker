@@ -74,7 +74,7 @@ check('blade 的 <tr> 带 data-images-count',
 
 // ④ 有图时的提示文案
 check('blade 含「无法删除存储策略」提示', bladeCode.includes('无法删除存储策略'));
-check('blade 含「请先删除」指引', bladeCode.includes('请先删除'));
+check('blade 含「请先清空」指引（清空图片入口出现后口径改了）', bladeCode.includes('请先清空'));
 check('blade 有图时用的是 html 提示块（含加粗数量）',
     /html:\s*`[^`]*<b>\$\{imagesCount\}<\/b>/.test(bladeCode));
 
