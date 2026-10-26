@@ -134,6 +134,12 @@ window.utils = {
                 }
             };
 
+            // 请求代号：每次 load / refresh 递增，只有「最新那一次」的响应能落地。
+            // 没有这道闸门时，快速连点筛选项（先取消、再点另一个）会让两个请求同时在路上，
+            // 先发的那个后到 ⇒ 把未筛选的一页 append 到筛选结果后面（一屏里两种结果混在一起），
+            // 同时 complete 里的 page++ 会跑两次、分页跳号。
+            let seq = 0;
+
             let load = (params, force) => {
                 if (!force) {
                     if (props.loading || props.finished) return;
@@ -145,8 +151,21 @@ window.utils = {
                     opts.data = $.extend(opts.data, params)
                 }
 
+                const mySeq = ++seq;
                 opts.beforeSend();
-                axios.get(opts.url, {params: opts.data}).then(opts.success).catch(opts.error).finally(opts.complete);
+                axios.get(opts.url, {params: opts.data})
+                    .then(response => {
+                        if (mySeq !== seq) return;      // 已经被更新的一次请求取代
+                        opts.success(response);
+                    })
+                    .catch(error => {
+                        if (mySeq !== seq) return;
+                        opts.error(error);
+                    })
+                    .finally(() => {
+                        if (mySeq !== seq) return;      // 别让旧请求改页面计数/加载态
+                        opts.complete();
+                    });
             };
 
             // 首次加载
