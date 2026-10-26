@@ -349,6 +349,11 @@ src/app/Http/Controllers/Auth/NewPasswordController.php
 src/lang/zh_CN/validation.php
 #   src/lang/zh_CN/zh_CN.json
 src/lang/zh_CN/zh_CN.json
+# [15b 真正生效的语言包：Laravel 的 JSON 翻译读 lang/<locale>.json，
+#      lang/zh_CN/zh_CN.json 只是随包进来的死副本（改它线上毫无变化）。
+#      「Log Out」→「退出登录」与验证页那句新说明都落在这份线上文件上。]
+#   src/lang/zh_CN.json
+src/lang/zh_CN.json
 
 # [16 存储策略删除保护：策略里还有图片时拒绝删除]
 #   src/app/Http/Controllers/Admin/StrategyController.php

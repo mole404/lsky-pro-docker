@@ -107,6 +107,7 @@
                     <div>
                         <label for="mail[from][address]" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>发件人地址</label>
                         <x-input type="email" name="mail[from][address]" id="mail[from][address]" value="{{ $configs['mail']['from']['address'] ?? '' }}" placeholder="请输入发件人邮箱地址" required/>
+                        <p class="mt-1 text-xs text-ink-2">例如：noreply@your.lsky-domain.com</p>
                     </div>
                     <div>
                         <label for="mail[from][name]" class="block text-sm font-medium text-ink"><span class="text-danger">*</span>发件人名称</label>

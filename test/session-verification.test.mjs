@@ -30,7 +30,11 @@ const registerController = read('app', 'Http', 'Controllers', 'Auth', 'Registere
 const settingsBlade = read('resources', 'views', 'user', 'settings.blade.php');
 const verifyBlade = read('resources', 'views', 'auth', 'verify-email.blade.php');
 const navBlade = read('resources', 'views', 'layouts', 'user-nav.blade.php');
+// 注意：Laravel 的 JSON 翻译读的是 lang/<locale>.json（= lang/zh_CN.json）。
+// lang/zh_CN/zh_CN.json 是随包进来的死副本，改它线上没有任何变化 —— 两个都要断言，别再改错。
 const zh = JSON.parse(read('lang', 'zh_CN', 'zh_CN.json'));
+const zhLive = JSON.parse(read('lang', 'zh_CN.json'));
+const settingBlade = read('resources', 'views', 'admin', 'setting', 'index.blade.php');
 const appCss = read('resources', 'css', 'app.css');
 const builtCss = read('public', 'css', 'app.css');
 
@@ -157,8 +161,21 @@ test('退出按钮不在 settings 表单里（页面用 $(\'form\').submit 接�
 
 section('C. 文案');
 
-test('「Log Out」中文是「退出登录」', () => {
-    assert.equal(zh['Log Out'], '退出登录');
+test('「Log Out」中文是「退出登录」（线上生效的那份）', () => {
+    assert.equal(zhLive['Log Out'], '退出登录');
+    assert.equal(zhLive['Logout'], '退出登录');
+});
+
+test('死副本与线上那份在这些 key 上保持一致', () => {
+    for (const k of ['Log Out', 'Logout', 'Log Out Other Browser Sessions']) {
+        assert.equal(zh[k], zhLive[k], 'key 不一致：' + k);
+    }
+});
+
+test('线上语言包里不再出现「注销」', () => {
+    for (const [k, v] of Object.entries(zhLive)) {
+        if (typeof v === 'string') assert.ok(!v.includes('注销'), '还有注销：' + k);
+    }
 });
 
 test('导航与验证页的退出链接都走这个 key', () => {
@@ -169,7 +186,7 @@ test('导航与验证页的退出链接都走这个 key', () => {
 test('验证页说明是新文案', () => {
     const key = "Thanks for signing up! Before getting started, could you verify your email address by clicking on the link we just emailed to you? If you didn't receive the email, we will gladly send you another.";
     assert.equal(
-        zh[key],
+        zhLive[key],
         '感谢您的注册！我们刚刚向您的邮箱内发送了一封验证邮件，请查看您的收件箱，完成验证后即可开始使用。如果收件箱内未收到验证邮件，请检查垃圾邮件，或重新发送验证邮件。'
     );
 });
@@ -191,6 +208,24 @@ test('.ls-btn-danger 在源码里', () => {
 
 test('.ls-btn-danger 在构建产物里（构建期不跑 npm）', () => {
     assert.match(builtCss, /\.ls-btn-danger/);
+});
+
+/* --------------------------------------------------- E 后台邮件设置 */
+
+section('E. 后台邮件设置');
+
+test('发件人地址下方有示例注释', () => {
+    const at = settingBlade.indexOf('id="mail[from][address]"');
+    assert.ok(at > -1, '找不到发件人地址输入框');
+    const chunk = settingBlade.slice(at, at + 400);
+    assert.match(chunk, /例如：noreply@your\.lsky-domain\.com/);
+});
+
+test('注释就在输入框和「发件人名称」之间', () => {
+    const addr = settingBlade.indexOf('id="mail[from][address]"');
+    const name = settingBlade.indexOf('id="mail[from][name]"');
+    const tip = settingBlade.indexOf('例如：noreply@your.lsky-domain.com');
+    assert.ok(addr < tip && tip < name, '注释位置不对');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
