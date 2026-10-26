@@ -21,6 +21,9 @@ const read = (...p) => fs.readFileSync(path.join(SRC, ...p), 'utf8');
 const exists = (...p) => fs.existsSync(path.join(SRC, ...p));
 
 const routes = read('routes', 'web.php');
+const apiRoutes = read('routes', 'api.php');
+const apiTokenController = read('app', 'Http', 'Controllers', 'Api', 'V1', 'TokenController.php');
+const apiImageController = read('app', 'Http', 'Controllers', 'Api', 'V1', 'ImageController.php');
 const authRoutes = read('routes', 'auth.php');
 const kernel = read('app', 'Http', 'Kernel.php');
 const middleware = read('app', 'Http', 'Middleware', 'EnsureEmailIsVerifiedIfRequired.php');
@@ -226,6 +229,44 @@ test('注释就在输入框和「发件人名称」之间', () => {
     const name = settingBlade.indexOf('id="mail[from][name]"');
     const tip = settingBlade.indexOf('例如：noreply@your.lsky-domain.com');
     assert.ok(addr < tip && tip < name, '注释位置不对');
+});
+
+/* ------------------------------------------------------- F API 侧门禁 */
+
+section('F. API 侧门禁');
+
+test('token 组挂了 verified.if-required', () => {
+    assert.match(apiRoutes, /'middleware' => \['auth:sanctum', 'verified\.if-required'\]/);
+});
+
+test('换 token 的公开路由在控制器里单独卡（中间件挂不上它）', () => {
+    const at = apiTokenController.indexOf('function store');
+    assert.ok(at > -1);
+    const body = apiTokenController.slice(at, at + 1200);
+    assert.match(body, /EnsureEmailIsVerifiedIfRequired::blocks\(\$user\)/);
+    assert.match(body, /请先验证您的邮箱/);
+    // 必须在发 token 之前
+    assert.ok(body.indexOf('blocks(') < body.indexOf('createToken('), '判断要早于签发 token');
+});
+
+test('带头部的 API 上传也卡住了', () => {
+    const at = apiImageController.indexOf('function upload');
+    const body = apiImageController.slice(at, at + 1600);
+    assert.match(body, /EnsureEmailIsVerifiedIfRequired::blocks\(Auth::user\(\)\)/);
+    assert.match(body, /请先验证您的邮箱/);
+});
+
+test('两处都用同一个判断，没有各写一份条件', () => {
+    assert.match(middleware, /public static function blocks\(\?User \$user\): bool/);
+});
+
+test('/api/* 回 200 + status:false，不 redirect、不回 401/403', () => {
+    assert.match(middleware, /\$request->is\('api\/\*'\)/);
+    const at = middleware.indexOf("$request->is('api/*')");
+    const end = middleware.indexOf('expectsJson', at);
+    const body = middleware.slice(at, end > at ? end : at + 220);
+    assert.match(body, /\$this->fail\('请先验证您的邮箱'\)/);
+    assert.ok(!/redirect|403/.test(body), 'api 分支不该 redirect 或带 403');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

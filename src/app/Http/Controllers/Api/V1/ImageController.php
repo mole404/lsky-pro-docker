@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\UploadException;
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\EnsureEmailIsVerifiedIfRequired;
 use App\Models\Image;
 use App\Models\User;
 use App\Services\ImageService;
@@ -37,6 +38,12 @@ class ImageController extends Controller
 
             if (! Auth::check()) {
                 throw new AuthenticationException('Authentication failed.');
+            }
+
+            // 后台开了邮箱验证时，未验证用户（管理员除外）不许上传 —— 这条路由是公开的
+            // （靠 Authorization 头区分登录/游客），中间件挂不上，用同一个判断卡住。
+            if (EnsureEmailIsVerifiedIfRequired::blocks(Auth::user())) {
+                return $this->fail('请先验证您的邮箱');
             }
         }
 

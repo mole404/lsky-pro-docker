@@ -375,6 +375,14 @@ src/app/Http/Controllers/Auth/AuthenticatedSessionController.php
 #       （页面底部新增一块说明 + 按钮，SweetAlert2 二次确认后调 logout-all-sessions；
 #         未验证用户被门禁挡住时走不到这里，属于预期）
 src/resources/views/user/settings.blade.php
+
+# [19 API 侧邮箱验证门禁：换 token 与带头部上传是公开路由，必须在控制器里卡]
+#   src/routes/api.php            —— auth:sanctum 组加 'verified.if-required'
+#   src/app/Http/Controllers/Api/V1/TokenController.php   —— store() 里 blocks() 判断（早于 createToken）
+#   src/app/Http/Controllers/Api/V1/ImageController.php   —— upload() 认证分支里 blocks() 判断
+src/routes/api.php
+src/app/Http/Controllers/Api/V1/TokenController.php
+src/app/Http/Controllers/Api/V1/ImageController.php
 EOF
 )
 # 去掉注释/空行/行尾空白，得到排序后的文件清单

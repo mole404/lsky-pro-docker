@@ -28,7 +28,9 @@ Route::group([
     Route::post('tokens', [TokenController::class, 'store'])->middleware('throttle:3,1');
 
     Route::group([
-        'middleware' => 'auth:sanctum',
+        // verified.if-required：后台开了邮箱验证时，未验证用户（管理员除外）拿 token 也调不动这些接口。
+        // 光靠这一行不够 —— POST tokens / POST upload 是公开路由，另在控制器里用同一个判断卡住。
+        'middleware' => ['auth:sanctum', 'verified.if-required'],
     ], function () {
         Route::get('images', [ImageController::class, 'images']);
         Route::delete('images/{key}', [ImageController::class, 'destroy']);
