@@ -255,7 +255,7 @@
             </tr>
             <tr>
                 <td class="px-3 py-2 text-ink-2 text-sm">strategy:<span class="italic">STRATEGY_NAME</span></td>
-                <td class="px-3 py-2 text-sm">匹配图片所属策略名称为 STRATEGY_NAME 的图片，如 <b>strategy:"Cloudflare R2"</b>（示例，请替换成自己的策略名）</td>
+                <td class="px-3 py-2 text-sm">匹配图片所属策略名称为 STRATEGY_NAME 的图片，如 <b>strategy:"Cloudflare R2"</b></td>
             </tr>
             <tr>
                 <td class="px-3 py-2 text-ink-2 text-sm">email:<span class="italic">EMAIL</span></td>
