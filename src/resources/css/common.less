@@ -412,13 +412,15 @@ html:root {
     }
 
     /* 危险操作的确认键（红底白字）：弹窗传 customClass: {confirmButton: 'ls-swal-danger'}。
-       白字对比度：底 4.83:1、hover 6.47:1，都过 AA（依据见 app.css 暗色令牌那段注释）。
+       白字对比度：亮色 底 4.83:1 / hover 6.47:1；暗色 底 6.47:1 / hover 4.83:1（都过 AA，
+       依据见 app.css 两处令牌注释）。
        hover 只换填充色/边框色，绝不用 filter / opacity —— 那会连带 swal2 那圈 3px 透明
        阴影一起显形（#export-cancel 踩过）。 */
     .swal2-styled.swal2-confirm.ls-swal-danger,
     .swal2-styled.swal2-deny.ls-swal-danger {
+        /* 边框单独一个令牌：暗色下深红填充与卡片底只有 2.70:1，靠亮一档的边框把轮廓勾出来。 */
         background-color: var(--lsky-danger-btn);
-        border-color: var(--lsky-danger-btn);
+        border: 1px solid var(--lsky-danger-btn-border);
         color: #fff;
         box-shadow: none;
     }
@@ -431,7 +433,10 @@ html:root {
 
     .swal2-styled.swal2-confirm.ls-swal-danger:focus,
     .swal2-styled.swal2-deny.ls-swal-danger:focus {
-        box-shadow: 0 0 0 3px var(--lsky-danger-soft);
+        /* 两圈：内圈是弹窗底色当"留白"，外圈才是真正的焦点环。
+           swal2 自己把 :focus-visible 的 outline 设成 none，这圈是键盘用户唯一的焦点提示，
+           所以环色必须和相邻颜色拉开（亮 10:1 / 暗 8.6:1），不能用 --lsky-danger-soft（1.09:1，等于没有）。 */
+        box-shadow: 0 0 0 2px var(--lsky-surface), 0 0 0 4px var(--lsky-danger-ring);
     }
 
     .swal2-styled.swal2-confirm.ls-swal-danger:focus:not(:focus-visible),

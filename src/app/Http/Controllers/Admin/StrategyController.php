@@ -4,18 +4,20 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StrategyRequest;
-use App\Services\UserService;
+use App\Services\ImagePurgeService;
 use App\Models\Image;
 use App\Models\Strategy;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class StrategyController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
         $keywords = $request->query('keywords');
         $strategies = Strategy::query()->when($keywords, function (Builder $builder, $keywords) {
@@ -23,6 +25,11 @@ class StrategyController extends Controller
         })->withCount('images')->withSum('images', 'size')->latest()->paginate();
 
         $strategies->appends(compact('keywords'));
+
+        // ?page= 越界（删到最后一页不足、旧书签）时回到最后一页，别停在空列表上。
+        if ($redirect = $this->redirectOutOfRangePage($strategies)) {
+            return $redirect;
+        }
 
         return view('admin.strategy.index', compact('strategies'));
     }
@@ -114,45 +121,106 @@ class StrategyController extends Controller
         $cursor = max(0, (int) $request->input('cursor', 0));
         $snapshot = max(0, (int) $request->input('snapshot', 0));
 
+        if ($snapshot > 0 && $cursor > $snapshot) {
+            return $this->fail('游标参数不合法');
+        }
+
+        // 同一个策略同时只允许一路清空：两个标签页同时点会互抢行锁，进度也会各算各的。
+        // 默认缓存驱动是 file（实现了 LockProvider，发导出那条路也靠它），但驱动可能被换成
+        // 不支持原子锁的（没建 cache_locks 表的 database、array）—— 那样 Cache::lock() 会直接抛，
+        // 整个功能 500。所以拿不到锁对象时退化成 Cache::add()：file 驱动的 add 走独占文件锁，
+        // 同样是原子的。
+        $lockKey = "purge-strategy:{$strategy->id}";
+        $lock = null;
+        $acquired = false;
+
+        try {
+            $lock = Cache::lock($lockKey, 600);
+            $acquired = $lock->get();
+        } catch (\Throwable $e) {
+            $lock = null;
+            $acquired = Cache::add($lockKey, 1, 600);
+        }
+
+        if (! $acquired) {
+            return $this->fail('该存储策略正在清空中，请等这一次跑完或刷新页面查看结果');
+        }
+
+        try {
+            return $this->purgeBatch($strategy, $deleteFiles, $limit, $cursor, $snapshot);
+        } finally {
+            $lock ? $lock->release() : Cache::forget($lockKey);
+        }
+    }
+
+    /**
+     * 跑一批清空。文件删除在事务提交之后（见 ImagePurgeService 的注释），
+     * 因此单批失败只会回滚数据库，不会出现「记录回来了、文件已经删了」。
+     */
+    private function purgeBatch(Strategy $strategy, bool $deleteFiles, int $limit, int $cursor, int $snapshot): Response
+    {
+        @set_time_limit(90);
+
         $base = Image::query()->where('strategy_id', $strategy->id);
+
         if ($snapshot === 0) {
             $snapshot = (int) (clone $base)->max('id');
         }
 
-        $ids = (clone $base)
+        $images = (clone $base)
             ->when($snapshot > 0, fn (Builder $builder) => $builder->where('id', '<=', $snapshot))
             ->when($cursor > 0, fn (Builder $builder) => $builder->where('id', '>', $cursor))
             ->orderBy('id')
             ->limit($limit)
-            ->pluck('id')
-            ->all();
+            // 只取用得到的列：删文件、清缓存、重算计数都不需要关联（也顺带没有了 N+1）。
+            ->get(['id', 'user_id', 'album_id', 'strategy_id', 'md5', 'sha1', 'pathname', 'key']);
 
+        $service = new ImagePurgeService();
         $deleted = 0;
-        if ($ids !== []) {
-            $service = new UserService();
-            // 单张删除的远端 I/O 可能很慢（存储不可达时要等超时）⇒ 按批切分并在接近
-            // 执行时间上限前主动收手，剩下的交给下一次请求，不让整个请求被 PHP 掐掉。
-            $deadline = microtime(true) + 25;
-            foreach (array_chunk($ids, 5) as $chunk) {
-                $deleted += $service->deleteImages($chunk, null, 'id', $deleteFiles);
-                $cursor = (int) end($chunk);
-                if (microtime(true) > $deadline) {
-                    break;
-                }
+        $filesDeleted = 0;
+        $filesFailed = 0;
+        // 单张远端删除有 5 秒超时（ImagePurgeService），这里再按批给一个总预算：
+        // 到点就收手，剩下的交给下一次请求，别让整个请求撞上 PHP/nginx 的时限。
+        $deadline = microtime(true) + 20;
+
+        foreach ($images->chunk(5) as $chunk) {
+            $result = $service->purge($chunk->values(), $deleteFiles);
+            $deleted += $result['records'];
+            $filesDeleted += $result['files_deleted'];
+            $filesFailed += $result['files_failed'];
+            $cursor = (int) $chunk->last()->id;
+
+            if (microtime(true) > $deadline) {
+                break;
             }
         }
 
+        // 进度按「游标之后还剩多少」算；这个区间空了就按快照全量复核一次 ——
+        // 否则「游标之后没图、游标之前还有残留」会被误判成已清空。
         $remaining = (clone $base)
             ->when($snapshot > 0, fn (Builder $builder) => $builder->where('id', '<=', $snapshot))
-            ->when($cursor > 0, fn (Builder $builder) => $builder->where('id', '>', $cursor))
+            ->where('id', '>', $cursor)
             ->count();
 
+        if ($remaining === 0) {
+            $remaining = (clone $base)
+                ->when($snapshot > 0, fn (Builder $builder) => $builder->where('id', '<=', $snapshot))
+                ->count();
+
+            if ($remaining > 0) {
+                // 还有残留但在游标之前 ⇒ 回到起点再扫一遍（正常情况下不会走到这里）。
+                $cursor = 0;
+            }
+        }
+
         return $this->success('已删除', [
-            'deleted' => $deleted,
-            'remaining' => $remaining,
-            'cursor' => $cursor,
-            'snapshot' => $snapshot,
-            'done' => $remaining === 0,
+            'deleted'       => $deleted,
+            'files_deleted' => $filesDeleted,
+            'files_failed'  => $filesFailed,
+            'remaining'     => $remaining,
+            'cursor'        => $cursor,
+            'snapshot'      => $snapshot,
+            'done'          => $remaining === 0,
         ]);
     }
 }

@@ -9,6 +9,7 @@ use App\Http\Requests\Admin\GroupRequest;
 use App\Models\Group;
 use App\Models\Image;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
@@ -26,7 +27,7 @@ class GroupController extends Controller
         ]);
     }
 
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
         $keywords = $request->query('keywords');
         $groups = Group::query()->when($keywords, function (Builder $builder, $keywords) {
@@ -34,6 +35,11 @@ class GroupController extends Controller
         })->withCount('users')->withCount('strategies')->latest()->paginate();
 
         $groups->appends(compact('keywords'));
+
+        // ?page= 越界（删到最后一页不足、旧书签）时回到最后一页，别停在空列表上。
+        if ($redirect = $this->redirectOutOfRangePage($groups)) {
+            return $redirect;
+        }
 
         $this->share();
 

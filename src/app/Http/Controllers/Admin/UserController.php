@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Support\Like;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +18,7 @@ use Illuminate\View\View;
 
 class UserController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
         $status = $request->query('status');
         $keywords = $request->query('keywords');
@@ -41,6 +42,11 @@ class UserController extends Controller
         $statuses = [-1 => '全部', 1 => '正常', 0 => '冻结'];
 
         $users->appends(compact('status', 'keywords'));
+
+        // ?page= 越界（删到最后一页不足、旧书签）时回到最后一页，别停在空列表上。
+        if ($redirect = $this->redirectOutOfRangePage($users)) {
+            return $redirect;
+        }
 
         return view('admin.user.index', compact('users', 'statuses'));
     }

@@ -52,6 +52,7 @@
                     icon: 'warning',
                     title: `清空存储策略【${name}】的图片？`,
                     html: `<div style="text-align:left">该策略内共有 <b>${total}</b> 张图片，删除后无法恢复。<br><br>`
+                        + '清空过程中如果有人继续上传新图将不会被删除，建议先编辑策略，把该策略关联的角色组全部取消，再执行清空图片操作，避免竞态行为。<br><br>'
                         + '<div style="display:flex;align-items:center;justify-content:flex-start;gap:6px">'
                         + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
                         + '<input type="checkbox" id="purge-delete-files"> 同时删除存储里的物理文件</label>'
@@ -90,6 +91,8 @@
                 let cursor = 0;
                 let snapshot = 0;
                 let deleted = 0;
+                let filesDeleted = 0;
+                let filesFailed = 0;
                 let lastCursor = -1;
                 let limit = deleteFiles ? 20 : 200;
 
@@ -118,11 +121,16 @@
 
                         let data = response.data.data;
                         deleted += data.deleted;
+                        filesDeleted += data.files_deleted || 0;
+                        filesFailed += data.files_failed || 0;
                         lastCursor = cursor;
                         cursor = data.cursor;
                         snapshot = data.snapshot;
 
-                        Swal.update({html: `已删除 <b>${deleted}</b> / ${total} 张`});
+                        Swal.update({
+                            html: `已删除 <b>${deleted}</b> / ${total} 张`
+                                + (deleteFiles ? `<br>物理文件 <b>${filesDeleted}</b> 张${filesFailed > 0 ? `，失败 <b>${filesFailed}</b> 张` : ''}` : '')
+                        });
 
                         // 有一批一张都没删掉、游标也没前进 => 停手，别在这里空转
                         if (data.deleted === 0 && cursor === lastCursor) {
@@ -130,10 +138,22 @@
                         }
 
                         if (data.done) {
+                            let summary = `已删除数据库记录 <b>${deleted}</b> 张。`;
+                            if (deleteFiles) {
+                                summary += `删除存储里的物理文件 <b>${filesDeleted}</b> 张。`;
+                                if (filesFailed > 0) {
+                                    summary += `<br><b>${filesFailed}</b> 张物理文件删除失败（已写入日志），`
+                                        + '可重新执行一次清空再试，或到存储服务端按日志里的路径手动清理。';
+                                }
+                            } else {
+                                summary += '<br>存储里的物理文件没有动，需要时请到存储服务端自行清理。';
+                            }
+                            summary += '<br>该存储策略的图片数量已归零，现在可以删除它了。';
+
                             Swal.fire({
                                 icon: 'success',
                                 title: '已清空',
-                                html: `共删除 <b>${deleted}</b> 张图片。<br>该存储策略的图片数量已归零，现在可以删除它了。`,
+                                html: summary,
                                 showCancelButton: false,
                                 confirmButtonText: '刷新页面'
                             }).then(function () {
@@ -150,7 +170,7 @@
                         Swal.fire({
                             icon: 'error',
                             title: '清空中断',
-                            text: `${message}（已删除 ${deleted} 张，刷新后可继续）`,
+                            text: `${message}（已删除 ${deleted} 张${deleteFiles ? `、物理文件 ${filesDeleted} 张` : ''}，刷新后可继续）`,
                             showCancelButton: false,
                             confirmButtonText: '刷新页面'
                         }).then(function () {
