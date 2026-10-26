@@ -411,6 +411,34 @@ html:root {
         color: var(--lsky-danger);
     }
 
+    /* 危险操作的确认键（红底白字）：弹窗传 customClass: {confirmButton: 'ls-swal-danger'}。
+       白字对比度：底 4.83:1、hover 6.47:1，都过 AA（依据见 app.css 暗色令牌那段注释）。
+       hover 只换填充色/边框色，绝不用 filter / opacity —— 那会连带 swal2 那圈 3px 透明
+       阴影一起显形（#export-cancel 踩过）。 */
+    .swal2-styled.swal2-confirm.ls-swal-danger,
+    .swal2-styled.swal2-deny.ls-swal-danger {
+        background-color: var(--lsky-danger-btn);
+        border-color: var(--lsky-danger-btn);
+        color: #fff;
+        box-shadow: none;
+    }
+
+    .swal2-styled.swal2-confirm.ls-swal-danger:hover,
+    .swal2-styled.swal2-deny.ls-swal-danger:hover {
+        background-color: var(--lsky-danger-btn-hover);
+        border-color: var(--lsky-danger-btn-hover);
+    }
+
+    .swal2-styled.swal2-confirm.ls-swal-danger:focus,
+    .swal2-styled.swal2-deny.ls-swal-danger:focus {
+        box-shadow: 0 0 0 3px var(--lsky-danger-soft);
+    }
+
+    .swal2-styled.swal2-confirm.ls-swal-danger:focus:not(:focus-visible),
+    .swal2-styled.swal2-deny.ls-swal-danger:focus:not(:focus-visible) {
+        box-shadow: none;
+    }
+
     // 导出弹窗里的「取消导出」是页面自己插进 swal 的 html 容器的按钮（#export-cancel），
     // 长相沿用上面的通用取消键（同带 swal2-styled swal2-cancel 两个类），但语义是「中断导出」
     // 这种危险动作 ⇒ 红底白字。必须用 id 限定：写成 .swal2-cancel 会把全站确认框的灰色取消键

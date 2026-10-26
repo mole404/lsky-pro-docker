@@ -124,5 +124,69 @@ check(
     /\$\('#tag-filter-clear'\)\.toggleClass\('hidden', ! on\);\s*\n(?:\s*\/\/[^\n]*\n)*\s*fitFilterPanel\(\);/.test(userBlade)
 );
 
+
+/* ---------------- D. 危险确认键（红底白字） ---------------- */
+
+console.log('D. 危险确认键');
+
+const dangerDialogs = {
+    'admin/user/index.blade.php': 1,
+    'admin/image/index.blade.php': 1,
+    'admin/strategy/index.blade.php': 2,
+    'admin/group/index.blade.php': 1,
+    'user/images.blade.php': 3,
+};
+for (const [name, expected] of Object.entries(dangerDialogs)) {
+    const text = name.startsWith('user/') ? read('resources', 'views', 'user', 'images.blade.php')
+        : blades[name];
+    const hits = (text.match(/customClass: \{confirmButton: 'ls-swal-danger'\}/g) || []).length;
+    check(`${name} 的 ${expected} 个删除确认键都挂了危险样式`, hits === expected, `实际 ${hits}`);
+}
+
+check('「退出所有登录会话」的 deny 键也挂了危险样式',
+    /customClass: \{denyButton: 'ls-swal-danger'\}/.test(read('resources', 'views', 'user', 'settings.blade.php')));
+
+const lessCss = read('resources', 'css', 'common.less');
+check('common.less 定义了 .ls-swal-danger', /\.swal2-styled\.swal2-confirm\.ls-swal-danger[\s\S]{0,400}?ls-swal-danger:focus/.test(lessCss));
+check('危险键的红底/白字由令牌驱动', /ls-swal-danger[\s\S]{0,200}?background-color: var\(--lsky-danger-btn\)/.test(lessCss));
+check('危险键 hover 只换颜色（不用 filter / opacity）', (() => {
+    const m = lessCss.match(/ls-swal-danger:hover[\s\S]{0,200}?\}/);
+    return !!m && !/filter|opacity|transform/.test(m[0]);
+})());
+
+// 产物必须和源同步（构建期不跑 npm，产物是提交进仓库的）
+const commonArtifact = read('public', 'css', 'common.css');
+check('public/css/common.css 里也有危险键规则（产物没落盘就等于没生效）',
+    commonArtifact.includes('html:root .swal2-styled.swal2-confirm.ls-swal-danger'));
+
+// 暗色按钮底色必须能和白字过 AA（≥4.5:1）
+const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+        .map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a, b) => {
+    const [x, y] = [lum(a), lum(b)];
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+const darkTokens = read('resources', 'css', 'app.css').split('html.dark')[1] || '';
+const darkBtn = (darkTokens.match(/--lsky-danger-btn:\s*(#[0-9a-f]{6})/) || [])[1];
+check('暗色危险按钮底色与白字对比度 ≥ 4.5:1', !!darkBtn && contrast(darkBtn, '#ffffff') >= 4.5,
+    `底色 ${darkBtn} 对比度 ${darkBtn ? contrast(darkBtn, '#ffffff').toFixed(2) : '?'}`);
+
+/* ---------------- E. 图片管理页每页 36 张 ---------------- */
+
+console.log('E. 每页张数');
+check('图片管理页每页 36 张', /\)->latest\(\)->paginate\(36\);/.test(read('app', 'Http', 'Controllers', 'Admin', 'ImageController.php')));
+
+/* ---------------- F. 清空弹窗的说明改成问号按钮 ---------------- */
+
+console.log('F. 清空弹窗说明');
+check('勾选项后面有问号按钮', /id="purge-help-btn"/.test(strategyBlade));
+check('说明默认收起（display:none）', /id="purge-help"[^>]*display:none/.test(strategyBlade));
+check('问号按钮点击切换显示', /getElementById\(\\?'purge-help\\?'\)/.test(strategyBlade));
+check('说明文字仍在（问号按钮的 title 与展开内容）', (strategyBlade.match(/不勾选则只删图床数据库记录/g) || []).length >= 2);
+
+
 console.log(failures === 0 ? '\n全部通过' : `\n失败 ${failures} 项`);
 process.exit(failures === 0 ? 0 : 1);

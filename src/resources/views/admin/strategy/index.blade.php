@@ -52,15 +52,23 @@
                     icon: 'warning',
                     title: `清空存储策略【${name}】的图片？`,
                     html: `<div style="text-align:left">该策略内共有 <b>${total}</b> 张图片，删除后无法恢复。<br><br>`
-                        + '<label style="display:flex;align-items:center;justify-content:flex-start;gap:8px">'
+                        + '<div style="display:flex;align-items:center;justify-content:flex-start;gap:6px">'
+                        + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
                         + '<input type="checkbox" id="purge-delete-files"> 同时删除存储里的物理文件</label>'
-                        + '（不勾选则只删图床数据库记录，适合存储已不可达或希望保留存储内图片的情况）<br><br>'
-                        + '请输入 <b>确认删除</b> 后继续</div>'
+                        + '<button type="button" id="purge-help-btn" title="不勾选则只删图床数据库记录，适合存储已不可达或希望保留存储内图片的情况" aria-label="说明"'
+                        + ' style="flex:0 0 auto;width:16px;height:16px;padding:0;border-radius:50%;border:1px solid var(--lsky-border-2);'
+                        + 'background:transparent;color:var(--lsky-text-3);font-size:11px;line-height:1;cursor:pointer"'
+                        + ' onclick="var h=document.getElementById(\'purge-help\');h.style.display=(h.style.display===\'none\'?\'block\':\'none\')">?</button>'
+                        + '</div>'
+                        + '<div id="purge-help" style="display:none;margin-top:6px;font-size:13px;color:var(--lsky-text-2)">'
+                        + '不勾选则只删图床数据库记录，适合存储已不可达或希望保留存储内图片的情况</div>'
+                        + '<div style="margin-top:12px">请输入 <b>确认删除</b> 后继续</div></div>'
                         + '<style>#purge-delete-files{outline:none!important;box-shadow:none!important}'
                         + '#purge-delete-files:focus,#purge-delete-files:focus-visible{outline:none!important;box-shadow:none!important}</style>',
                     input: 'text',
                     inputPlaceholder: '确认删除',
                     showCancelButton: true,
+                    customClass: {confirmButton: 'ls-swal-danger'},
                     confirmButtonText: '开始清空',
                     cancelButtonText: '取消',
                     preConfirm: function (value) {
@@ -180,6 +188,7 @@
                     text: "如果某个组下面没有存储策略，该组下面的用户将无法上传图片。",
                     icon: 'warning',
                     showCancelButton: true,
+                    customClass: {confirmButton: 'ls-swal-danger'},
                     confirmButtonText: '确认删除',
                 }).then((result) => {
                     if (result.isConfirmed) {

@@ -315,6 +315,7 @@
                     text: "记录与物理文件将会一起删除。",
                     icon: 'warning',
                     showCancelButton: true,
+                    customClass: {confirmButton: 'ls-swal-danger'},
                     confirmButtonText: '确认删除',
                 }).then((result) => {
                     if (result.isConfirmed) {

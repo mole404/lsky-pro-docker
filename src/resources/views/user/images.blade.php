@@ -2295,6 +2295,7 @@
                             showCancelButton: true,
                             confirmButtonColor: '#3085d6',
                             cancelButtonColor: '#d33',
+                            customClass: {confirmButton: 'ls-swal-danger'},
                             confirmButtonText: '确认',
                         }).then((result) => {
                             if (result.isConfirmed) {
@@ -2809,6 +2810,7 @@
                         showCancelButton: true,
                         confirmButtonColor: '#3085d6',
                         cancelButtonColor: '#d33',
+                        customClass: {confirmButton: 'ls-swal-danger'},
                         confirmButtonText: '确认',
                         cancelButtonText: '取消',
                     }).then(result => {
@@ -3668,6 +3670,7 @@
                         text: "删除后不可恢复，记录和文件同时删除",
                         icon: 'warning',
                         showCancelButton: true,
+                        customClass: {confirmButton: 'ls-swal-danger'},
                         confirmButtonText: '确认删除',
                         cancelButtonText: '取消',
                     }).then((result) => {

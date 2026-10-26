@@ -1771,6 +1771,7 @@
                     html: '立即使您的账号在所有设备上退出登录，需要重新输入密码登录账号。',
                     showConfirmButton: false,
                     showDenyButton: true,
+                    customClass: {denyButton: 'ls-swal-danger'},
                     denyButtonText: '全部退出',
                     showCancelButton: true,
                     cancelButtonText: '取消',

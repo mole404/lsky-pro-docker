@@ -5444,7 +5444,7 @@
                              );
                          }
                      });
-@@ -386,6 +2283,12 @@
+@@ -386,21 +2283,30 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -5457,7 +5457,10 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +2298,14 @@
+                             showCancelButton: true,
+                             confirmButtonColor: '#3085d6',
+                             cancelButtonColor: '#d33',
++                            customClass: {confirmButton: 'ls-swal-danger'},
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -5474,7 +5477,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +2337,18 @@
+@@ -432,15 +2338,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -5496,7 +5499,7 @@
                  });
              }
  
-@@ -449,9 +2357,544 @@
+@@ -449,9 +2358,545 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -5955,6 +5958,7 @@
 +                        showCancelButton: true,
 +                        confirmButtonColor: '#3085d6',
 +                        cancelButtonColor: '#d33',
++                        customClass: {confirmButton: 'ls-swal-danger'},
 +                        confirmButtonText: '确认',
 +                        cancelButtonText: '取消',
 +                    }).then(result => {
@@ -6044,7 +6048,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +2911,288 @@
+@@ -468,11 +2913,288 @@
              });
          </script>
          <script>
@@ -6333,7 +6337,7 @@
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +3206,14 @@
+@@ -486,10 +3208,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -6350,7 +6354,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -497,22 +3221,112 @@
+@@ -497,22 +3223,112 @@
                  $(operates.map(item => `[data-operate=${item}]`).toString()).css('display', 'block');
              };
  
@@ -6467,7 +6471,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +3347,250 @@
+@@ -533,27 +3349,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -6735,7 +6739,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +3601,9 @@
+@@ -564,7 +3603,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -6746,7 +6750,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +3611,19 @@
+@@ -572,47 +3613,19 @@
                          }
                      });
                  },
@@ -6803,7 +6807,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +3660,10 @@
+@@ -649,10 +3662,15 @@
                  },
                  delete() {
                      Swal.fire({
@@ -6814,7 +6818,12 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +3677,23 @@
+                         showCancelButton: true,
++                        customClass: {confirmButton: 'ls-swal-danger'},
+                         confirmButtonText: '确认删除',
+                         cancelButtonText: '取消',
+                     }).then((result) => {
+@@ -662,13 +3680,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -6840,7 +6849,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,21 +3708,30 @@
+@@ -683,21 +3711,30 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -6877,7 +6886,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +3753,11 @@
+@@ -719,6 +3756,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -6889,7 +6898,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +3822,9 @@
+@@ -783,9 +3825,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -6902,7 +6911,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +3842,10 @@
+@@ -803,9 +3845,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -6914,7 +6923,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -827,7 +3867,9 @@
+@@ -827,7 +3870,9 @@
                  let operate = $(this).data('operate');
                  let selected = ds.getSelection();
  
@@ -6925,7 +6934,7 @@
                      return false;
                  }
  
-@@ -844,17 +3886,138 @@
+@@ -844,17 +3889,138 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;

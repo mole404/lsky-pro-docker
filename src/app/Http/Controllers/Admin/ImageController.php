@@ -88,7 +88,7 @@ class ImageController extends Controller
                     }
                 });
             }
-        })->latest()->paginate(40);
+        })->latest()->paginate(36);
         $images->getCollection()->each(function (Image $image) {
             $image->append('url', 'pathname', 'thumb_url');
             $image->album?->setVisible(['name']);

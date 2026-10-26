@@ -66,10 +66,12 @@
         --lsky-accent-hover: #60a5fa;
         --lsky-accent-soft: #16233b;
         --lsky-danger: #f87171;
-        /* 暗色的悬停方向与 accent 一致：往上提一档（红 500 → 红 400），不是压暗。
-           静止态用红 500 而不是 --lsky-danger 的红 400 —— 后者在深色卡面上像已被高亮。 */
-        --lsky-danger-btn: #ef4444;
-        --lsky-danger-btn-hover: #f87171;
+        /* 暗色沿用「悬停提亮」的方向（与 accent 一致），但把两档都压到白字能读的深度：
+           #b91c1c 与白字 6.47:1、hover #dc2626 与白字 4.83:1，都过 WCAG AA。
+           原来用的红 500(#ef4444) 白字只有 3.76:1、红 400(#f87171) 更差（2.77:1），
+           13.5px 的按钮文字在暗色下发糊。文字色固定 #fff，见 common.less 的 .ls-swal-danger。 */
+        --lsky-danger-btn: #b91c1c;
+        --lsky-danger-btn-hover: #dc2626;
         --lsky-danger-soft: #2a1618;
         --lsky-shadow-card: 0 1px 2px rgba(0, 0, 0, .35), 0 1px 3px rgba(0, 0, 0, .3);
         --lsky-shadow-pop: 0 8px 22px rgba(0, 0, 0, .45);
