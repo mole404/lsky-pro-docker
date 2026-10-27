@@ -8,6 +8,7 @@ use App\Services\UserService;
 use App\Support\Like;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
@@ -15,7 +16,7 @@ use Illuminate\View\View;
 
 class ImageController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
         $keywords = $request->query('keywords');
         $images = Image::query()->with(['user' => function (BelongsTo $belongsTo) {
@@ -88,7 +89,7 @@ class ImageController extends Controller
                     }
                 });
             }
-        })->latest()->paginate(40);
+        })->latest()->paginate(36);
         $images->getCollection()->each(function (Image $image) {
             $image->append('url', 'pathname', 'thumb_url');
             $image->album?->setVisible(['name']);
@@ -97,6 +98,11 @@ class ImageController extends Controller
         });
 
         $images->appends(compact('keywords'));
+
+        // ?page= 越界（删到最后一页不足、旧书签）时回到最后一页，别停在空列表上。
+        if ($redirect = $this->redirectOutOfRangePage($images)) {
+            return $redirect;
+        }
 
         return view('admin.image.index', compact('images'));
     }

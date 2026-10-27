@@ -2295,6 +2295,7 @@
                             showCancelButton: true,
                             confirmButtonColor: '#3085d6',
                             cancelButtonColor: '#d33',
+                            customClass: {confirmButton: 'ls-swal-danger'},
                             confirmButtonText: '确认',
                         }).then((result) => {
                             if (result.isConfirmed) {
@@ -2364,6 +2365,12 @@
                 const on = selectedStrategyId !== null || selectedTagIds.length > 0;
                 $('#tag-filter').toggleClass('bg-brand-soft text-brand', on).toggleClass('text-ink', ! on);
                 $('#tag-filter-clear').toggleClass('hidden', ! on);
+                // 「清除筛选」这一行是面板底部的固定行（实测高 36px，开关行 37px）：
+                // 它一出现，固定行总高从 37 变成 73，而滚动区高度是打开面板时按「当时的固定行」
+                // 算出来的 —— 不重算的话多出来的 36px 会把「显示图片标签」那行顶到面板的
+                // overflow:hidden 外面（实测被裁 24.5px，看起来就是被「清除筛选」盖住）。
+                // 面板没打开时 fitFilterPanel 自己会直接返回，调用是安全的。
+                fitFilterPanel();
             };
 
             // 存储策略清单（单选）：名字允许换行，再长也完整显示，不截断
@@ -2803,6 +2810,7 @@
                         showCancelButton: true,
                         confirmButtonColor: '#3085d6',
                         cancelButtonColor: '#d33',
+                        customClass: {confirmButton: 'ls-swal-danger'},
                         confirmButtonText: '确认',
                         cancelButtonText: '取消',
                     }).then(result => {
@@ -3662,6 +3670,7 @@
                         text: "删除后不可恢复，记录和文件同时删除",
                         icon: 'warning',
                         showCancelButton: true,
+                        customClass: {confirmButton: 'ls-swal-danger'},
                         confirmButtonText: '确认删除',
                         cancelButtonText: '取消',
                     }).then((result) => {

@@ -179,7 +179,12 @@ console.log('\n[③ 旧弹窗] 两个确认框改用与新弹窗同一套皮肤�
     check('「设置权限」那个 Swal 弹窗已彻底下线（公开/私有 文案一个不剩）',
         !blade.includes('选择一个权限') && !blade.includes('设置权限') && !blade.includes("input: 'select'")
         && !blade.includes('公开') && !blade.includes('私有'));
-    check('确认框选项没被改（没塞 customClass 之类，纯靠 CSS 统一）', !blade.includes('customClass'));
+    // 皮肤仍然靠 CSS 统一；唯一允许的弹窗级选项是「危险键」这一个类名，
+    // 其余任何自定义类/内联颜色都不要出现在确认框里。
+    check('确认框只给危险键挂 ls-swal-danger，其余仍靠 CSS 统一', (() => {
+        const found = blade.match(/customClass:\s*\{[^}]*\}/g) || [];
+        return found.every((block) => /^customClass: \{(?:confirmButton|denyButton): 'ls-swal-danger'\}$/.test(block));
+    })());
     check('校验/提交流程一字未改（preConfirm + showValidationMessage + inputValue）',
         blade.includes('inputValue: item.filename') && blade.includes('preConfirm: (value) => {')
         && blade.includes("Swal.showValidationMessage('服务异常，请稍后重试。')"));

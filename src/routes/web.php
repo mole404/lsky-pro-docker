@@ -118,6 +118,7 @@ Route::group(['prefix' => 'admin', 'middleware' => ['auth.admin']], function () 
         Route::get('{id}', [AdminStrategyController::class, 'edit'])->name('admin.strategy.edit');
         Route::put('{id}', [AdminStrategyController::class, 'update'])->name('admin.strategy.update');
         Route::delete('{id}', [AdminStrategyController::class, 'delete'])->name('admin.strategy.delete');
+        Route::post('{id}/purge-images', [AdminStrategyController::class, 'purgeImages'])->name('admin.strategy.images.purge');
     });
 
     Route::group(['prefix' => 'settings'], function () {

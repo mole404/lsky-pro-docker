@@ -3942,7 +3942,7 @@
 +            <div class="mb-4 flex items-center gap-3">
 +                <img src="__thumb_url__" alt="__filename__" class="h-16 w-16 shrink-0 rounded-lg border border-line bg-surface-2 object-cover">
 +                <p class="min-w-0 truncate text-[16px] font-semibold leading-6 text-ink">图片详细信息</p>
-             </div>
++            </div>
 +            <dl class="divide-y divide-line rounded-lg border border-line bg-surface-2 px-4">
 +                <div class="flex flex-col gap-0.5 py-3 sm:flex-row sm:gap-4">
 +                    <dt class="shrink-0 text-[13px] leading-6 text-ink-3 sm:w-28">上传时间</dt>
@@ -4072,9 +4072,9 @@
 +                <input type="text" name="name" maxlength="64" class="ls-input h-11 min-w-0 flex-1 text-[14px] sm:h-9" placeholder="请输入标签名称">
 +                <button type="submit" class="ls-btn h-11 shrink-0 px-4 sm:h-9">确认修改</button>
 +            </form>
-         </div>
-     </script>
- 
++        </div>
++    </script>
++
 +    {{-- 「标签管理」窗口里的一行：左边是勾选区（整块 ≥44px 点击区），右边两个常显的 44×44
 +         「重命名 / 删除」按钮（改标签本身，不影响图片）。
 +         勾选语义（按两态）：勾上 = 给选中的这些图片加上该标签；取消勾选 = 从这些图片移除。
@@ -4089,10 +4089,10 @@
 +            <div class="tag-row-actions flex shrink-0 items-center border-l border-line">
 +                <button type="button" class="update flex h-11 w-11 items-center justify-center text-ink-2 hover:bg-surface-3 hover:text-brand" aria-label="重命名标签"><i class="fas fa-edit text-[15px]"></i></button>
 +                <button type="button" class="delete flex h-11 w-11 items-center justify-center text-danger hover:bg-surface-3" aria-label="删除标签"><i class="fas fa-trash-alt text-[15px]"></i></button>
-+            </div>
-+        </div>
-+    </script>
-+
+             </div>
+         </div>
+     </script>
+ 
 +    @push('styles')
 +        <style>
 +            /* 按在图片上拖动时，浏览器会启动 <img> 的原生拖拽、把 mousemove 变成 drag 事件 ——
@@ -4125,7 +4125,7 @@
          <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
          <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
          <script>
-@@ -217,44 +987,1064 @@
+@@ -217,44 +987,1067 @@
  
              const HEADER_TITLE = '#header-title';
              const IMAGES_SCROLL = '#images-scroll';
@@ -4196,7 +4196,10 @@
 +            let allStrategies = [];    // 存储策略清单（只含「图片里实际出现过」的，带当前上下文张数）
 +            let strategyNames = {};    // id => 名字，切换上下文后清单里可能暂时没有已选中的那项
 +            let selectedStrategyId = null;   // 存储策略是**单选**；null = 不按策略筛（显示全部）
-+            let strategiesLoaded = false;    // 懒加载：第一次打开面板才去取清单
++            let strategiesLoaded = false;    // 清单是否真的取到了（**成功落地才置 true**：失败要能再试）
++            // 已经提交给图片列表的搜索词。输入框里正在敲、还没回车的字不算 ——
++            // 面板上的「N 张」必须和列表同口径，否则会出现「面板说 3 张、点进去 7 张」。
++            let committedKeyword = '';
 +
 +            // 标签名来自用户输入，塞进 innerHTML 之前一律先转义
 +            const escapeHtml = (value) => String(value === null || value === undefined ? '' : value)
@@ -5212,7 +5215,7 @@
                  success: function (response) {
                      if (!response.status) {
                          return toastr.error(response.message);
-@@ -269,18 +2059,34 @@
+@@ -269,18 +2062,35 @@
                      for (const i in images) {
                          html += $('#images-item-tpl').html()
                              .replace(/__id__/g, images[i].id)
@@ -5244,14 +5247,15 @@
 +                    // 策略清单在图片墙第一页落地后就静默预取：第一次点开「筛选」时选项已经在，
 +                    // 不用再等一次请求（原本是「第一次打开面板才去取」，那一下会空一会儿）。
 +                    // 只发一次；之后由 resetImages() 随上下文刷新。
++                    // 注意别在这里预设「已加载」：loadStrategies() 自己会在成功落地后才置 true，
++                    // 失败时留 false ⇒ 打开面板那一刻还会再试一次。
 +                    if (! strategiesLoaded) {
-+                        strategiesLoaded = true;
 +                        loadStrategies();
 +                    }
                  },
                  complete: function () {
                      if ($photos.html() !== '') {
-@@ -300,22 +2106,82 @@
+@@ -300,22 +2110,89 @@
                  }
              });
  
@@ -5282,6 +5286,13 @@
 +                //   这段时间页面高度剧烈变化（塌缩 → 逐页长回来），最容易被补齐/重排带着连发。
 +                resetGuardUntil = Date.now() + 800;
 +                try { window.__lskyResetGuardUntil = resetGuardUntil; } catch (e) {}
++                // 只有「带 keyword 的那次重置」才是搜索词变更（搜索框回车）；其它重置（换排序、
++                // 换相册/标签/策略）都沿用列表里已有的那份 —— 列表自己的 data.keyword 也是这么
++                // 累积的，这样面板分面的口径永远等于列表。
++                // 这里刻意不 trim：后端就是照请求值做 like 的，裁掉空白会让面板与列表口径分叉。
++                if (Object.prototype.hasOwnProperty.call(params, 'keyword')) {
++                    committedKeyword = params.keyword === null || params.keyword === undefined ? '' : String(params.keyword);
++                }
                  imagesInfinite.refresh(params);
 +                // 上下文变了 ⇒ 面板里的「N 张」也要跟着变（没打开过面板就不发这个请求）
 +                if (strategiesLoaded) {
@@ -5338,7 +5349,7 @@
                          success: function (response) {
                              if (!response.status) {
                                  return toastr.error(response.message);
-@@ -328,29 +2194,43 @@
+@@ -328,29 +2205,43 @@
  
                              let html = '';
                              for (const i in albums) {
@@ -5395,7 +5406,7 @@
                          // 如果当前已经为选中状态则清除
                          if (selectedAlbum.id === $(this).data('id')) {
                              selectedAlbum = {};
-@@ -358,12 +2238,13 @@
+@@ -358,12 +2249,13 @@
                              selectedAlbum = $(this).data('json');
                          }
                          resetImages({page: 1, album_id: selectedAlbum.id || null});
@@ -5411,7 +5422,7 @@
                          $albums.find(CREATE_ID).addClass('hidden');
                          $albums.find(UPDATE_ID).remove();
                          albumsInfinite.refresh({page: 1});
-@@ -372,13 +2253,18 @@
+@@ -372,13 +2264,18 @@
                      $albums.off('click', '.update').on('click', '.update', function (e) {
                          e.stopPropagation();
                          let selectedId = $albums.find(UPDATE_ID).data('id');
@@ -5433,7 +5444,7 @@
                              );
                          }
                      });
-@@ -386,6 +2272,12 @@
+@@ -386,21 +2283,30 @@
                      $albums.off('click', '.delete').on('click', '.delete', function (e) {
                          e.stopPropagation();
                          Swal.fire({
@@ -5446,7 +5457,10 @@
                              title: '确认删除该相册?',
                              text: "删除后相册中的图片将会被移出。",
                              icon: 'warning',
-@@ -395,12 +2287,14 @@
+                             showCancelButton: true,
+                             confirmButtonColor: '#3085d6',
+                             cancelButtonColor: '#d33',
++                            customClass: {confirmButton: 'ls-swal-danger'},
                              confirmButtonText: '确认',
                          }).then((result) => {
                              if (result.isConfirmed) {
@@ -5463,7 +5477,7 @@
                                      } else {
                                          toastr.error(response.data.message);
                                      }
-@@ -432,15 +2326,18 @@
+@@ -432,15 +2338,18 @@
                              let $errorMessage = $albums.find(UPDATE_ID + ' .error-message').html('').hide();
                              if (response.data.status) {
                                  let $editContainer = $(this).closest(UPDATE_ID);
@@ -5485,7 +5499,7 @@
                  });
              }
  
-@@ -449,9 +2346,516 @@
+@@ -449,9 +2358,545 @@
                  $('#order span').text({newest: '最新', earliest: '最早', utmost: '最大', least: '最小'}[sort]);
              };
  
@@ -5499,6 +5513,12 @@
 +                const on = selectedStrategyId !== null || selectedTagIds.length > 0;
 +                $('#tag-filter').toggleClass('bg-brand-soft text-brand', on).toggleClass('text-ink', ! on);
 +                $('#tag-filter-clear').toggleClass('hidden', ! on);
++                // 「清除筛选」这一行是面板底部的固定行（实测高 36px，开关行 37px）：
++                // 它一出现，固定行总高从 37 变成 73，而滚动区高度是打开面板时按「当时的固定行」
++                // 算出来的 —— 不重算的话多出来的 36px 会把「显示图片标签」那行顶到面板的
++                // overflow:hidden 外面（实测被裁 24.5px，看起来就是被「清除筛选」盖住）。
++                // 面板没打开时 fitFilterPanel 自己会直接返回，调用是安全的。
++                fitFilterPanel();
 +            };
 +
 +            // 存储策略清单（单选）：名字允许换行，再长也完整显示，不截断
@@ -5611,32 +5631,54 @@
 +
 +            // 策略清单的取数参数与列表同形（相册 / 标签 / 关键字），
 +            // 这样面板里的「N 张」永远等于点进去能看到的张数。
++            // 关键字取 committedKeyword（已提交的那一份），不读输入框实时值：
++            // 列表只在回车时才带上搜索词，读实时值会让面板先「变」而列表没变。
 +            const strategyFacetParams = () => ({
 +                album_id: selectedAlbum.id || undefined,
 +                tags: selectedTagIds.slice(),
-+                keyword: ($('#search').val() || '').trim() || undefined,
++                keyword: committedKeyword || undefined,
 +            });
 +
-+            const loadStrategies = () => axios.get('{{ route('user.image-strategies') }}', {params: strategyFacetParams()}).then(response => {
-+                if (! response.data.status) {
-+                    return;
-+                }
-+                allStrategies = (response.data.data.strategies || []).slice();
-+                allStrategies.forEach(strategy => { strategyNames[strategy.id] = strategy.name; });
++            // 分面请求的序号：连点几下筛选/换相册时会有多个请求在路上，只让最新那个落地
++            // （旧响应后到会把新上下文的张数覆盖回去）。
++            let facetSeq = 0;
 +
-+                // 换了相册/标签后，已选中的策略可能在这个上下文里一张都没有 —— 仍然把它列出来
-+                // （标 0 张），否则按钮显示「筛选已启用」却找不到是哪一项。
-+                if (selectedStrategyId !== null && allStrategies.every(strategy => strategy.id !== selectedStrategyId)) {
-+                    allStrategies.unshift({
-+                        id: selectedStrategyId,
-+                        name: strategyNames[selectedStrategyId] || '已选策略',
-+                        total: 0,
-+                    });
-+                }
++            const loadStrategies = () => {
++                const seq = ++facetSeq;
++                return axios.get('{{ route('user.image-strategies') }}', {params: strategyFacetParams()}).then(response => {
++                    if (seq !== facetSeq) {
++                        return;                     // 已被更新的一次请求取代
++                    }
++                    if (! response.data.status) {
++                        strategiesLoaded = false;   // 没拿到清单 ⇒ 回到未加载，下次再试
++                        return;
++                    }
++                    allStrategies = (response.data.data.strategies || []).slice();
++                    allStrategies.forEach(strategy => { strategyNames[strategy.id] = strategy.name; });
 +
-+                renderStrategyFilter();
-+                updateFilterButton();
-+            });
++                    // 换了相册/标签后，已选中的策略可能在这个上下文里一张都没有 —— 仍然把它列出来
++                    // （标 0 张），否则按钮显示「筛选已启用」却找不到是哪一项。
++                    if (selectedStrategyId !== null && allStrategies.every(strategy => strategy.id !== selectedStrategyId)) {
++                        allStrategies.unshift({
++                            id: selectedStrategyId,
++                            name: strategyNames[selectedStrategyId] || '已选策略',
++                            total: 0,
++                        });
++                    }
++
++                    renderStrategyFilter();
++                    updateFilterButton();
++                    // 只有真正渲染出来了才算「加载过」：置得太早（旧实现是发请求之前就置 true）
++                    // 会让一次失败永久关掉重试 —— 面板从此一直显示空/旧数字，再也不重取。
++                    strategiesLoaded = true;
++                }).catch(() => {
++                    if (seq !== facetSeq) {
++                        return;
++                    }
++                    // 面板只是辅助信息，失败不打扰用户（不弹 toastr）；回到未加载态等下次重试
++                    strategiesLoaded = false;
++                });
++            };
 +
 +            // 拉一次标签列表（页面加载时、以及增删标签之后）
 +            const loadTags = () => axios.get('{{ route('user.tags') }}').then(response => {
@@ -5697,10 +5739,10 @@
 +            });
 +
 +            // 打开面板：先算高度；策略清单第一次打开时才去取（不占首屏请求）
++            // 预设「已加载」的活交给 loadStrategies() 自己（成功才置 true），这里只发起。
 +            $('#tag-filter').off('click.filterpanel').on('click.filterpanel', function () {
 +                setTimeout(fitFilterPanel, 0);
 +                if (! strategiesLoaded) {
-+                    strategiesLoaded = true;
 +                    loadStrategies();
 +                }
 +            });
@@ -5916,6 +5958,7 @@
 +                        showCancelButton: true,
 +                        confirmButtonColor: '#3085d6',
 +                        cancelButtonColor: '#d33',
++                        customClass: {confirmButton: 'ls-swal-danger'},
 +                        confirmButtonText: '确认',
 +                        cancelButtonText: '取消',
 +                    }).then(result => {
@@ -6005,7 +6048,7 @@
              };
  
              $('#search').keydown(function (e) {
-@@ -468,11 +2872,288 @@
+@@ -468,11 +2913,288 @@
              });
          </script>
          <script>
@@ -6033,8 +6076,8 @@
                  area: $(IMAGES_SCROLL).get(0),
                  keyboardDrag: false,
 +                zoom: dsPageZoom(),
-             });
- 
++            });
++
 +            /* ---------------- 触摸端不让 DragSelect 取消默认行为（2026-10-08 拍板） ----------------
 +             * 为什么必须处理：库的 Interaction._start 第一句就是**无条件**的
 +             *     if (e.type === 'touchstart') e.preventDefault();
@@ -6090,8 +6133,8 @@
 +                } catch (e) {
 +                    console.warn('ds re-measure skipped:', e);
 +                }
-+            });
-+
+             });
+ 
 +            /* ---- 自己记选择框：让"库的判定矩形"与"屏幕上那只框"都绑到原始指针坐标上 ----
 +             * 真因（实测，别再走回头路）：
 +             *  页面 = <html>{zoom:1.1} + 整页滚动。DragSelect 内部把**布局单位**的滚动量混进了
@@ -6294,7 +6337,7 @@
              const bindOperates = () => {
                  let selected = ds.getSelection();
                  if (selected.length) {
-@@ -486,10 +3167,14 @@
+@@ -486,10 +3208,14 @@
                      operates = ['refresh'];
                  }
                  if (selected.length === 1) {
@@ -6311,7 +6354,7 @@
                  }
                  if (selected.length && selectedAlbum.id !== undefined) {
                      operates.push('remove');
-@@ -497,22 +3182,112 @@
+@@ -497,22 +3223,112 @@
                  $(operates.map(item => `[data-operate=${item}]`).toString()).css('display', 'block');
              };
  
@@ -6428,7 +6471,7 @@
          </script>
          <script>
              context.init({
-@@ -533,27 +3308,250 @@
+@@ -533,27 +3349,250 @@
                  toastr.warning('复制失败')
              });
  
@@ -6696,7 +6739,7 @@
                  },
                  remove() {
                      let selected = ds.getSelection().map(item => $(item).data('id'));
-@@ -564,7 +3562,9 @@
+@@ -564,7 +3603,9 @@
                          id: null,
                      }).then(response => {
                          if (response.data.status) {
@@ -6707,7 +6750,7 @@
                              resetImages();
                              toastr.success(response.data.message);
                          } else {
-@@ -572,47 +3572,19 @@
+@@ -572,47 +3613,19 @@
                          }
                      });
                  },
@@ -6764,7 +6807,7 @@
                          title: '请输入图片名称',
                          input: 'text',
                          inputValue: item.filename,
-@@ -649,6 +3621,10 @@
+@@ -649,10 +3662,15 @@
                  },
                  delete() {
                      Swal.fire({
@@ -6775,7 +6818,12 @@
                          title: '确认要删除选中的图片？',
                          text: "删除后不可恢复，记录和文件同时删除",
                          icon: 'warning',
-@@ -662,13 +3638,23 @@
+                         showCancelButton: true,
++                        customClass: {confirmButton: 'ls-swal-danger'},
+                         confirmButtonText: '确认删除',
+                         cancelButtonText: '取消',
+                     }).then((result) => {
+@@ -662,13 +3680,23 @@
                                  data: selected,
                              }).then(response => {
                                  if (response.data.status) {
@@ -6801,7 +6849,7 @@
                                      $photos.justifiedGallery(gridConfigs).removeClass('reset');
                                      toastr.success(response.data.message);
                                  } else {
-@@ -683,21 +3669,30 @@
+@@ -683,21 +3711,30 @@
                      axios.get(`/user/images/${item.id}`).then(response => {
                          if (response.data.status) {
                              let image = response.data.data.image;
@@ -6838,7 +6886,7 @@
                          } else {
                              toastr.error(response.data.message);
                          }
-@@ -719,6 +3714,11 @@
+@@ -719,6 +3756,11 @@
                      visible: () => ds.getSelection().length === 1,
                  },
                  refresh: {text: '刷新', action: _ => resetImages()},
@@ -6850,7 +6898,7 @@
                  rename: {
                      text: '重命名',
                      visible: () => ds.getSelection().length === 1,
-@@ -783,9 +3783,9 @@
+@@ -783,9 +3825,9 @@
                      text: '删除',
                      action: _ => methods.delete(),
                  },
@@ -6863,7 +6911,7 @@
                  },
              };
              // right click 'images scroll' container
-@@ -803,9 +3803,10 @@
+@@ -803,9 +3845,10 @@
                      actions.open,
                      actions.movements,
                      actions.remove,
@@ -6875,7 +6923,7 @@
                      actions.rename,
                      actions.delete,
                  ],
-@@ -827,7 +3828,9 @@
+@@ -827,7 +3870,9 @@
                  let operate = $(this).data('operate');
                  let selected = ds.getSelection();
  
@@ -6886,7 +6934,7 @@
                      return false;
                  }
  
-@@ -844,17 +3847,138 @@
+@@ -844,17 +3889,138 @@
                      case 'rename': // 重命名
                          methods.rename(selected[0]);
                          break;

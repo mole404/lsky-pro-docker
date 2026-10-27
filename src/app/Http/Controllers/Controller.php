@@ -17,8 +17,10 @@ use App\Utils;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Foundation\Validation\ValidatesRequests;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -32,6 +34,24 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class Controller extends BaseController
 {
     use AuthorizesRequests, DispatchesJobs, ValidatesRequests, Result;
+
+    /**
+     * 页码越界时把请求拉回最后一页。
+     *
+     * 「停在最后一页把最后几条删掉再刷新」、旧书签、手改地址栏都会让 ?page= 超过总页数，
+     * 此时列表是空的而分页条按 lastPage 判断又整块不渲染，用户没有任何入口回到有效页。
+     * 返回非 null 就由调用方直接 return。
+     */
+    protected function redirectOutOfRangePage(LengthAwarePaginator $paginator): ?RedirectResponse
+    {
+        $lastPage = $paginator->lastPage();
+
+        if ($lastPage < 1 || $paginator->currentPage() <= $lastPage) {
+            return null;
+        }
+
+        return redirect()->to($paginator->url($lastPage));
+    }
 
     public function install(Request $request): View|Response
     {

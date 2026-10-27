@@ -12,7 +12,7 @@
         </form>
 
         @if($images->isNotEmpty())
-            <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-2">
+            <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-2">
                 @foreach($images as $image)
                 <div data-json='{{ $image->toJson() }}' class="item relative flex flex-col items-center justify-center overflow-hidden rounded-md cursor-pointer group">
                     <div class="flex absolute top-1 left-1 z-[1] space-x-1">
@@ -46,7 +46,7 @@
                 @endforeach
             </div>
             <div class="mt-2">
-                {{ $images->links() }}
+                <x-pagination :paginator="$images" />
             </div>
         @else
             <x-no-data message="这里还是空的～" />
@@ -315,6 +315,7 @@
                     text: "记录与物理文件将会一起删除。",
                     icon: 'warning',
                     showCancelButton: true,
+                    customClass: {confirmButton: 'ls-swal-danger'},
                     confirmButtonText: '确认删除',
                 }).then((result) => {
                     if (result.isConfirmed) {

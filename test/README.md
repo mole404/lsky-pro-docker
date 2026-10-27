@@ -57,12 +57,15 @@ node repro-clickthrough.mjs /path/to/context-js.js     # 最小复现：滚动�
 | `menu-guard.test.mjs` | 「菜单开着时点菜单外只关菜单、不触发别的」的两个守卫（仅图片页）：盾牌与 touch 时间窗已撤除、click 守卫是捕获阶段且面板内放行、关菜单走 Alpine 状态、一段 touch 事件都不碰、两族菜单同时开着的行为 |
 | `ui-tweaks.test.mjs` | 一批 UI / 文案契约：单位大小写、顶栏收拢、外观切换共用下拉、用量条 8px、**各策略占用百分比已下线（图例与气泡都不留，只保留仪表盘右上角的总占比）与「存储用量」用词** |
 | `sidebar.test.mjs` | 侧栏折叠三契约（首屏贴类、切换写 localStorage、<640px 只开关抽屉） |
+| `admin-pagination-and-purge.test.mjs` | 后台分页组件（用到的类都必须在产物里、`nav`/`aria-current`/`aria-disabled`、44px 命中区、页码越界夹回最后一页）+ 清空策略后端契约（两阶段删除的**顺序**、`delete_files` 取自请求而非写死、同策略互斥锁、物理文件成功/失败都计数）+ 每个破坏性弹窗逐块配对危险样式 + 亮暗两套对比度真算 |
+| `purge-dialog-behavior.test.mjs` | 清空弹窗的行为面：把策略页那段 `<script>` 在 jsdom + 真实 jQuery 里跑起来（问号按钮点两下状态来回、勾选值真的进请求、完成弹窗分别写记录数与物理文件数、没进展时停手报错、服务端重置游标时继续） |
 
 只跑某一个：`node <文件名>`。
 
 ## 已知局限
 
 - jsdom 没有 `matchMedia`，代码里有能力检测兜底（没有 `matchMedia` 时退回 `'ontouchstart' in window`）；测试里"有鼠标的设备"那条是显式 stub 出来的
+- `ImagePurgeService`（清空策略的两阶段删除）依赖 Laravel 运行时（Eloquent / 语言包 / Flysystem），本目录没有 `vendor/`，所以只做到「源码结构契约 + 前端行为」两层，**没有**在这里真跑一次删库删文件；那一步要在能 `composer install` 的镜像里做一次实测（详见 PR/task 里的验证记录）
 - jsdom 没有排版引擎（元素高度恒为 0，`fadeIn/fadeOut` 也不产生可见的 opacity/display 变化），所以只校验菜单的 `left` 与数值型 `top`；菜单开合状态用补丁新增的 `context.isMenuOpen()` 观测
 - `menuOnScreen()` 的 **DOM 实测那条分支**（`getBoundingClientRect().height > 0`）在 jsdom 里恒为假，只能靠桩高度来测（见回归用例 B）；它真正的价值在真浏览器里 —— 那是"菜单还看得见就拦得住"的最后一道保险
 - 同理：真机上"哪一发浏览器行为把状态提前置 false"（滚动锚定 / 懒加载重排 / 平台差异）无法在 jsdom 里完全复刻，所以补丁新增了 `context.debugDump()` 常驻诊断转储：真机再遇到时导出即可定位

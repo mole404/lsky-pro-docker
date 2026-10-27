@@ -43,7 +43,7 @@
             <x-no-data message="没有找到任何用户"/>
         @else
             <div class="mt-4">
-                {{ $users->links() }}
+                <x-pagination :paginator="$users" />
             </div>
         @endif
     </div>
@@ -143,6 +143,7 @@
                     text: "⚠️注意，删除后不可恢复，且该用户的图片将会变成游客身份！",
                     icon: 'warning',
                     showCancelButton: true,
+                    customClass: {confirmButton: 'ls-swal-danger'},
                     confirmButtonText: '确认删除',
                 }).then((result) => {
                     if (result.isConfirmed) {

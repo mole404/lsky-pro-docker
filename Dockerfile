@@ -127,7 +127,7 @@ RUN printf '%s\n' \
 # 这几个文件以后只要被改动（哪怕手滑），构建就会红 —— md5 必须随改动同步更新。
 RUN printf '%s\n' \
         'dcc6b370414cf329b7902cdd85f33d2f  ./config/convention.php' \
-        'ce9b22171fe3633beaa7caac7f5f4a01  ./routes/web.php' \
+        'f3cbca18762ba5c5bf96b58f2c3ee254  ./routes/web.php' \
         'c1ab546f3e7f5237c1d45435171858ce  ./routes/auth.php' \
         'c0ea82b790494e247de943f75fa5d059  ./app/Services/ImageService.php' \
     | md5sum -c -
@@ -172,7 +172,7 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" \
 RUN printf '%s\n' \
         '5cf4921912df67a6de657dee02284e65  ./public/js/context-js/context-js.js' \
         '5cf4921912df67a6de657dee02284e65  ./resources/js/context-js.js' \
-        '5be0cf865855a02cdd723d5a252974eb  ./resources/views/user/images.blade.php' \
+        '139c9d35de40a6109c9b08ea3763384c  ./resources/views/user/images.blade.php' \
     | md5sum -c - \
     && grep -q "assetVersion('js/context-js/context-js.js')" ./resources/views/user/images.blade.php \
     && grep -q 'isIOSWebKit' ./public/js/context-js/context-js.js \
@@ -244,7 +244,7 @@ RUN APP_SRC_MD5=$(LC_ALL=C find app config routes lang -type f -print0 2>/dev/nu
         "fork_sha=${FORK_SHA}" \
         "lsky_commit=${LSKY_COMMIT}" \
         "context_js_md5=5cf4921912df67a6de657dee02284e65" \
-        "images_blade_md5=5be0cf865855a02cdd723d5a252974eb" \
+        "images_blade_md5=139c9d35de40a6109c9b08ea3763384c" \
         "app_src_md5=${APP_SRC_MD5}" \
         "app_js_md5=${APP_JS_MD5}" \
         "app_css_md5=${APP_CSS_MD5}" \
