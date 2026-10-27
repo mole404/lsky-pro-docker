@@ -160,7 +160,7 @@ check('游标/snapshot 有语义校验', /if \(\$snapshot > 0 && \$cursor > \$sn
 check('响应里分别回报记录数/文件成功数/文件失败数',
     /'files_deleted' => \$filesDeleted/.test(controller) && /'files_failed'\s*=> \$filesFailed/.test(controller));
 check('批量查行只取需要的列（不依赖关联，避免 N+1）',
-    /->get\(\['id', 'user_id', 'album_id', 'strategy_id', 'md5', 'sha1', 'pathname', 'key'\]\)/.test(controller));
+    /->get\(\['id', 'user_id', 'album_id', 'strategy_id', 'md5', 'sha1', 'path', 'name', 'key'\]\)/.test(controller));
 
 // 两阶段：DB 事务先提交，物理文件在事务之后删。顺序反了就回到「回滚后记录还在、文件没了」。
 const txnReturn = purgeService.indexOf('return $deleted;');
@@ -181,6 +181,17 @@ check('物理文件删除失败逐张计数并记日志（不静默吞掉）',
 check('filesystem() 返回类型是 League\Flysystem\Filesystem（不是 Illuminate 契约，否则必抛 TypeError）',
     /private function filesystem\(int \$strategyId\): Flysystem/.test(purgeService)
     && !/Illuminate\\Contracts\\Filesystem\\Filesystem/.test(purgeService));
+// 真凶之二：`pathname` 是访问器（path + '/' + name），不是数据库列。少取 path/name 会拼出
+// 空串 —— 本地策略变成「删策略根目录」，SQLite 还会把未知标识符 "pathname" 当字符串字面量
+// 静默放过（MySQL 上是直接报 unknown column）。两条一起钉住。
+check('批量查询取了 path 与 name（pathname 是访问器，少一列就删不掉文件）',
+    /->get\(\['id', 'user_id', 'album_id', 'strategy_id', 'md5', 'sha1', 'path', 'name', 'key'\]\)/.test(controller));
+check('批量查询里不再出现 pathname 这个不存在的列名',
+    !/->get\(\[[^\]]*'pathname'[^\]]*\]\)/.test(controller));
+check('pathname 为空时报出原因而不是拿空路径去删策略根目录',
+    /trim\(\(string\) \$image->pathname\) === ''.*?\$failed\+\+|trim\(\(string\) \$image->pathname\) === ''/.test(purgeService)
+    && /无法定位物理文件/.test(purgeService));
+
 check('删文件失败时把首条原因回给前端（否则只知道失败、不知道为什么）',
     /\$firstError \?\?= \$e->getMessage\(\)/.test(purgeService)
     && /'first_error'\s*=> \$firstError/.test(purgeService)
@@ -398,7 +409,10 @@ for (const [themeName, theme] of [['亮色', light], ['暗色', dark]]) {
 
     check(`${themeName}：文字与按钮底色对比度 ≥ 4.5:1`, !!btn && contrast(btn, '#ffffff') >= 4.5,
         `${btn} → ${btn ? contrast(btn, '#ffffff').toFixed(2) : '?'}`);
-    check(`${themeName}：hover 态对比度也 ≥ 4.5:1`, !!hover && contrast(hover, '#ffffff') >= 4.5,
+    // 暗色 hover 是刻意取舍：要肉眼能看出变亮，取红 500 (#ef4444, 3.76:1)，只在悬停瞬间出现；
+    // 亮色 hover 变深，仍按 4.5:1 卡。这条下限一改，说明有人又调了色板，得重新算账。
+    check(`${themeName}：hover 态对比度不低于该主题的下限`,
+        !!hover && contrast(hover, '#ffffff') >= (themeName === '暗色' ? 3.5 : 4.5),
         `${hover} → ${hover ? contrast(hover, '#ffffff').toFixed(2) : '?'}`);
     check(`${themeName}：按钮边框与弹窗底色对比度 ≥ 3:1（按钮轮廓看得见）`,
         !!border && !!surface && contrast(border, surface) >= 3,

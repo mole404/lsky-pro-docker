@@ -173,7 +173,10 @@ class StrategyController extends Controller
             ->orderBy('id')
             ->limit($limit)
             // 只取用得到的列：删文件、清缓存、重算计数都不需要关联（也顺带没有了 N+1）。
-            ->get(['id', 'user_id', 'album_id', 'strategy_id', 'md5', 'sha1', 'pathname', 'key']);
+            // ⚠️ `pathname` 不是数据库列，是 Image 上的访问器（= path + '/' + name），
+            // 所以这里必须取 `path` 和 `name` —— 少一个，访问器就拼出空串，
+            // 删除时变成「删策略根目录」，报 Unable to delete file located at: …/（空文件名）。
+            ->get(['id', 'user_id', 'album_id', 'strategy_id', 'md5', 'sha1', 'path', 'name', 'key']);
 
         $service = new ImagePurgeService();
         $deleted = 0;

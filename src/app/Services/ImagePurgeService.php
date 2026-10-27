@@ -136,6 +136,20 @@ class ImagePurgeService
                 ->exists();
 
             if (! $stillReferenced) {
+                // 定位不到文件就别去删：pathname 是访问器（path + '/' + name），
+                // 上游查询少取一列就会得到空串，Flysystem 会拿去删策略根目录。
+                // 这种情况要报出原因，而不是让它伪装成一次普通的删除失败。
+                if (trim((string) $image->pathname) === '') {
+                    $failed++;
+                    $firstError ??= "图片记录 {$image->id} 缺少 path/name，无法定位物理文件";
+                    Log::warning('清空存储策略：图片记录缺少 path/name，跳过物理文件删除', [
+                        'image_id'    => $image->id,
+                        'strategy_id' => $image->strategy_id,
+                    ]);
+                    Cache::forget("image_{$image->key}");
+                    continue;
+                }
+
                 try {
                     $this->filesystem($image->strategy_id)->delete($image->pathname);
                     @unlink(public_path($image->getThumbnailPathname()));
