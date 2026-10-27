@@ -72,15 +72,14 @@
         --lsky-accent-soft: #16233b;
         --lsky-danger: #f87171;
         /* 暗色沿用「悬停提亮」的方向（与 accent 一致），但把两档都压到白字能读的深度：
-           静止 #b91c1c 对白 6.47:1、hover #dc2626 对白 4.83:1，都过 WCAG AA。
-           原来用的红 500(#ef4444) 对白只有 3.76:1、红 400(#f87171) 更差（2.77:1），
-           13.5px 的按钮文字在暗色下发糊。文字色固定 #fff，见 common.less 的 .ls-swal-danger。
-           代价：深红填充与卡片底 --lsky-surface(#161a20) 只有 2.70:1（低于控件边界的 3:1），
-           所以边框改用亮一档的 #ef4444（对卡片底 4.65:1）把按钮轮廓勾出来；
-           焦点环用 #fca5a5。 */
-        --lsky-danger-btn: #b91c1c;
-        --lsky-danger-btn-hover: #dc2626;
-        --lsky-danger-btn-border: #ef4444;
+           静止 #dc2626 对白 4.83:1、hover #e0302c 对白 4.54:1，都过 WCAG AA（4.5:1）。
+           再往上亮（红 500 #ef4444 = 3.76:1、红 400 #f87171 = 2.77:1）13.5px 的按钮文字就发糊了，
+           所以静止态就停在 #dc2626 —— 也就是上一版 hover 用过的那个红。
+           代价：填充与卡片底 --lsky-surface(#161a20) 只有 3.62:1（刚过控件边界的 3:1），
+           所以边框再亮一档用 #f87171（对卡片底 6.31:1）把轮廓勾出来；焦点环用 #fca5a5。 */
+        --lsky-danger-btn: #dc2626;
+        --lsky-danger-btn-hover: #e0302c;
+        --lsky-danger-btn-border: #f87171;
         --lsky-danger-ring: #fca5a5;
         --lsky-danger-soft: #2a1618;
         --lsky-shadow-card: 0 1px 2px rgba(0, 0, 0, .35), 0 1px 3px rgba(0, 0, 0, .3);

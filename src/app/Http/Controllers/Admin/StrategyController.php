@@ -126,10 +126,10 @@ class StrategyController extends Controller
         }
 
         // 同一个策略同时只允许一路清空：两个标签页同时点会互抢行锁，进度也会各算各的。
-        // 默认缓存驱动是 file（实现了 LockProvider，发导出那条路也靠它），但驱动可能被换成
-        // 不支持原子锁的（没建 cache_locks 表的 database、array）—— 那样 Cache::lock() 会直接抛，
-        // 整个功能 500。所以拿不到锁对象时退化成 Cache::add()：file 驱动的 add 走独占文件锁，
-        // 同样是原子的。
+        // 标准驱动（file/database/array/redis）都实现了 LockProvider，但型别对不代表运行期不会抛：
+        // database 驱动没建 cache_locks 表时取锁会抛 QueryException，array 驱动的锁出了进程就不算数。
+        // 所以拿不到锁对象时退化成 Cache::add()（file 驱动的 add 走独占文件锁，同样是原子的），
+        // 宁可少一层互斥也不要整个功能 500。
         $lockKey = "purge-strategy:{$strategy->id}";
         $lock = null;
         $acquired = false;
@@ -179,6 +179,7 @@ class StrategyController extends Controller
         $deleted = 0;
         $filesDeleted = 0;
         $filesFailed = 0;
+        $firstFileError = null;
         // 单张远端删除有 5 秒超时（ImagePurgeService），这里再按批给一个总预算：
         // 到点就收手，剩下的交给下一次请求，别让整个请求撞上 PHP/nginx 的时限。
         $deadline = microtime(true) + 20;
@@ -188,6 +189,7 @@ class StrategyController extends Controller
             $deleted += $result['records'];
             $filesDeleted += $result['files_deleted'];
             $filesFailed += $result['files_failed'];
+            $firstFileError ??= $result['first_error'] ?? null;
             $cursor = (int) $chunk->last()->id;
 
             if (microtime(true) > $deadline) {
@@ -217,6 +219,7 @@ class StrategyController extends Controller
             'deleted'       => $deleted,
             'files_deleted' => $filesDeleted,
             'files_failed'  => $filesFailed,
+            'error'         => $firstFileError,
             'remaining'     => $remaining,
             'cursor'        => $cursor,
             'snapshot'      => $snapshot,

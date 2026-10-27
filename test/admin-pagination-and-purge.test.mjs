@@ -173,13 +173,29 @@ check('批量删除走查询构造器（不触发 deleting 钩子里的文件删
 check('只删记录模式下也清图片缓存（否则原图保护 TTL 内还能读到已删图）',
     /if \(! \$deleteFiles\) \{\s*foreach \(\$images as \$image\) \{\s*Cache::forget/.test(purgeService));
 check('物理文件删除失败逐张计数并记日志（不静默吞掉）',
-    /\$failed\+\+;\s*\n\s*Log::warning\('清空存储策略：删除物理文件失败'/.test(purgeService));
+    /\$failed\+\+;[\s\S]{0,160}?Log::warning\('清空存储策略：删除物理文件失败'/.test(purgeService));
+// 真凶记录：League\Flysystem\Filesystem 并没有实现 Illuminate\Contracts\Filesystem\Filesystem，
+// 把 filesystem() 的返回类型声明成后者会在**每次**返回时抛 TypeError，被 catch 吃掉之后
+// 表现成「勾了删物理文件，一个都删不掉、日志里全是同一句 TypeError」。
+// 这条把它钉住：返回类型必须是 League 的类（或者干脆不写类型）。
+check('filesystem() 返回类型是 League\Flysystem\Filesystem（不是 Illuminate 契约，否则必抛 TypeError）',
+    /private function filesystem\(int \$strategyId\): Flysystem/.test(purgeService)
+    && !/Illuminate\\Contracts\\Filesystem\\Filesystem/.test(purgeService));
+check('删文件失败时把首条原因回给前端（否则只知道失败、不知道为什么）',
+    /\$firstError \?\?= \$e->getMessage\(\)/.test(purgeService)
+    && /'first_error'\s*=> \$firstError/.test(purgeService)
+    && /'error'\s*=> \$firstFileError/.test(controller));
+
 check('文件系统客户端按策略记忆化，并把超时收紧到 5 秒',
     /private array \$filesystems/.test(purgeService) && /'connect_timeout' => 5, 'timeout' => 5/.test(purgeService));
 check('用户图片计数在行锁内重算（与上传路径的 increment 串行）',
     /lockForUpdate\(\)->first\(\)/.test(purgeService));
 
 const strategyBlade = blades['admin/strategy/index.blade.php'];
+check('清空完成的文案不再提「写入日志」和「再执行一次」', (() => {
+    const seg = strategyBlade.slice(strategyBlade.indexOf('let summary ='), strategyBlade.indexOf('history.go(0);'));
+    return seg.length > 0 && !/已写入日志/.test(seg) && !/重新执行一次清空/.test(seg);
+})());
 check('策略列表有「清空图片」入口', /data-operate="purge"/.test(strategyBlade));
 check('入口只在有图片时出现', /@if\(\$strategy->images_count > 0\)[\s\S]{0,200}data-operate="purge"/.test(strategyBlade));
 check('前端提交输入式确认', /confirm: '确认删除'/.test(strategyBlade));
@@ -247,6 +263,7 @@ const dialogSources = {
 let destructive = 0;
 const notDanger = [];
 const notDeny = [];
+let logoutAllDanger = false;
 for (const [name, text] of Object.entries(dialogSources)) {
     for (const block of swalBlocks(text)) {
         const confirmText = (block.match(/confirmButtonText:\s*['"]([^'"]*)['"]/) || [])[1] || '';
@@ -261,6 +278,12 @@ for (const [name, text] of Object.entries(dialogSources)) {
         const hasDangerDeny = /customClass:\s*\{[^}]*denyButton:\s*'ls-swal-danger'/.test(block);
         // 「全部退出」这类动作挂在 deny 键上，只要那颗键是红的就行。
         const denyIsAction = /删除|清空|退出|移除/.test(denyText);
+        // 例外：用户设置页「退出所有登录会话」的「全部退出」键保持 Swal 默认色（老师看过实际
+        // 效果后定的），这里反过来断言它没被挂类 —— 免得以后又被「顺手补上」。
+        if (denyText.trim() === '全部退出') {
+            logoutAllDanger = hasDangerDeny;
+            continue;
+        }
         if (denyIsAction ? !hasDangerDeny : !hasDangerConfirm) {
             notDanger.push(`${name}（${denyIsAction ? denyText : confirmText}）：${block.slice(0, 50)}…`);
         }
@@ -272,6 +295,8 @@ for (const [name, text] of Object.entries(dialogSources)) {
 check(`扫到 ${destructive} 个破坏性确认弹窗（预期 ≥ 9，太少说明解析或写法变了）`, destructive >= 9, `实际 ${destructive}`);
 check('每一个破坏性确认键都挂了 ls-swal-danger', notDanger.length === 0, notDanger.join(' | '));
 check('带 denyButton 的破坏性弹窗也挂了危险样式', notDeny.length === 0, notDeny.join(' '));
+check('「退出所有登录会话」的「全部退出」保持 Swal 默认色（不挂 ls-swal-danger）', logoutAllDanger === false,
+    '被重新挂上了 ls-swal-danger');
 
 const lessRaw = read('resources', 'css', 'common.less');
 const lessCss = lessRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');

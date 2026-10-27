@@ -93,6 +93,7 @@
                 let deleted = 0;
                 let filesDeleted = 0;
                 let filesFailed = 0;
+                let firstError = null;
                 let lastCursor = -1;
                 let limit = deleteFiles ? 20 : 200;
 
@@ -123,6 +124,9 @@
                         deleted += data.deleted;
                         filesDeleted += data.files_deleted || 0;
                         filesFailed += data.files_failed || 0;
+                        if (!firstError && data.error) {
+                            firstError = String(data.error);
+                        }
                         lastCursor = cursor;
                         cursor = data.cursor;
                         snapshot = data.snapshot;
@@ -142,8 +146,10 @@
                             if (deleteFiles) {
                                 summary += `删除存储里的物理文件 <b>${filesDeleted}</b> 张。`;
                                 if (filesFailed > 0) {
-                                    summary += `<br><b>${filesFailed}</b> 张物理文件删除失败（已写入日志），`
-                                        + '可重新执行一次清空再试，或到存储服务端按日志里的路径手动清理。';
+                                    summary += `<br><b>${filesFailed}</b> 张物理文件删除失败`;
+                                    if (firstError) {
+                                        summary += `：${$('<div>').text(firstError).html()}`;
+                                    }
                                 }
                             } else {
                                 summary += '<br>存储里的物理文件没有动，需要时请到存储服务端自行清理。';

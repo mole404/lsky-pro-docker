@@ -6,7 +6,6 @@ use App\Models\Album;
 use App\Models\Image;
 use App\Models\Strategy;
 use App\Models\User;
-use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -29,7 +28,7 @@ use League\Flysystem\Filesystem as Flysystem;
  */
 class ImagePurgeService
 {
-    /** @var array<int, Filesystem> 每个策略只建一次客户端（S3/OSS 客户端要重新握手，很贵） */
+    /** @var array<int, Flysystem> 每个策略只建一次客户端（S3/OSS 客户端要重新握手，很贵） */
     private array $filesystems = [];
 
     /**
@@ -86,15 +85,17 @@ class ImagePurgeService
 
         $filesDeleted = 0;
         $filesFailed = 0;
+        $firstError = null;
 
         if ($deleteFiles) {
-            [$filesDeleted, $filesFailed] = $this->deleteFiles($images);
+            [$filesDeleted, $filesFailed, $firstError] = $this->deleteFiles($images);
 
             if ($filesFailed > 0) {
                 Log::warning('清空存储策略：部分物理文件删除失败', [
                     'strategy_id' => $images->first()->strategy_id,
                     'failed'      => $filesFailed,
                     'deleted'     => $filesDeleted,
+                    'error'       => $firstError,
                 ]);
             }
         }
@@ -107,18 +108,25 @@ class ImagePurgeService
             }
         }
 
-        return ['records' => $records, 'files_deleted' => $filesDeleted, 'files_failed' => $filesFailed];
+        return [
+            'records'       => $records,
+            'files_deleted' => $filesDeleted,
+            'files_failed'  => $filesFailed,
+            // 只回第一条原因：反复贴同一句 SDK 报错没有意义，够定位就行。
+            'first_error'   => $firstError,
+        ];
     }
 
     /**
      * 事务提交后删物理文件；同样的 md5+sha1 在**同一策略内**还有别的记录时跳过（文件还被引用）。
      *
-     * @return array{0: int, 1: int} [成功数, 失败数]
+     * @return array{0: int, 1: int, 2: string|null} [成功数, 失败数, 首条错误原因]
      */
     private function deleteFiles(Collection $images): array
     {
         $deleted = 0;
         $failed = 0;
+        $firstError = null;
 
         foreach ($images as $image) {
             $stillReferenced = Image::query()
@@ -134,6 +142,7 @@ class ImagePurgeService
                     $deleted++;
                 } catch (\Throwable $e) {
                     $failed++;
+                    $firstError ??= $e->getMessage();
                     Log::warning('清空存储策略：删除物理文件失败', [
                         'image_id'    => $image->id,
                         'strategy_id' => $image->strategy_id,
@@ -146,13 +155,13 @@ class ImagePurgeService
             Cache::forget("image_{$image->key}");
         }
 
-        return [$deleted, $failed];
+        return [$deleted, $failed, $firstError];
     }
 
     /**
      * 按策略取（并记住）文件系统客户端；超时压到 5 秒，避免存储半死不活时一张图拖死整个请求。
      */
-    private function filesystem(int $strategyId): Filesystem
+    private function filesystem(int $strategyId): Flysystem
     {
         if (! isset($this->filesystems[$strategyId])) {
             $strategy = Strategy::query()->find($strategyId);
