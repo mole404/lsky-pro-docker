@@ -59,11 +59,11 @@ ARG PHP_EXT_INSTALLER_VERSION=2.12.0
 # 带 `@digest` 时 **digest 优先、tag 只作装饰**，只换 PHP_VERSION 不换 digest 会静默构建出旧版本。
 # CI 已自动化：build-image.yaml 的 Resolve 步骤会按请求的 PHP 版本解析出对应 digest 并覆盖这两个 ARG
 # （也可在 workflow_dispatch 里手工传 php_cli_digest / php_apache_digest）。上面这套手工方法仅用于本地/离线场景。
-# 实测（2026-10-21 复核，PHP 8.3.36；Docker Hub Registry API 原始响应头）：
-#   php:8.3-cli-bookworm    -> sha256:35eafb4bd92db9f7776cb842b8498a3be418a0bd4843cda993fb38e488e1b732
-#   php:8.3-apache-bookworm -> sha256:f4d54b83d7d3a18013ae40b08bd0af4207ff684ad60cad60837e024b08b9ef9b
-ARG PHP_CLI_IMAGE_DIGEST=sha256:35eafb4bd92db9f7776cb842b8498a3be418a0bd4843cda993fb38e488e1b732
-ARG PHP_APACHE_IMAGE_DIGEST=sha256:f4d54b83d7d3a18013ae40b08bd0af4207ff684ad60cad60837e024b08b9ef9b
+# 实测（2026-11-20 复核，PHP 8.3.37；Docker Hub Registry API 原始响应头）：
+#   php:8.3-cli-bookworm    -> sha256:3aa97c2d2056b43903dbc0dc03ccedb8637f02351fe0d59e8f9dab2c1db717bd
+#   php:8.3-apache-bookworm -> sha256:e6303247c1e799435f688cac959651951e3e84b9b46b1c5033e303755dd0179e
+ARG PHP_CLI_IMAGE_DIGEST=sha256:3aa97c2d2056b43903dbc0dc03ccedb8637f02351fe0d59e8f9dab2c1db717bd
+ARG PHP_APACHE_IMAGE_DIGEST=sha256:e6303247c1e799435f688cac959651951e3e84b9b46b1c5033e303755dd0179e
 
 FROM php:${PHP_VERSION}-cli-${DEBIAN_RELEASE}@${PHP_CLI_IMAGE_DIGEST} AS build
 

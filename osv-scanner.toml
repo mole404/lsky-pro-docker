@@ -113,3 +113,44 @@ reason = "同上：dev-only 测试工具链，不进镜像"
 id = "GHSA-xjj6-f33q-929c"        # undici：websocket 相关
 ignoreUntil = 2027-06-30
 reason = "同上：dev-only 测试工具链，不进镜像"
+
+# -----------------------------------------------------------------------------
+# 7) 2026-11-20 新增命中（公告库更新后新收录，与本次基镜像升级无关）
+#    · laravel/framework 9.52.22 —— 生产依赖，9.x 已 EOL，无补丁。
+#      本条打的是 Illuminate\Concurrency 的并发任务输出注入；该门面**11.x 才引入**
+#      （9.x / 10.x 上游分支无 src/Illuminate/Concurrency，线上 vendor 亦无此目录）
+#      ⇒ 功能不存在，零暴露。公告区间写成 introduced: 0，属 OSV 区间过宽。
+#    · undici 8.11.2（5 条）—— 只出现在 test/package-lock.json（jsdom 的 dev 传递依赖）；
+#      .dockerignore 排掉 test/、Dockerfile 只 COPY src/ ⇒ 不进镜像。
+#      测试里全部 19 处 `new JSDOM(...)` 都未启用 resources: 'usable'，也无 fetch / WebSocket /
+#      自定义 Agent / interceptor 调用 ⇒ 这 5 条的利用前提一条都不满足。
+# -----------------------------------------------------------------------------
+[[IgnoredVulns]]
+id = "GHSA-63hm-g96r-2m2q"        # laravel/framework：Concurrency 任务输出注入
+ignoreUntil = 2027-06-30
+reason = "9.x 无 Illuminate\\Concurrency（该门面 11.x 才引入），线上 vendor 亦无此目录 ⇒ 零暴露；9.x(EOL) 无补丁"
+
+[[IgnoredVulns]]
+id = "GHSA-2m5v-pch6-74hx"        # undici：Agent 丢 tls 选项导致证书校验绕过
+ignoreUntil = 2027-06-30
+reason = "test/package-lock.json 的 dev 传递依赖（jsdom），不进镜像；测试不构造自定义 Agent"
+
+[[IgnoredVulns]]
+id = "GHSA-4w7w-5xrc-9h26"        # undici：跨源重定向缓存投毒
+ignoreUntil = 2027-06-30
+reason = "同上：dev-only；测试未使用 redirect/cache interceptor，无 shared cache"
+
+[[IgnoredVulns]]
+id = "GHSA-55wc-3pg8-jfw6"        # undici：decompress interceptor DoS
+ignoreUntil = 2027-06-30
+reason = "同上：dev-only；测试未启用 decompress interceptor"
+
+[[IgnoredVulns]]
+id = "GHSA-9fm3-97px-rjf6"        # undici：WebSocket 自动 PONG 无界缓冲
+ignoreUntil = 2027-06-30
+reason = "同上：dev-only；测试不建立 WebSocket 连接"
+
+[[IgnoredVulns]]
+id = "GHSA-qrxm-fqhp-jwvm"        # undici：TLS 1.2 重协商崩溃
+ignoreUntil = 2027-06-30
+reason = "同上：dev-only；测试不发起 TLS 连接"
