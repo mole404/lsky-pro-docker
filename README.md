@@ -9,7 +9,15 @@
 ---
 
 **本仓库镜像地址：`ghcr.io/mole404/lsky-pro-docker:latest`**  
-**最新版 `3.7.5`**  
+**最新版 `3.7.6`**  
+
+<details>
+<summary>📢 <b>3.7.6 安全更新 (2026-11-20)</b></summary>
+  
+### 更新内容：
+**更新依赖版本**：更新 PHP 版本至 8.3.37。旧版 Apache 也有漏洞虽然并不影响本项目但也顺手更新到 2.4.71 了。
+
+</details>
 
 <details>
 <summary>📢 <b>3.7.5 版本更新 (2026-10-27)</b></summary>
@@ -41,9 +49,9 @@
 
 ---
 <img width="1920" height="869" alt="6ac68bfc94a7f" src="https://github.com/user-attachments/assets/6ed36f64-5e26-4f9d-be2f-9d247abc3816" />
-<img width="1920" height="869" alt="PixPin_2026-10-06_21-32-32" src="https://github.com/user-attachments/assets/b7b16ff1-9f9e-44e8-821c-3d2ef2564ff0" />
-<img width="1920" height="1079" alt="PixPin_2026-10-08_02-16-26" src="https://github.com/user-attachments/assets/0205d10a-0076-4814-bad8-2e278ced58ab" />
-<img width="1920" height="869" alt="PixPin_2026-10-08_02-15-24" src="https://github.com/user-attachments/assets/89d9ddc2-307e-436b-bc76-33d20397200d" />
+<img width="1920" height="869" alt="6aff3ff09f3e3" src="https://github.com/user-attachments/assets/d4a31f86-70af-44f6-876a-9370b76759b1" />
+<img width="1920" height="869" alt="PixPin_2026-11-20_02-35-54" src="https://github.com/user-attachments/assets/b631c9dd-0358-41b7-b332-a1f6aa424dc2" />
+<img width="1920" height="1080" alt="PixPin_2026-11-20_02-35-02" src="https://github.com/user-attachments/assets/64994076-69e2-4d8c-a4a0-aa6f79060905" />
 <img width="1920" height="869" alt="PixPin_2026-10-17_01-41-16" src="https://github.com/user-attachments/assets/69dfa6ed-fd66-4269-becd-edf36fd24c4a" />
 <img width="1920" height="1079" alt="PixPin_2026-10-17_01-41-57" src="https://github.com/user-attachments/assets/d17bd71b-a8d3-4bc6-bdaa-53a85678c5db" />
 
@@ -89,7 +97,7 @@
 |---|---|---|
 | 容器内 HTTPS 证书（⚠不是反代 CA 证书） | 镜像内置一对公开的默认私钥 | ✅ 首次启动自动生成全新自签证书（⚠测试用，不是反代用的） |
 | SVG 格式支持 | 含 SVG（可被用来挂 XSS） | ✅ 移除 SVG 功能 |
-| 依赖版本 | PHP 8.1（已停止安全支持）、旧依赖 | ✅ PHP 8.3.36 + 依赖升到安全版本线 |
+| 依赖版本 | PHP 8.1（已停止安全支持）、旧依赖 | ✅ PHP 8.3.37，依赖升到安全版本线 |
 
 ## 快速开始
 
