@@ -213,6 +213,6 @@ return [
     |
     */
 
-    'version' => '3.7.5',
+    'version' => '3.7.6',
     'author'  => 'Mole404 & DeepSeek & Claude',
 ];
